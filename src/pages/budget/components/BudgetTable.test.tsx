@@ -30,7 +30,7 @@ const defaultProps = () => ({
   timePeriod: 'month' as TimePeriod,
 })
 
-const renderTable = (overrides: Partial<ReturnType<typeof defaultProps>> = {}) =>
+const renderTable = (overrides: Partial<ReturnType<typeof defaultProps>> & { onImportCSV?: () => void } = {}) =>
   render(<BudgetTable {...defaultProps()} {...overrides} />)
 
 function setupMockFileReader(content: string) {
@@ -211,6 +211,28 @@ describe('BudgetTable', () => {
     })
 
     expect(screen.getByRole('alert')).toHaveTextContent('Upload failed')
+  })
+
+  it('opens the import wizard from the month menu and drops the legacy hint and file input (E4)', async () => {
+    const user = userEvent.setup()
+    const onImportCSV = vi.fn()
+    renderTable({ onImportCSV })
+
+    expect(screen.queryByTestId('csv-file-input')).not.toBeInTheDocument()
+    fireEvent.contextMenu(screen.getAllByText('Jan')[0])
+    expect(screen.queryByRole('button', { name: 'Upload CSV for Jan' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Date,Category,Amount/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Import into Jan…' }))
+
+    expect(onImportCSV).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: 'Import into Jan…' })).not.toBeInTheDocument()
+  })
+
+  it('still offers Remove CSV for a month with data when the wizard is on', () => {
+    renderTable({ onImportCSV: vi.fn() })
+    fireEvent.contextMenu(screen.getAllByText('Jan')[0])
+    expect(screen.getByRole('button', { name: 'Remove CSV' })).toBeInTheDocument()
   })
 
   it('closes the month context menu when the backdrop is clicked', async () => {

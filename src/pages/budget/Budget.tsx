@@ -391,6 +391,7 @@ const Budget: FC = () => {
                     monthsWithData={monthsWithData}
                     onUploadCSV={uploadCSV}
                     onRemoveCSV={removeCSV}
+                    onImportCSV={importWizardOn ? () => wizard.open() : undefined}
                     timePeriod={timePeriod}
                   />
                 ) : (
@@ -470,7 +471,16 @@ const Budget: FC = () => {
                     </div>
                   }
                 >
-                  <PdfToCsv />
+                  <PdfToCsv
+                    onUseInWizard={
+                      importWizardOn
+                        ? csvText => {
+                            closePdfModal()
+                            wizard.open({ text: csvText })
+                          }
+                        : undefined
+                    }
+                  />
                 </Suspense>
               </div>
             </div>

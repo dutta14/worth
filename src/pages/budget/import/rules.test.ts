@@ -10,6 +10,7 @@ import {
   compileRules,
   isContainsRule,
   matchRules,
+  matchRulesDetailed,
   MAX_RULES,
   moveRule,
   nextRuleId,
@@ -19,6 +20,7 @@ import {
   retargetRules,
   ruleCategoryOptions,
   setRuleEnabled,
+  suggestRuleValue,
   validateRule,
   type CategoryRule,
 } from './rules'
@@ -255,5 +257,49 @@ describe('retargetRules', () => {
   it('ignores the target itself and reports no change when nothing matches', () => {
     expect(retargetRules(rules, ['Gas'], 'Gas')).toEqual({ rules, changed: 0 })
     expect(retargetRules(rules, ['Travel'], 'Food').changed).toBe(0)
+  })
+})
+
+describe('matchRulesDetailed', () => {
+  const compiled = compileRules(
+    [containsRule('r_01', 'gone', 'Missing'), containsRule('r_02', 'starbucks', 'Dining')],
+    categoryResolver(groups),
+  )
+
+  it('reports which rule won and which were passed over', () => {
+    expect(matchRulesDetailed(compiled, 'Gone Starbucks')).toEqual({
+      category: 'Dining',
+      ruleId: 'r_02',
+      skipped: ['r_01'],
+    })
+  })
+
+  it('returns no rule for an empty or unmatched description', () => {
+    expect(matchRulesDetailed(compiled, '  ')).toEqual({ category: null, ruleId: null, skipped: [] })
+    expect(matchRulesDetailed(compiled, 'Kroger')).toEqual({ category: null, ruleId: null, skipped: [] })
+  })
+})
+
+describe('suggestRuleValue', () => {
+  it.each([
+    ['SQ *BLUE BOTTLE #1234', 'BLUE BOTTLE'],
+    ['STARBUCKS #1234', 'STARBUCKS'],
+    ["POS Purchase TST* Joe's Pizza 0412", "Joe's Pizza"],
+    ['AMAZON MKTPLACE PMTS AMZN.COM/BILL', 'AMAZON MKTPLACE'],
+    ['Kroger', 'Kroger'],
+    ["Trader Joe's, 55", "Trader Joe's"],
+    ['  Whole   Foods  Market  ', 'Whole Foods'],
+  ])('suggests the merchant from %s', (description, expected) => {
+    expect(suggestRuleValue(description)).toBe(expected)
+  })
+
+  it('falls back to the whole description when nothing usable is left', () => {
+    expect(suggestRuleValue('12345 67890')).toBe('12345 67890')
+    expect(suggestRuleValue('A')).toBe('A')
+    expect(suggestRuleValue('')).toBe('')
+  })
+
+  it('caps the fallback at 100 characters', () => {
+    expect(suggestRuleValue(`1${'2'.repeat(200)}`)).toHaveLength(100)
   })
 })

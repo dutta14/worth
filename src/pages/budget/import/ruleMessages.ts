@@ -1,5 +1,6 @@
 import { plural } from '../../../utils/plural'
 import { MAX_RULE_VALUE, MAX_RULES, MIN_RULE_VALUE, type RuleError } from './rules'
+import { formatMonthList } from './format'
 import type { RulesLoad, RulesSaveResult } from './importStorage'
 
 export const RULES_TITLE = 'Categorization rules'
@@ -52,3 +53,45 @@ export const ruleMoved = (value: string, position: number, total: number): strin
 
 export const ruleToggled = (value: string, enabled: boolean): string =>
   `Rule ${value} turned ${enabled ? 'on' : 'off'}.`
+
+export const CREATE_RULE_HEADING = 'Create a rule'
+
+export const createRuleEntryLabel = (category: string | null): string =>
+  category ? `Always categorize merchants like this as ${category}` : 'Always categorize merchants like this as…'
+
+export const ruleMatchPreview = (n: number, value: string): string =>
+  `${n.toLocaleString()} ${plural(n, 'transaction', 'transactions')} match "${value}".`
+
+export const RULE_CREATE_LABEL = 'Create rule'
+
+export const ruleCreateAndApplyLabel = (n: number): string => `Create rule and apply to ${n.toLocaleString()}`
+
+export const RULE_CREATED = 'Rule saved.'
+
+export const ruleCreatedAndApplied = (k: number): string => `${RULE_CREATED} ${applyDoneMessage(k)}`
+
+export const APPLY_BUTTON_LABEL = 'Apply rules to uncategorized'
+
+export const applyConfirmTitle = (n: number): string =>
+  `Apply rules to ${n.toLocaleString()} uncategorized ${plural(n, 'transaction', 'transactions')}?`
+
+export const APPLY_CONFIRM_BODY =
+  'Only uncategorized transactions change. Anything you have categorized stays as it is.'
+
+export const APPLY_NONE = 'No uncategorized transactions match your rules.'
+
+export const APPLY_UNDONE = 'Undone. Those transactions are back to how they were.'
+
+export const applyDoneMessage = (k: number): string =>
+  `Recategorized ${k.toLocaleString()} ${plural(k, 'transaction', 'transactions')}.`
+
+export const applyFailureMessage = (reason: 'stale' | 'write', months: string[], restored: boolean): string => {
+  if (reason === 'stale') return 'Your transactions changed while this window was open. Close it and try again.'
+  const tail = restored ? '' : ' Some months may be partly changed, so check your transactions before trying again.'
+  return `Nothing was applied. ${formatMonthList(months)} could not be saved. Check that the worth folder is still available, then try again.${tail}`
+}
+
+export const APPLY_UNDO_FAILURE =
+  'The change could not be undone. Check that the worth folder is still available, then try again.'
+
+export const MANAGE_RULES_LABEL = 'Rules'

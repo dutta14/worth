@@ -5,7 +5,12 @@ import { structureRows, rowsToCsv, mergeDebitCredit as mergeDebitCreditUtil } fr
 import type { TextItem } from '../utils/pdfCsvUtils'
 import '../../../styles/PdfToCsv.css'
 
-const PdfToCsv: FC = () => {
+interface PdfToCsvProps {
+  /** When given, a button hands the extracted CSV text to the import wizard without a download. */
+  onUseInWizard?: (csvText: string) => void
+}
+
+const PdfToCsv: FC<PdfToCsvProps> = ({ onUseInWizard }) => {
   const [fileName, setFileName] = useState<string | null>(null)
   const [pages, setPages] = useState<{ pageNum: number; items: TextItem[] }[]>([])
   const [selectedPage, setSelectedPage] = useState(1)
@@ -395,6 +400,11 @@ const PdfToCsv: FC = () => {
               <button className="pdf2csv-btn pdf2csv-btn--primary" onClick={handleDownload}>
                 Download .csv
               </button>
+              {onUseInWizard && (
+                <button className="pdf2csv-btn" onClick={() => onUseInWizard(currentCsv)}>
+                  Review in import wizard
+                </button>
+              )}
             </div>
           </div>
           <div className="pdf2csv-table-wrap">

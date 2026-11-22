@@ -11,6 +11,11 @@ import CashflowTabs, {
   shouldFocusCashflowTab,
   type CashflowTab,
 } from '../../components/CashflowTabs'
+import { FLAGS } from '../../flags/flagDefinitions'
+import { useFlag } from '../../flags/useFlag'
+import { createRuleEntryLabel } from '../budget/import/ruleMessages'
+import { isFallbackCategory } from '../budget/import/recategorize'
+import TransactionImportTools, { type RuleSource } from './components/TransactionImportTools'
 import '../../styles/Transactions.css'
 
 import type { FileStore } from '../../utils/fileStoreTypes'
@@ -310,6 +315,9 @@ const Transactions: FC = () => {
   const paramFrom = searchParams.get('from') ?? ''
   const paramTo = searchParams.get('to') ?? ''
   const { fileStore } = useFileStore()
+  const importWizardOn = useFlag(FLAGS.IMPORT_WIZARD)
+  const [ruleSource, setRuleSource] = useState<RuleSource | null>(null)
+  const ruleOpenerRef = useRef<HTMLElement | null>(null)
   const budgetStoreRef = useRef<BudgetStore>({ csvs: {}, configs: {}, years: [], categoryGroups: [] })
 
   const [allTransactions, setAllTransactions] = useState<LoadedTransaction[]>([])
@@ -854,6 +862,20 @@ const Transactions: FC = () => {
     })
   }
 
+  const startRule = (transaction: LoadedTransaction): void => {
+    ruleOpenerRef.current = document.querySelector<HTMLElement>('.txn-row-category-button[aria-expanded="true"]')
+    setEditingCategory(null)
+    setCategoryEditSearch('')
+    setRuleSource({ description: transaction.description?.trim() ?? '', category: transaction.category })
+  }
+
+  const closeRuleSource = useCallback((): void => {
+    setRuleSource(null)
+    setTimeout(() => {
+      if (ruleOpenerRef.current?.isConnected) ruleOpenerRef.current.focus()
+    }, 0)
+  }, [])
+
   const reassignTransactionCategory = async (transaction: LoadedTransaction, nextCategory: string): Promise<void> => {
     if (transaction.category === nextCategory) {
       setEditingCategory(null)
@@ -1310,6 +1332,15 @@ const Transactions: FC = () => {
                 </ul>
               )}
             </div>
+
+            {importWizardOn && (
+              <TransactionImportTools
+                transactions={allTransactions}
+                ruleSource={ruleSource}
+                onRuleSourceClose={closeRuleSource}
+                onInvalidate={resetTransactionCache}
+              />
+            )}
           </div>
         </div>
       </header>
@@ -1319,7 +1350,11 @@ const Transactions: FC = () => {
           {allTransactions.length === 0 ? (
             <div className="txn-empty-state">
               <h2 className="txn-empty-title">No transactions yet</h2>
-              <p className="txn-empty-copy">Import a monthly CSV on the Budget page to see transactions here.</p>
+              <p className="txn-empty-copy">
+                {importWizardOn
+                  ? 'Import a CSV to see transactions here.'
+                  : 'Import a monthly CSV on the Budget page to see transactions here.'}
+              </p>
             </div>
           ) : groupedTransactions.length > 0 ? (
             <>
@@ -1450,6 +1485,17 @@ const Transactions: FC = () => {
                                       <p className="txn-category-editor-empty">No matching categories</p>
                                     )}
                                   </div>
+                                  {importWizardOn && (
+                                    <button
+                                      type="button"
+                                      className="txn-category-editor-rule"
+                                      onClick={() => startRule(transaction)}
+                                    >
+                                      {createRuleEntryLabel(
+                                        isFallbackCategory(transaction.category) ? null : transaction.category,
+                                      )}
+                                    </button>
+                                  )}
                                 </div>,
                                 document.body,
                               )}

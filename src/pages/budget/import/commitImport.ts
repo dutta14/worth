@@ -47,7 +47,7 @@ export interface ExecuteImportArgs {
 }
 
 /** Month text as a reload would produce it, so it can be compared with the in-memory store. */
-const normalizeCsv = (text: string): string => serializeCSV(parseCSVRows(text))
+export const normalizeCsv = (text: string): string => serializeCSV(parseCSVRows(text))
 
 const yearOf = (monthKey: string): number => parseInt(monthKey.split('-')[0], 10)
 

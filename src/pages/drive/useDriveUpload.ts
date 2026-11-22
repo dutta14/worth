@@ -1,14 +1,37 @@
 import { useState, useCallback, useRef } from 'react'
 import { useBudget } from '../budget/hooks/useBudget'
 import { monthKeyFromFilename } from '../budget/hooks/useCSVUpload'
+import { useImportWizard, type ImportBudgetApi } from '../budget/import/hooks/useImportWizard'
+import { FLAGS } from '../../flags/flagDefinitions'
+import { useFlag } from '../../flags/useFlag'
 
 interface CsvPreview {
   monthKey: string
   csv: string
 }
 
-export function useDriveUpload(refreshTree: () => void) {
-  const { uploadCSV } = useBudget()
+interface DriveUploadOptions {
+  onViewTransactions?: () => void
+}
+
+export function useDriveUpload(refreshTree: () => void, { onViewTransactions }: DriveUploadOptions = {}) {
+  const { uploadCSV, store, commitImport, undoImport } = useBudget()
+  const importWizardOn = useFlag(FLAGS.IMPORT_WIZARD)
+  const wizardBudget: ImportBudgetApi = {
+    store,
+    commitImport: async (plan, snapshot) => {
+      const result = await commitImport(plan, snapshot)
+      refreshTree()
+      return result
+    },
+    undoImport: async record => {
+      const result = await undoImport(record)
+      refreshTree()
+      return result
+    },
+  }
+  const wizard = useImportWizard(wizardBudget, { onViewTransactions })
+  const openWizard = wizard.open
   const [csvPreview, setCsvPreview] = useState<CsvPreview | null>(null)
   const [bulkQueue, setBulkQueue] = useState<CsvPreview[]>([])
   const [pendingNewCats, setPendingNewCats] = useState<string[]>([])
@@ -23,6 +46,10 @@ export function useDriveUpload(refreshTree: () => void) {
 
   const processFiles = useCallback(
     async (files: File[]) => {
+      if (importWizardOn) {
+        openWizard({ files })
+        return
+      }
       const pending: CsvPreview[] = []
       const skipped: string[] = []
 
@@ -49,7 +76,7 @@ export function useDriveUpload(refreshTree: () => void) {
         setBulkQueue(pending.slice(1))
       }
     },
-    [showToast],
+    [showToast, importWizardOn, openWizard],
   )
 
   const handlePreviewConfirm = useCallback(
@@ -152,6 +179,8 @@ export function useDriveUpload(refreshTree: () => void) {
   const openFilePicker = useCallback(() => fileInputRef.current?.click(), [])
 
   return {
+    importWizardOn,
+    wizardElement: wizard.element,
     csvPreview,
     toastMsg,
     dismissToast,
