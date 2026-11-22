@@ -1,0 +1,189 @@
+/* Category budget targets: Monthly target / Vs target columns on the Budget aggregated view. */
+
+/* Twelve month columns plus the two target columns need room; the wrapper scrolls instead of squeezing. */
+.budget-table--targets-months {
+  min-width: 1500px;
+}
+
+.budget-table .budget-th--target {
+  width: 104px;
+  white-space: normal;
+  border-left: 2px solid var(--color-border);
+}
+.budget-table .budget-th--vs {
+  width: 140px;
+  white-space: normal;
+}
+
+.budget-table .budget-tr--agg-row .budget-td--target,
+.budget-table .budget-tr--agg-row .budget-td--vs,
+.budget-table .budget-tr--grand-total .budget-td--target,
+.budget-table .budget-tr--grand-total .budget-td--vs {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+}
+.budget-table .budget-tr--agg-row .budget-td--target,
+.budget-table .budget-tr--grand-total .budget-td--target {
+  padding-left: 0.3rem;
+  padding-right: 0.3rem;
+  border-left: 2px solid var(--color-border);
+}
+
+.budget-target-btn {
+  display: inline-block;
+  min-height: 32px;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-heading);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2rem;
+}
+.budget-target-btn--empty {
+  color: var(--accent);
+}
+.budget-target-btn:hover {
+  background: var(--color-surface-hover);
+}
+.budget-target-btn:active {
+  background: var(--color-surface-alt);
+}
+.budget-target-btn:focus-visible,
+.budget-target-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.budget-target-btn[aria-disabled='true'] {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+.budget-target-btn[aria-disabled='true']:hover {
+  background: transparent;
+}
+
+.budget-target-editor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.budget-target-input {
+  width: 100%;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.budget-target-hint,
+.budget-target-error {
+  font-size: var(--fs-xs);
+  line-height: 1.3;
+  text-align: right;
+}
+.budget-target-hint {
+  display: none;
+  color: var(--color-text-secondary);
+}
+.budget-target-editor:focus-within .budget-target-hint {
+  display: block;
+}
+.budget-target-error {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+  color: var(--color-negative);
+}
+.budget-target-error svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.budget-target-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.budget-target-status--over {
+  color: var(--color-negative);
+}
+.budget-target-status--under {
+  color: var(--color-text-muted);
+}
+.budget-target-status--on {
+  color: var(--color-positive);
+}
+.budget-target-icon {
+  flex: none;
+}
+.budget-target-caption {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.budget-target-delta > span {
+  white-space: nowrap;
+}
+.budget-target-delta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0 2px;
+  white-space: normal;
+  line-height: 1.25;
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-negative);
+}
+
+.budget-target-intro,
+.budget-target-note {
+  max-width: 60ch;
+  margin: 0.75rem 0 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-secondary);
+}
+.budget-target-intro {
+  margin: 0 0 0.75rem;
+}
+.budget-target-alert {
+  max-width: 60ch;
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-negative);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-negative);
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 640px) {
+  .budget-target-btn {
+    min-height: 44px;
+  }
+  .budget-target-input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}

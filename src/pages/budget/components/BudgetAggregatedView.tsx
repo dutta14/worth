@@ -1,6 +1,24 @@
 import { FC, useState } from 'react'
 import { CategoryGroup, TimePeriod } from '../types'
 import { shortMonthName, buildMonthKey } from '../utils/csvParser'
+import { evaluatePeriod, monthlyTargetFor } from '../utils/budgetTargets'
+import type { BudgetTargetsFile } from '../utils/budgetTargets'
+import BudgetTargetCell from './BudgetTargetCell'
+import BudgetTargetStatus from './BudgetTargetStatus'
+import '../../../styles/BudgetTargets.css'
+
+export interface BudgetTargetsConfig {
+  targets: BudgetTargetsFile
+  monthsWithData: ReadonlySet<string>
+  nowMonthKey: string
+  /** True when targets.json could not be read: targets are not applied and editing is off. */
+  readOnly: boolean
+  /** Live-region text for the latest change or failure. */
+  message: string
+  /** Changes on every announcement; keys the message so identical consecutive texts are re-announced. */
+  messageId: number
+  onSetTarget: (groupId: string, label: string, value: number | null) => Promise<{ ok: boolean }>
+}
 
 interface BudgetAggregatedViewProps {
   year: number
@@ -9,7 +27,15 @@ interface BudgetAggregatedViewProps {
   categorySums: Record<string, Record<string, number>>
   timePeriod: TimePeriod
   incomeCategoryGroups?: CategoryGroup[]
+  /** Present only when the targets flag is on and the Expenses tab is shown; absent renders the original table. */
+  targetsConfig?: BudgetTargetsConfig
 }
+
+const TARGETS_INTRO = 'Set a monthly target on any group to see how each month compares.'
+const TARGETS_NOTE =
+  'Targets are monthly. Changing one applies from this month on; earlier months keep the target that applied then.'
+const TARGETS_UNREADABLE =
+  "Your targets file couldn't be read, so targets are turned off to keep it safe. The file is budget/targets.json in your data folder."
 
 const fmt = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })
@@ -21,7 +47,9 @@ const BudgetAggregatedView: FC<BudgetAggregatedViewProps> = ({
   categorySums,
   timePeriod,
   incomeCategoryGroups,
+  targetsConfig,
 }) => {
+  const targetsOn = type === 'expense' && targetsConfig !== undefined
   const months = Array.from({ length: 12 }, (_, i) => buildMonthKey(year, i))
 
   const periods: { label: string; monthKeys: string[] }[] = (() => {
@@ -50,20 +78,16 @@ const BudgetAggregatedView: FC<BudgetAggregatedViewProps> = ({
     return !hasNegative && monthValues.some(v => v > 0)
   }
 
-  const relevantGroups: { id: string; name: string; categories: string[] }[] =
-    type === 'income'
-      ? (incomeCategoryGroups || [])
-          .map(g => ({
-            ...g,
-            categories: g.categories.filter(c => isTypeCategory(c)),
-          }))
-          .filter(g => g.categories.length > 0)
-      : categoryGroups
-          .map(g => ({
-            ...g,
-            categories: g.categories.filter(c => isTypeCategory(c)),
-          }))
-          .filter(g => g.categories.length > 0)
+  const hasTarget = (id: string): boolean => targetsOn && Object.hasOwn(targetsConfig.targets.groups, id)
+
+  const relevantGroups: { id: string; name: string; categories: string[] }[] = (
+    type === 'income' ? incomeCategoryGroups || [] : categoryGroups
+  )
+    .map(g => ({
+      ...g,
+      categories: g.categories.filter(c => isTypeCategory(c)),
+    }))
+    .filter(g => g.categories.length > 0 || hasTarget(g.id))
 
   const getGroupPeriodTotal = (group: { categories: string[] }, period: { monthKeys: string[] }): number => {
     let total = 0
@@ -99,13 +123,34 @@ const BudgetAggregatedView: FC<BudgetAggregatedViewProps> = ({
     return `${((Math.abs(getGroupYearTotal(group)) / gt) * 100).toFixed(1)}%`
   }
 
+  const evaluateGroup = (group: { id: string; categories: string[] }, monthKeys: string[]) =>
+    targetsOn
+      ? evaluatePeriod({
+          record: targetsConfig.targets.groups[group.id],
+          monthKeys,
+          monthsWithData: targetsConfig.monthsWithData,
+          signedNetFor: m => group.categories.reduce((sum, cat) => sum + (categorySums[cat]?.[m] || 0), 0),
+          nowMonth: targetsConfig.nowMonthKey,
+        })
+      : null
+
   const [showPct, setShowPct] = useState(false)
 
   return (
     <div className="budget-table-section">
       <h3 className="budget-table-title">{type === 'income' ? 'Income' : 'Expenses'}</h3>
+      {targetsOn && targetsConfig.readOnly && (
+        <div className="budget-target-alert" role="alert">
+          {TARGETS_UNREADABLE}
+        </div>
+      )}
+      {targetsOn && !targetsConfig.readOnly && !categoryGroups.some(g => hasTarget(g.id)) && (
+        <p className="budget-target-intro">{TARGETS_INTRO}</p>
+      )}
       <div className="budget-table-wrapper">
-        <table className="budget-table">
+        <table
+          className={`budget-table${targetsOn ? ` budget-table--targets${timePeriod === 'month' ? ' budget-table--targets-months' : ''}` : ''}`}
+        >
           <thead>
             <tr>
               <th className="budget-th budget-th--category">Group</th>
@@ -121,6 +166,16 @@ const BudgetAggregatedView: FC<BudgetAggregatedViewProps> = ({
               >
                 {showPct ? '%' : 'Total'}
               </th>
+              {targetsOn && (
+                <>
+                  <th scope="col" className="budget-th budget-th--target">
+                    Monthly target
+                  </th>
+                  <th scope="col" className="budget-th budget-th--vs">
+                    Vs target
+                  </th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -130,7 +185,7 @@ const BudgetAggregatedView: FC<BudgetAggregatedViewProps> = ({
                 const yearTotal = getGroupYearTotal(group)
                 return (
                   <tr key={group.id} className="budget-tr--agg-row">
-                    <td className="budget-td budget-td--category">
+                    <td className="budget-td budget-td--category" title={targetsOn ? group.name : undefined}>
                       <strong>{group.name}</strong>
                     </td>
                     {periods.map(p => {
@@ -141,6 +196,9 @@ const BudgetAggregatedView: FC<BudgetAggregatedViewProps> = ({
                           className={`budget-td budget-td--number${type === 'expense' && val > 0 ? ' refund' : ''}`}
                         >
                           {val !== 0 ? fmt(Math.abs(val)) : ''}
+                          {targetsOn && (
+                            <BudgetTargetStatus result={evaluateGroup(group, p.monthKeys)} variant="period" />
+                          )}
                         </td>
                       )
                     })}
@@ -149,6 +207,24 @@ const BudgetAggregatedView: FC<BudgetAggregatedViewProps> = ({
                     >
                       <strong>{showPct ? getGroupPct(group) : yearTotal !== 0 ? fmt(Math.abs(yearTotal)) : ''}</strong>
                     </td>
+                    {targetsOn && (
+                      <>
+                        <td className="budget-td budget-td--target">
+                          <BudgetTargetCell
+                            groupName={group.name}
+                            current={monthlyTargetFor(
+                              targetsConfig.targets.groups[group.id],
+                              targetsConfig.nowMonthKey,
+                            )}
+                            disabled={targetsConfig.readOnly}
+                            onSave={value => targetsConfig.onSetTarget(group.id, group.name, value)}
+                          />
+                        </td>
+                        <td className="budget-td budget-td--vs">
+                          <BudgetTargetStatus result={evaluateGroup(group, months)} variant="full" />
+                        </td>
+                      </>
+                    )}
                   </tr>
                 )
               })}
@@ -171,11 +247,25 @@ const BudgetAggregatedView: FC<BudgetAggregatedViewProps> = ({
                 <td className={`budget-td ${showPct ? 'budget-td--pct' : 'budget-td--number'}`}>
                   <strong>{showPct ? '100%' : fmt(Math.abs(grandTotal()))}</strong>
                 </td>
+                {targetsOn && (
+                  <>
+                    <td className="budget-td budget-td--target" />
+                    <td className="budget-td budget-td--vs" />
+                  </>
+                )}
               </tr>
             )}
           </tbody>
         </table>
       </div>
+      {targetsOn && (
+        <>
+          <p className="budget-target-note">{TARGETS_NOTE}</p>
+          <div className="sr-only" role="status" aria-live="polite">
+            <span key={targetsConfig.messageId}>{targetsConfig.message}</span>
+          </div>
+        </>
+      )}
     </div>
   )
 }

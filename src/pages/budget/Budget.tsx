@@ -1,6 +1,7 @@
 import { FC, useState, lazy, Suspense, useEffect, useRef, useCallback } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useBudget } from './hooks/useBudget'
+import { currentMonthKey, useBudgetTargets } from './hooks/useBudgetTargets'
 import { useCSVUpload } from './hooks/useCSVUpload'
 import { BudgetViewMode, TimePeriod } from './types'
 import BudgetHeader from './components/BudgetHeader'
@@ -16,6 +17,8 @@ import CashflowSankey from './components/CashflowSankey'
 import { getCSVFormatHelp } from './utils/csvParser'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { getStorageItem } from '../../utils/storage'
+import { useFlag } from '../../flags/useFlag'
+import { FLAGS } from '../../flags/flagDefinitions'
 import '../../styles/Budget.css'
 
 const PdfToCsv = lazy(() => import('../tools/components/PdfToCsv'))
@@ -44,7 +47,11 @@ const Budget: FC = () => {
     categorySums,
     summary,
     monthsWithData,
+    loaded: groupsLoaded,
   } = useBudget()
+
+  const targetsOn = useFlag(FLAGS.CATEGORY_BUDGET_TARGETS)
+  const budgetTargets = useBudgetTargets({ enabled: targetsOn, groups: categoryGroups, groupsLoaded })
 
   const {
     csvPreview,
@@ -377,6 +384,20 @@ const Budget: FC = () => {
                     incomeCategoryGroups={incomeCategoryGroups}
                     categorySums={categorySums}
                     timePeriod={timePeriod}
+                    targetsConfig={
+                      aggTab === 'expense' &&
+                      (budgetTargets.status === 'ready' || budgetTargets.status === 'unreadable')
+                        ? {
+                            targets: budgetTargets.targets,
+                            monthsWithData,
+                            nowMonthKey: currentMonthKey(),
+                            readOnly: budgetTargets.status === 'unreadable',
+                            message: budgetTargets.message,
+                            messageId: budgetTargets.messageId,
+                            onSetTarget: budgetTargets.setTarget,
+                          }
+                        : undefined
+                    }
                   />
                 )}
               </>
