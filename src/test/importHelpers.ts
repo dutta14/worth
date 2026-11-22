@@ -3,6 +3,7 @@ import { buildImportPlan } from '../pages/budget/import/buildImportPlan'
 import { resolveMapping, type MappingDraft } from '../pages/budget/import/mapping'
 import { normalizeRows } from '../pages/budget/import/normalizeRows'
 import type { ImportOptions, ImportPlan } from '../pages/budget/import/types'
+import type { CategoryRule } from '../pages/budget/import/rules'
 import { createWizardFile } from '../pages/budget/import/wizardFiles'
 import { DEFAULT_OPTIONS } from '../pages/budget/import/wizardState'
 
@@ -31,6 +32,7 @@ interface PlanFromTextOptions {
   existing?: Record<string, string>
   groups?: CategoryGroup[]
   options?: ImportOptions
+  rules?: CategoryRule[]
   /** Applied on top of the suggested mapping, for example the sign choice the Columns step requires. */
   draft?: Partial<MappingDraft>
 }
@@ -60,5 +62,13 @@ export function planFromTexts(sources: { name: string; text: string }[], opts: P
     existingCsvs: opts.existing ?? {},
     categoryGroups: opts.groups ?? DEFAULT_TEST_GROUPS,
     options: opts.options ?? DEFAULT_OPTIONS,
+    rules: opts.rules,
   })
 }
+
+export const containsRule = (id: string, value: string, category: string, enabled = true): CategoryRule => ({
+  id,
+  match: { field: 'description', type: 'contains', value },
+  category,
+  enabled,
+})

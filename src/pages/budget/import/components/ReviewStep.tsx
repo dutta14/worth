@@ -1,6 +1,7 @@
 import { FC, useId, useMemo, useState } from 'react'
 import { plural } from '../../../../utils/plural'
 import { sameSignMessage, savedFormatLabel, SIGN_LABEL } from '../messages'
+import { rulesSkippedMessage, rulesSortedMessage } from '../ruleMessages'
 import { formatMoney, formatMonth, formatMonthList, formatSignedMoney } from '../format'
 import { UNCATEGORIZED_EXPENSE } from '../constants'
 import {
@@ -30,6 +31,10 @@ interface ReviewStepProps {
   savedFormats: SavedFormatUse[]
   onChangeFormat: (fileIndex: number) => void
   onOptions: (options: Partial<ImportOptions>) => void
+  /** Why rules are off for this import (an unreadable rules file); null when they are in use. */
+  rulesWarning?: string | null
+  /** Opens the rules dialog. */
+  onManageRules?: () => void
 }
 
 const PAGE_SIZE = 100
@@ -55,7 +60,14 @@ const toRow = (entry: ReviewEntry, showFile: boolean): PreviewRow => ({
   ],
 })
 
-const ReviewStep: FC<ReviewStepProps> = ({ plan, savedFormats, onChangeFormat, onOptions }) => {
+const ReviewStep: FC<ReviewStepProps> = ({
+  plan,
+  savedFormats,
+  onChangeFormat,
+  onOptions,
+  rulesWarning,
+  onManageRules,
+}) => {
   const id = useId()
   const [filter, setFilter] = useState<ReviewFilter>('all')
   const [page, setPage] = useState(0)
@@ -135,12 +147,23 @@ const ReviewStep: FC<ReviewStepProps> = ({ plan, savedFormats, onChangeFormat, o
         {plan.newCategories.length > 0 && (
           <li>{countLabel(plan.newCategories.length, 'new category', 'new categories')} will be added</li>
         )}
+        {plan.rulesApplied > 0 && <li>{rulesSortedMessage(plan.rulesApplied)}</li>}
+        {plan.rulesSkipped > 0 && <li>{rulesSkippedMessage(plan.rulesSkipped)}</li>}
         {plan.fallbackCount > 0 && (
           <li>
             {countLabel(plan.fallbackCount, 'transaction', 'transactions')} will go to {UNCATEGORIZED_EXPENSE}
           </li>
         )}
       </ul>
+
+      {rulesWarning && <p className="iw-warning">{rulesWarning}</p>}
+      {onManageRules && (
+        <p className="iw-rule-manage">
+          <button type="button" className="iw-link" onClick={onManageRules}>
+            Manage rules
+          </button>
+        </p>
+      )}
 
       {monthKeys.length > 0 && (
         <ul className="iw-months" aria-label="Transactions by month">

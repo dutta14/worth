@@ -1,16 +1,23 @@
-import { ChangeEvent, ReactNode, useCallback, useMemo, useReducer, useRef } from 'react'
+import { ChangeEvent, ReactNode, useCallback, useMemo, useReducer, useRef, useState } from 'react'
 import { useFileStore } from '../../../../contexts/FileStoreContext'
 import type { BudgetStore } from '../../types'
 import ImportWizard from '../components/ImportWizard'
+import RulesDialog from '../components/RulesDialog'
 import { buildImportPlan, type PlanFileInput } from '../buildImportPlan'
 import { canUndoImport, type CommitResult, type UndoRecord, type UndoResult } from '../commitImport'
 import {
   loadFormats,
+  loadRules,
   noopPreImportSnapshot,
   saveFormatUpdates,
+  saveRules,
   type FormatsLoad,
   type PreImportSnapshot,
+  type RulesLoad,
+  type RulesSaveResult,
 } from '../importStorage'
+import { rulesWarning } from '../ruleMessages'
+import { emptyRulesFile, type CategoryRule } from '../rules'
 import { normalizeRows } from '../normalizeRows'
 import type { ImportPlan } from '../types'
 import type { ReadableFile } from '../readFile'
@@ -89,6 +96,8 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
   const lastPlan = useRef<ImportPlan | null>(null)
   const { preImportSnapshot = noopPreImportSnapshot, onViewTransactions } = options
   const { fileStore } = useFileStore()
+  const [rulesLoad, setRulesLoad] = useState<RulesLoad>({ state: 'ready', file: emptyRulesFile() })
+  const [rulesOpen, setRulesOpen] = useState(false)
   const { phase, files, options: importOptions } = state
   const { store } = budget
 
@@ -97,12 +106,14 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
       const token = ++loadToken.current
       const names = [...(sources.files ?? []).map(f => f.name), ...(sources.texts ?? []).map(t => t.name)]
       dispatch({ type: 'loading', names })
-      const formats: FormatsLoad = await loadFormats(fileStore)
+      const [formats, rules] = await Promise.all([loadFormats(fileStore), loadRules(fileStore)])
       if (token !== loadToken.current) return
       const result = await loadWizardFiles({ ...sources, formats: formats.state === 'ready' ? formats.file : null })
       if (token !== loadToken.current) return
-      if (result.ok) dispatch({ type: 'loaded', files: result.files, formats })
-      else dispatch({ type: 'load-failed', failure: { message: result.message, canPickAgain: result.canPickAgain } })
+      if (result.ok) {
+        setRulesLoad(rules)
+        dispatch({ type: 'loaded', files: result.files, formats })
+      } else dispatch({ type: 'load-failed', failure: { message: result.message, canPickAgain: result.canPickAgain } })
     },
     [fileStore],
   )
@@ -133,6 +144,7 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
 
   const close = useCallback(() => {
     loadToken.current++
+    setRulesOpen(false)
     dispatch({ type: 'close' })
     restoreFocus(openerRef.current)
   }, [])
@@ -158,6 +170,8 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
     return Object.fromEntries(Object.entries(store.csvs).map(([month, csv]) => [month, csv.csv]))
   }, [phase, store])
 
+  const rules = useMemo(() => (rulesLoad.state === 'ready' ? rulesLoad.file.rules : []), [rulesLoad])
+
   const livePlan = useMemo(
     () =>
       planInputs
@@ -166,9 +180,10 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
             existingCsvs,
             categoryGroups: store.categoryGroups ?? [],
             options: importOptions,
+            rules,
           })
         : null,
-    [planInputs, existingCsvs, store, importOptions],
+    [planInputs, existingCsvs, store, importOptions, rules],
   )
   // While committing, keep showing the plan being written even though the store is changing underneath it.
   if (livePlan) lastPlan.current = livePlan
@@ -221,11 +236,23 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
     }
   }, [budget, undoRecord])
 
+  const changeRules = useCallback(
+    async (next: CategoryRule[]): Promise<RulesSaveResult> => {
+      const outcome = await saveRules(fileStore, next)
+      if (outcome.ok) setRulesLoad({ state: 'ready', file: { ...emptyRulesFile(), rules: next } })
+      return outcome
+    },
+    [fileStore],
+  )
+
+  const closeRules = useCallback(() => setRulesOpen(false), [])
+
   const viewTransactions = useMemo(
     () =>
       onViewTransactions
         ? () => {
             loadToken.current++
+            setRulesOpen(false)
             dispatch({ type: 'close' })
             onViewTransactions()
           }
@@ -256,6 +283,18 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
           onUndo={undo}
           onPickAgain={() => pickFiles(files.length > 1)}
           onViewTransactions={viewTransactions}
+          rulesOpen={rulesOpen}
+          rulesWarning={rulesLoad.state === 'unreadable' ? rulesWarning(rulesLoad.reason) : null}
+          rulesSkipped={lastPlan.current?.rulesSkipped ?? 0}
+          onManageRules={() => setRulesOpen(true)}
+        />
+      )}
+      {phase !== 'idle' && rulesOpen && (
+        <RulesDialog
+          rules={rulesLoad}
+          categoryGroups={store.categoryGroups ?? []}
+          onChange={changeRules}
+          onClose={closeRules}
         />
       )}
     </>

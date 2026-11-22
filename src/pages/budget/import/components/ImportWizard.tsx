@@ -9,6 +9,7 @@ import {
   savedFormatLabel,
   UNDONE_MESSAGE,
 } from '../messages'
+import { rulesSortedMessage } from '../ruleMessages'
 import { countLabel } from '../reviewRows'
 import type { ImportPlan } from '../types'
 import { canGoBack, hasColumnsStep, type WizardAction, type WizardState } from '../wizardState'
@@ -27,6 +28,11 @@ interface ImportWizardProps {
   onUndo: () => void
   onPickAgain: () => void
   onViewTransactions?: () => void
+  /** True while the rules dialog is on top: this dialog stops reacting to Escape and cannot be reached. */
+  rulesOpen?: boolean
+  rulesWarning?: string | null
+  rulesSkipped?: number
+  onManageRules?: () => void
 }
 
 const stepLabel = (state: WizardState): string | null => {
@@ -46,6 +52,10 @@ const ImportWizard: FC<ImportWizardProps> = ({
   onUndo,
   onPickAgain,
   onViewTransactions,
+  rulesOpen = false,
+  rulesWarning,
+  rulesSkipped,
+  onManageRules,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null)
   const { phase, files, fileIndex, commit } = state
@@ -62,11 +72,11 @@ const ImportWizard: FC<ImportWizardProps> = ({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !committing) onCancel()
+      if (e.key === 'Escape' && !committing && !rulesOpen) onCancel()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [committing, onCancel])
+  }, [committing, rulesOpen, onCancel])
 
   const resolved = useMemo(
     () => (phase === 'columns' && file ? resolveMapping(file.parsed.detection.dataRecords, file.draft) : null),
@@ -107,7 +117,8 @@ const ImportWizard: FC<ImportWizardProps> = ({
         .flat()
         .filter(Boolean)
         .join(' ')
-      return [`${stepper}.`, formatsUsed, summary].filter(Boolean).join(' ')
+      const sorted = plan.rulesApplied > 0 ? `${rulesSortedMessage(plan.rulesApplied)}.` : ''
+      return [`${stepper}.`, formatsUsed, summary, sorted].filter(Boolean).join(' ')
     }
     if (phase === 'result' && commit?.ok) {
       if (state.undone) return UNDONE_MESSAGE
@@ -156,7 +167,7 @@ const ImportWizard: FC<ImportWizardProps> = ({
   const showCancel = !(phase === 'result' && commit?.ok)
 
   return (
-    <div className="iw-overlay">
+    <div className="iw-overlay" inert={rulesOpen}>
       <div ref={dialogRef} className="iw-dialog" role="dialog" aria-modal="true" aria-labelledby="iw-title">
         <header className="iw-header">
           <h2 id="iw-title" className="iw-title">
@@ -204,6 +215,8 @@ const ImportWizard: FC<ImportWizardProps> = ({
               savedFormats={savedFormats}
               onChangeFormat={fileIndex => dispatch({ type: 'change-format', fileIndex })}
               onOptions={options => dispatch({ type: 'options', options })}
+              rulesWarning={rulesWarning}
+              onManageRules={onManageRules}
             />
           )}
           {phase === 'result' && commit && (
@@ -214,6 +227,7 @@ const ImportWizard: FC<ImportWizardProps> = ({
               formatNote={state.formatNote}
               canUndo={canUndo}
               onUndo={onUndo}
+              rulesSkipped={rulesSkipped}
             />
           )}
         </div>
