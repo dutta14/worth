@@ -88,6 +88,8 @@ export function useBudget() {
 
   const persist = useCallback(
     (next: BudgetStore) => {
+      // After a failed read the in-memory store is empty or stale, so saving it would overwrite files that exist.
+      if (readFailedRef.current) return
       storeRef.current = next
       setStore(next)
       saveBudgetStore(fileStore, next).catch(console.error)

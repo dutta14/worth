@@ -125,6 +125,23 @@ describe('useBudget — initial state', () => {
   })
 })
 
+describe('useBudget — unreadable budget files', () => {
+  it('blocks imports and does not write anything when the budget files cannot be read', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    loadBudgetStoreStrict.mockRejectedValue(new Error('permission denied'))
+    const { result } = await renderAndLoad()
+
+    expect(result.current.importBlocked).toBe(true)
+    expect(result.current.loaded).toBe(false)
+
+    act(() => {
+      result.current.uploadCSV('2025-05', VALID_CSV)
+    })
+
+    expect(saveBudgetStore).not.toHaveBeenCalled()
+  })
+})
+
 describe('useBudget — uploadCSV', () => {
   it('parses uploaded CSV and creates transactions for the given month key', async () => {
     const { result } = await renderAndLoad()
