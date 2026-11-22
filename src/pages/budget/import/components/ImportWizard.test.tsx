@@ -215,6 +215,22 @@ describe('Import wizard', () => {
     expect(await fileStore.readCSV('transactions/2026/2026-10.csv')).toEqual(before)
   })
 
+  it('counts only the months that have new transactions in the summary line', async () => {
+    const first = setup({ request: { files: [asFile('span.csv', f05)] } })
+    await first.user.click(screen.getByRole('button', { name: 'Import' }))
+    await screen.findByRole('heading', { name: 'Columns' })
+    await chooseNegativeSpending(first.user)
+    await first.user.click(primary('Continue to review'))
+    await first.user.click(await screen.findByRole('button', { name: /^Import \d+ transactions?$/ }))
+    await screen.findByRole('heading', { name: 'Import complete' })
+    first.unmount()
+
+    const extra = `${f05.trimEnd()}\n2026-11-03,Bakery,-6.00\n`
+    const second = setup({ request: { files: [asFile('span.csv', extra)] } }, first.fileStore)
+    await second.user.click(screen.getByRole('button', { name: 'Import' }))
+    expect(await screen.findByText('1 new transaction across 1 month')).toBeInTheDocument()
+  })
+
   it('undoes an import and removes the month it created', async () => {
     const { user, fileStore } = await openWith([['legacy.csv', f11]])
     await user.click(await screen.findByRole('button', { name: /^Import \d+ transactions?$/ }))

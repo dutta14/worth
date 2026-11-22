@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -120,5 +120,70 @@ describe('Transactions with the import-wizard flag on', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Edit category for STARBUCKS/i })).toHaveTextContent('Dining'),
     )
+  })
+  it('selects the categories of the first import into a page that had no transactions', async () => {
+    const fileStore = await seed(false)
+    renderPage(fileStore, true)
+    await screen.findByText('Import a CSV to see transactions here.')
+
+    await fileStore.writeCSV('transactions/2026/2026-10.csv', parseCSV(OCT))
+    await fileStore.writeJSON('budget/categories.json', {
+      version: 1,
+      years: [2026],
+      categoryGroups: [{ id: 'food', name: 'Food', categories: ['Dining', 'Uncategorized'] }],
+    })
+
+    expect(await screen.findByRole('button', { name: /Edit category for Blue Bottle/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Category\s*All Categories/ })).toBeInTheDocument()
+  })
+
+  it('keeps a row visible when a rule moves it into a category the page had not listed', async () => {
+    const user = userEvent.setup()
+    const fileStore = await seed(false)
+    await fileStore.writeCSV(
+      'transactions/2026/2026-10.csv',
+      parseCSV('Date,Category,Amount,Description\n2026-10-01,Uncategorized,-4.50,STARBUCKS #1'),
+    )
+    renderPage(fileStore, true)
+    await screen.findByRole('button', { name: /Edit category for STARBUCKS/i })
+    await user.click(screen.getByRole('button', { name: 'Apply rules to uncategorized' }))
+    await user.click(await screen.findByRole('button', { name: 'Apply rules' }))
+    await screen.findByRole('heading', { name: 'Rules applied' })
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Edit category for STARBUCKS/i })).toHaveTextContent('Dining'),
+    )
+  })
+
+  it('moves the category editor up when it would run past the bottom of the viewport', async () => {
+    const user = userEvent.setup()
+    renderPage(await seed(), true)
+    const trigger = await screen.findByRole('button', { name: /Edit category for Blue Bottle/i })
+    const bottom = window.innerHeight + 120
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const editor = this.classList.contains('txn-category-editor')
+      const top = editor ? Number.parseFloat(this.style.top || '0') : 0
+      return {
+        top,
+        bottom: editor ? top + (bottom - 300) : 300,
+        left: 0,
+        right: 0,
+        width: 0,
+        height: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }
+    })
+    try {
+      await user.click(trigger)
+      const editor = await screen.findByRole('dialog', { name: /Edit category for Blue Bottle/i })
+      await waitFor(() => expect(Number.parseFloat(editor.style.top)).toBeLessThan(308))
+      expect(editor.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight - 8)
+    } finally {
+      rect.mockRestore()
+    }
   })
 })

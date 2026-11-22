@@ -1,6 +1,6 @@
 # Import Wizard
 
-- **Status:** Proposed
+- **Status:** Built behind the `import-wizard` flag (off by default, 0% rollout); experimental. Slices PR1 to PR5 and the PR6 hardening, Playwright and docs have landed. Rollout and removal of the legacy path are still to do and are the owner's decision
 - **Owner:** Anindya
 - **Last updated:** 2026-11-08
 - **Priority:** 3 of 5 in the next-features list
@@ -682,7 +682,9 @@ The PM draft put dedupe in slice 2 and merge later. Merge without dedupe doubles
 | PR3 | Saved formats (`import-formats.json`), "Using saved format", signature matching | off |
 | PR4 | Rules: storage, apply on import, `RulesDialog`, validation, `retargetRules` | off |
 | PR5 | Transactions integration (create rule, apply rules, Import button E7) plus E4, E5, E6 | off |
-| PR6 | Playwright and a11y hardening, docs, rollout 0% to owner to 100%, then delete the legacy path and flag | removed |
+| PR6 | Playwright and a11y hardening, docs (landed, flag still off). Then, as separate owner-driven steps: rollout 0% to owner to 100%, then delete the legacy path and flag | off, then removed |
+
+PR6 notes. `e2e/import-wizard.spec.ts` covers the E1-E7 entry points, column mapping, saved formats, month split, merge and duplicates, rules, undo and its limits, the paused state for unreadable files, keyboard and accessibility checks (focus trap and restore, live region, accessible names, dark-mode contrast, 44px touch targets) and a no-foreign-host network check. It found and fixed three defects: the Review summary counted months that only held duplicates; the Transactions category filter hid rows in a category that appeared after an import or a rule (flag on only); and the category editor opened below the viewport, hiding "Always categorize merchants like this" (flag on only). Not done in PR6, by decision of the owner: changing the flag default or rollout, and deleting the legacy path.
 
 Each PR passes the repo pre-commit gates (prettier, eslint max-warnings=0, tsc, vitest with the 90% statement coverage gate, Playwright).
 
@@ -758,7 +760,7 @@ Fixtures with CRLF, BOM, UTF-16 and 50k rows are built programmatically in tests
 | R4 | Overwriting a corrupt or newer-schema JSON file | Read with `readJSON(path, null)` plus `exists`; refuse to write when either is unexpected |
 | R5 | UI freeze on 50k rows | Chunked parsing, 100-row preview, hard limits |
 | R6 | Dark-mode primary button contrast | Tinted button tokens (5.2), checked in PR2 review |
-| R7 | Provider order drift between CONTRIBUTING.md and `App.tsx` | No new provider; fix the doc in PR6 |
+| R7 | Provider order drift between CONTRIBUTING.md and `App.tsx` | No new provider; CONTRIBUTING.md corrected in PR6 |
 | R8 | `persist` swallows write errors | `commitImport` awaits its own writes and reports failures |
 | R9 | Same-day identical rows edited in Transactions hit the first match (existing limitation, 2.6) | Not fixed here; apply-rules edits by row index, not by value matching |
 | R10 | `TextDecoder('windows-1252')` differs between runtimes (Node decodes the label as plain Latin-1, so the euro sign and smart quotes come out wrong) | `decodeBytes` decodes windows-1252 with its own byte table instead of the native label, so the browser and the Vitest runtime behave identically |

@@ -1,4 +1,4 @@
-import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { FC, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { loadBudgetStore, saveBudgetStore, saveCSVForMonth } from '../budget/utils/budgetStorage'
@@ -343,6 +343,7 @@ const Transactions: FC = () => {
   const [visibleCount, setVisibleCount] = useState(15)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const initialLoadDone = useRef(false)
+  const knownCategories = useRef<Set<string>>(new Set())
   const allCategoriesRef = useRef<HTMLInputElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
   const filterRef = useRef<HTMLDivElement>(null)
@@ -381,6 +382,7 @@ const Transactions: FC = () => {
 
       if (!initialLoadDone.current) {
         initialLoadDone.current = true
+        knownCategories.current = new Set(result.transactions.map(t => t.category))
         const removed = result.budgetGroups.find(g => g.id === 'removed')
         const removedSet = new Set(removed?.categories ?? [])
         const allCats = new Set(result.transactions.map(t => t.category))
@@ -499,12 +501,17 @@ const Transactions: FC = () => {
   )
 
   useEffect(() => {
+    // With the wizard, imports and rules add categories while the page is open; show them instead of hiding the rows.
+    const known = knownCategories.current
+    const added = importWizardOn ? categories.filter(c => !known.has(c) && !removedCategories.has(c)) : []
+    knownCategories.current = new Set(categories)
     setSelectedCategories(current => {
       const validCategories = new Set(categories)
       const next = new Set([...current].filter(c => validCategories.has(c)))
-      return next.size === current.size ? current : next
+      added.forEach(c => next.add(c))
+      return next.size === current.size && added.length === 0 ? current : next
     })
-  }, [categories])
+  }, [categories, importWizardOn, removedCategories])
 
   const allSelected = selectedCategories.size === categories.length
   const noneSelected = selectedCategories.size === 0
@@ -861,6 +868,16 @@ const Transactions: FC = () => {
       return { key }
     })
   }
+
+  // The editor opens below its row; near the bottom of the screen that would hide the rule entry at its foot.
+  useLayoutEffect(() => {
+    if (!importWizardOn || !editingCategory || !categoryEditorPos) return
+    const editor = categoryEditorRef.current
+    if (!editor) return
+    const overflow = editor.getBoundingClientRect().bottom - (window.innerHeight - 8)
+    const top = Math.max(8, categoryEditorPos.top - overflow)
+    if (overflow > 0 && top !== categoryEditorPos.top) setCategoryEditorPos({ ...categoryEditorPos, top })
+  }, [importWizardOn, editingCategory, categoryEditorPos])
 
   const startRule = (transaction: LoadedTransaction): void => {
     ruleOpenerRef.current = document.querySelector<HTMLElement>('.txn-row-category-button[aria-expanded="true"]')

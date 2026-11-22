@@ -82,6 +82,7 @@ const ReviewStep: FC<ReviewStepProps> = ({
 
   const { totals, options } = plan
   const monthKeys = Object.keys(plan.months)
+  const monthsWithNewRows = monthKeys.filter(month => plan.months[month].added.length > 0)
   const replacedMonths = monthKeys.filter(month => plan.months[month].hasExistingFile)
   const nothingNew = totals.newRows === 0
 
@@ -128,7 +129,7 @@ const ReviewStep: FC<ReviewStepProps> = ({
       ) : (
         <p className="iw-summary-line">
           {countLabel(totals.newRows, 'new transaction', 'new transactions')} across{' '}
-          {countLabel(monthKeys.length, 'month', 'months')}
+          {countLabel(monthsWithNewRows.length, 'month', 'months')}
         </p>
       )}
 
