@@ -137,6 +137,7 @@ This is the spine of the app. The Accounts tab gives you the raw history, Alloca
 - Filter the accounts table when you want to isolate cash, retirement, debt, or other slices
 - In Allocation, create custom ratio tabs for your ideal asset mix
 - In Growth, log yearly income, expenses, and savings to keep the balance history grounded in behavior
+- Experimental, off by default: open the Review tab for a one-page look at a single year (net worth change, income, expenses, savings rate, top spending groups, goal progress), then print it, save it as a PDF, or download it as a CSV (feature flag `annual-review`)
 
 **One tip:** Use Accounts for what happened, Allocation for what you want, and Growth for why the gap exists. The three tabs make more sense when you think of them as history, target, and explanation.
 

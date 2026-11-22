@@ -77,6 +77,11 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>Filter the accounts table when you want to isolate cash, retirement, debt, or other slices.</li>
         <li>In Allocation, create custom ratio tabs for your ideal asset mix.</li>
         <li>In Growth, log yearly income, expenses, and savings to keep the balance history grounded in behavior.</li>
+        <li>
+          Experimental, off by default: turn on the Annual review feature flag to get a Review tab. Pick a year to see
+          net worth, income, expenses, savings rate, top spending groups, and goal progress on one page, then print it,
+          save it as a PDF, or download it as a CSV. Anything missing from your files is listed under Things to know.
+        </li>
       </ul>
       <p>
         <strong>One tip:</strong> Use Accounts for what happened, Allocation for what you want, and Growth for why the

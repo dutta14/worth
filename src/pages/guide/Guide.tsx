@@ -50,7 +50,12 @@ const tocItems: GuideSectionLink[] = [
   { id: 'features-by-page', title: 'Features, by page', keywords: ['pages', 'navigation'] },
   { id: 'feature-home', title: 'Home', level: 3, keywords: ['dashboard', 'cards'] },
   { id: 'feature-goals', title: 'Planning', level: 3, keywords: ['goals', 'plans', 'fi calculator'] },
-  { id: 'feature-net-worth', title: 'Wealth', level: 3, keywords: ['accounts', 'allocation', 'growth'] },
+  {
+    id: 'feature-net-worth',
+    title: 'Wealth',
+    level: 3,
+    keywords: ['accounts', 'allocation', 'growth', 'review', 'annual review', 'year in review'],
+  },
   { id: 'feature-budget', title: 'Cashflow', level: 3, keywords: ['budget', 'cashflow', 'csv', 'converter'] },
   { id: 'feature-transactions', title: 'Transactions', level: 3, keywords: ['categorization', 'filters'] },
   { id: 'feature-taxes', title: 'Taxes', level: 3, keywords: ['documents', 'checklists'] },

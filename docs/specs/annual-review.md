@@ -1,8 +1,8 @@
 # Annual Review
 
-- **Status:** Proposed
+- **Status:** Built behind the `annual-review` flag (default off, 0% rollout); experimental until the owner enables it
 - **Owner:** Anindya
-- **Last updated:** 2026-11-08
+- **Last updated:** 2026-11-22
 - **Priority:** 5 of 5 in the next-features list
 - **Effort:** M
 
@@ -629,6 +629,9 @@ Spec of `formatDelta`: rounds once with `Intl.NumberFormat` (not `toFixed`), ret
 3. **Sections.** Net worth with SVG chart and table, cashflow, spending, goals, notes, prior-year lines.
 4. **Print and CSV.** `AnnualReview.css` print block, document title handling, `reviewCsv.ts`, buttons.
 5. **E2E, docs, enable.** Playwright specs, Guide, README, CONTRIBUTING, demo-data screenshot optional, then set the flag to 100% and schedule flag removal.
+   - Landed: `e2e/annual-review.spec.ts` (page object and fixtures alongside), Guide, README, CONTRIBUTING and this spec. Demo mode needed no seed changes (it already carries balances, goals and budget CSVs).
+   - Not done on purpose: raising the flag from 0% is the owner's call, so the flag stays off and the docs call the feature experimental. O-12 (Growth year cards linking to the review) stays a follow-up.
+   - Deviations from the plan in 7.4: the keyboard test changes the year by typing it into the focused select, because Chrome on macOS opens the list on an arrow key instead of changing the value; the chart is an `<svg role="img">` whose `aria-label` is the summary sentence (backed by the monthly table) rather than a `figcaption`; the no-outside-requests test ignores the shell's own flag-registry and web-font requests.
 
 ### 7.4 Test plan
 
