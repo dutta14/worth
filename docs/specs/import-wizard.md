@@ -118,7 +118,7 @@ Folder `src/pages/budget/import/` (NEW), one co-located test per file:
 | `readFile.ts` | Size check, `decodeBytes(bytes)`: UTF-8 (strip BOM), UTF-16 LE/BE by BOM, else fall back to `windows-1252` (decoded with a built-in table, see R10) |
 | `delimiter.ts` | `sniffDelimiter(text)` over `, ; \t \|` by consistent column count across the first 20 records |
 | `tokenize.ts` | `tokenize(text, delimiter)`: RFC 4180 (quotes, escaped quotes, newlines in quotes, CRLF/LF/CR). Reports an unterminated quote with a row number |
-| `headerDetect.ts` | `detectHeaderRow(records)` skips preamble rows, finds the header, drops footer rows; `suggestMapping(headers)` with synonym dictionaries. "type" is excluded as ambiguous |
+| `headerDetect.ts` | `detectHeaderRow(records)` skips preamble rows, finds the header (only when no data-looking row sits above it; otherwise the file is headerless), drops footer rows (no date and either no amount or a Total/Balance-style label; a trailing row with an amount and a bad date is kept so it is reported), and returns `preambleCount`/`footerCount` so every source record is accounted for; `suggestMapping(headers)` with synonym dictionaries. "type" is excluded as ambiguous |
 | `parseAmount.ts` | `parseAmountToCents(text, decimalSeparator)`: integer cents; handles currency symbols, NBSP, Swiss apostrophe, parentheses, leading plus, leading or trailing minus |
 | `parseDate.ts` | `detectDateFormats(samples)`, `parseDate(text, format)`: string math only; strict calendar validation; strips a time suffix; implausible-year check (1990 to current year + 1) |
 | `normalizeRows.ts` | `normalizeRows(records, mapping)`: rows to `NormalizedRow[]` plus `SkippedRow[]` |

@@ -32,6 +32,8 @@ interface PipelineResult extends NormalizeResult {
   mapping: ColumnMapping
   headerIndex: number
   firstSourceRow: number
+  preambleCount: number
+  footerCount: number
   tokenizeErrors: { row: number; message: string }[]
   dateFormats: DateFormat[]
 }
@@ -88,9 +90,19 @@ function runPipeline(
     mapping,
     headerIndex: detection.headerIndex,
     firstSourceRow: detection.firstSourceRow,
+    preambleCount: detection.preambleCount,
+    footerCount: detection.footerCount,
     tokenizeErrors: errors,
     dateFormats,
   }
+}
+
+/** Every non-blank source record must be a row, a skipped row, the header, or a counted preamble/footer record. */
+function expectNoRecordLost(text: string, result: PipelineResult) {
+  const { records } = tokenize(text, result.delimiter)
+  const nonBlank = records.filter(record => record.some(cell => cell.trim() !== '')).length
+  const header = result.headerIndex === -1 ? 0 : 1
+  expect(result.rows.length + result.skipped.length + header + result.preambleCount + result.footerCount).toBe(nonBlank)
 }
 
 const run = (text: string, overrides: Partial<ColumnMapping> = {}, detect: { hasHeader?: boolean } = {}) =>
@@ -374,6 +386,54 @@ describe('F15: malformed rows', () => {
       [4, 'column-count'],
       [5, 'column-count'],
     ])
+  })
+})
+
+describe('no source record is silently lost (AC-1, AC-11)', () => {
+  const fixtures: [string, string, Partial<ColumnMapping>][] = [
+    ['F01', f01, {}],
+    ['F02', f02, {}],
+    ['F02b', f02b, {}],
+    ['F03', f03, {}],
+    ['F05', f05, {}],
+    ['F06', f06, {}],
+    ['F07', f07, {}],
+    ['F08', f08, { dateFormat: 'MM/DD/YYYY' }],
+    ['F09', f09, { date: 0, description: 1, amount: 2 }],
+    ['F10', f10, {}],
+    ['F11', f11, {}],
+    ['F13', f13, {}],
+    ['F15', f15, {}],
+  ]
+
+  it.each(fixtures)('accounts for every record of %s', (_name, text, overrides) => {
+    expectNoRecordLost(text, run(text, overrides))
+  })
+
+  it('reports the preamble and footer of F08 as counts', () => {
+    const result = run(f08, { dateFormat: 'MM/DD/YYYY' })
+    expect(result.preambleCount).toBe(3)
+    expect(result.footerCount).toBe(2)
+  })
+
+  it('reports a notes row in a headerless file as skipped, with the rows above it kept', () => {
+    const text = '2024-01-01,Coffee,-3.00\n2024-01-02,Tea,-4.00\nPending,Transactions,here\n2024-01-03,Food,-5.00'
+    const result = run(text, { date: 0, description: 1, amount: 2 })
+    expect(result.headerIndex).toBe(-1)
+    expect(result.rows.map(r => r.sourceRow)).toEqual([1, 2, 4])
+    expect(result.skipped.map(s => [s.sourceRow, s.reason])).toEqual([[3, 'bad-date']])
+    expectNoRecordLost(text, result)
+  })
+
+  it('reports trailing transactions with a blank or N/A date as skipped', () => {
+    const text = 'Date,Desc,Amount\n2024-01-01,Coffee,-3.00\n2024-01-02,Tea,-4.00\nN/A,Food,-5.00\n,Gas,-9.00'
+    const result = run(text)
+    expect(result.rows).toHaveLength(2)
+    expect(result.skipped.map(s => [s.sourceRow, s.reason])).toEqual([
+      [4, 'bad-date'],
+      [5, 'bad-date'],
+    ])
+    expectNoRecordLost(text, result)
   })
 })
 

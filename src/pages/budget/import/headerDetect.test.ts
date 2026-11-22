@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { tokenize } from './tokenize'
 import { detectHeaderRow, modalWidth, normalizeHeader, suggestMapping } from './headerDetect'
 
 describe('detectHeaderRow', () => {
@@ -12,6 +13,8 @@ describe('detectHeaderRow', () => {
       headerIndex: 0,
       headers: ['Date', 'Description', 'Amount'],
       dataRecords: [['2026-01-01', 'Shop', '-5.00']],
+      preambleCount: 0,
+      footerCount: 0,
       firstSourceRow: 2,
     })
   })
@@ -58,6 +61,55 @@ describe('detectHeaderRow', () => {
       [''],
     ])
     expect(result.dataRecords).toEqual([['2026-01-01', 'Shop', '-5.00'], [''], ['2026-01-02', 'Cafe', '-3.00']])
+    expect(result.footerCount).toBe(2)
+  })
+
+  it('counts preamble records above the header, not blank ones', () => {
+    const result = detectHeaderRow([
+      ['Account Name', 'Everyday Checking', ''],
+      [''],
+      ['Date', 'Description', 'Amount'],
+      ['2026-01-01', 'Shop', '-5.00'],
+    ])
+    expect(result.preambleCount).toBe(1)
+  })
+
+  it('treats a file as headerless when a notes row follows data, so the notes row is reported, not promoted', () => {
+    const { records } = tokenize(
+      '2024-01-01,Coffee,-3.00\n2024-01-02,Tea,-4.00\nPending,Transactions,here\n2024-01-03,Food,-5.00',
+      ',',
+    )
+    const result = detectHeaderRow(records)
+    expect(result.hasHeader).toBe(false)
+    expect(result.headerIndex).toBe(-1)
+    expect(result.dataRecords).toEqual(records)
+    expect(result.firstSourceRow).toBe(1)
+  })
+
+  it('keeps a trailing transaction whose date is blank or N/A so it can be reported', () => {
+    const { records } = tokenize(
+      'Date,Desc,Amount\n2024-01-01,Coffee,-3.00\n2024-01-02,Tea,-4.00\nN/A,Food,-5.00\n,Gas,-9.00',
+      ',',
+    )
+    const result = detectHeaderRow(records)
+    expect(result.dataRecords).toHaveLength(4)
+    expect(result.footerCount).toBe(0)
+  })
+
+  it('trims trailing summary records by label or by having no amount, but stops at a real transaction', () => {
+    const result = detectHeaderRow([
+      ['Date', 'Description', 'Amount'],
+      ['2026-01-01', 'Shop', '-5.00'],
+      ['Pending', 'Food', '-9.00'],
+      ['Total', '', '-14.00'],
+      ['Ending balance', '', '100.00'],
+      ['Generated on October 31', '', ''],
+    ])
+    expect(result.dataRecords).toEqual([
+      ['2026-01-01', 'Shop', '-5.00'],
+      ['Pending', 'Food', '-9.00'],
+    ])
+    expect(result.footerCount).toBe(3)
   })
 
   it('keeps a trailing record with a date-shaped cell even if its date is invalid, so it can be reported', () => {
@@ -91,6 +143,8 @@ describe('detectHeaderRow', () => {
       headerIndex: -1,
       headers: ['Column 1', 'Column 2', 'Column 3'],
       dataRecords: records,
+      preambleCount: 0,
+      footerCount: 0,
       firstSourceRow: 1,
     })
   })
@@ -184,6 +238,8 @@ describe('detectHeaderRow', () => {
       headerIndex: -1,
       headers: [],
       dataRecords: [],
+      preambleCount: 0,
+      footerCount: 0,
       firstSourceRow: 1,
     })
     expect(detectHeaderRow([[''], ['']]).dataRecords).toEqual([])

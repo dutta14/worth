@@ -9,6 +9,10 @@ export interface HeaderDetection {
   headers: string[]
   /** Records after the header, with trailing blank and footer records removed. */
   dataRecords: string[][]
+  /** Non-blank records above the header that were ignored as preamble (account name, date range). */
+  preambleCount: number
+  /** Non-blank trailing records dropped as footers (totals, balances, generated-on lines). */
+  footerCount: number
   /** 1-based record number of `dataRecords[0]`: pass it to normalizeRows so skipped rows cite the file's own rows. */
   firstSourceRow: number
 }
@@ -30,6 +34,14 @@ const hasDateCell = (record: string[]): boolean => record.some(cell => looksLike
 const isAmountCell = (cell: string): boolean =>
   parseAmountToCents(cell, '.') !== null || parseAmountToCents(cell, ',') !== null
 const hasAmountCell = (record: string[]): boolean => record.some(isAmountCell)
+const looksLikeData = (record: string[]): boolean => hasDateCell(record) && hasAmountCell(record)
+
+const SUMMARY_LABEL =
+  /^(?:grand\s+)?(?:sub\s*)?totals?\b|^(?:closing|opening|ending|beginning|available|running|ledger)\b|^balance\b/i
+const isSummaryRecord = (record: string[]): boolean => {
+  const first = record.find(cell => cell.trim() !== '')
+  return !hasAmountCell(record) || (first !== undefined && SUMMARY_LABEL.test(first.trim()))
+}
 
 /** The most common record width; ties go to the wider one so a short preamble cannot win. */
 export function modalWidth(records: string[][]): number {
@@ -59,7 +71,10 @@ function isHeaderLike(record: string[], width: number): boolean {
 function findHeaderIndex(records: string[][], width: number): number {
   let relaxed = -1
   for (let index = 0; index < records.length; index++) {
-    if (isBlankRecord(records[index]) || !isHeaderLike(records[index], width)) continue
+    if (isBlankRecord(records[index])) continue
+    // A data row above the candidate means the file has no header: the candidate is a mid-file notes row.
+    if (looksLikeData(records[index])) return relaxed
+    if (!isHeaderLike(records[index], width)) continue
     let next = index + 1
     while (next < records.length && isBlankRecord(records[next])) next++
     if (next >= records.length || !hasDateCell(records[next])) continue
@@ -69,18 +84,32 @@ function findHeaderIndex(records: string[][], width: number): number {
   return relaxed
 }
 
-/** Drops trailing blank records and footer records (totals, closing balance): ones with no date-shaped cell. */
-function trimTrailing(records: string[][]): string[][] {
+/**
+ * Drops trailing blank records and footer records. A footer has no date-shaped cell and looks like a summary:
+ * it has no amount-like cell, or it starts with a label such as Total or Closing balance. A trailing record
+ * with an amount and no date (blank, N/A, Pending) is a transaction with a bad date and stays, so
+ * normalizeRows reports it.
+ */
+function trimTrailing(records: string[][]): { kept: string[][]; footerCount: number } {
   const anyDates = records.some(hasDateCell)
   let end = records.length
-  while (end > 0 && (isBlankRecord(records[end - 1]) || (anyDates && !hasDateCell(records[end - 1])))) end--
-  return records.slice(0, end)
+  let footerCount = 0
+  while (end > 0) {
+    const last = records[end - 1]
+    if (isBlankRecord(last)) end--
+    else if (anyDates && !hasDateCell(last) && isSummaryRecord(last)) {
+      end--
+      footerCount++
+    } else break
+  }
+  return { kept: records.slice(0, end), footerCount }
 }
 
 /**
  * Finds the header row, skipping preamble records (account name, date range) above it and dropping footer
  * records below the data. A header is a text-only record, as wide as the data, followed by a record that
- * has a date and an amount.
+ * has a date and an amount, with no data-looking record (date and amount) above it. Preamble and footer
+ * records are counted in the result so callers can account for every source record.
  */
 export function detectHeaderRow(records: string[][], options: DetectHeaderOptions = {}): HeaderDetection {
   const nonBlank = records.filter(record => !isBlankRecord(record))
@@ -97,20 +126,26 @@ export function detectHeaderRow(records: string[][], options: DetectHeaderOption
   }
 
   if (headerIndex === -1) {
+    const { kept, footerCount } = trimTrailing(records)
     return {
       hasHeader: false,
       headerIndex: -1,
       headers: Array.from({ length: width }, (_, i) => `Column ${i + 1}`),
-      dataRecords: trimTrailing(records),
+      dataRecords: kept,
+      preambleCount: 0,
+      footerCount,
       firstSourceRow: 1,
     }
   }
 
+  const { kept, footerCount } = trimTrailing(records.slice(headerIndex + 1))
   return {
     hasHeader: true,
     headerIndex,
     headers: records[headerIndex].map(cell => cell.trim()),
-    dataRecords: trimTrailing(records.slice(headerIndex + 1)),
+    dataRecords: kept,
+    preambleCount: records.slice(0, headerIndex).filter(record => !isBlankRecord(record)).length,
+    footerCount,
     firstSourceRow: headerIndex + 2,
   }
 }
