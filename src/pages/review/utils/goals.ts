@@ -15,11 +15,21 @@ function fiBalanceAt(month: string, accounts: Account[], balances: BalanceEntry[
   return roundCents(total)
 }
 
+const createdYearOf = (goal: FinancialGoal): number => parseInt((goal.goalCreatedIn ?? '').split('-')[0], 10)
+
 /** A goal whose creation month cannot be parsed counts as existing. */
 const existedBy = (goal: FinancialGoal, year: number): boolean => {
-  const createdYear = parseInt((goal.goalCreatedIn ?? '').split('-')[0], 10)
+  const createdYear = createdYearOf(goal)
   return Number.isNaN(createdYear) || createdYear <= year
 }
+
+/**
+ * getFiTarget returns 0 for a garbage creation month and reads the real clock for an empty one.
+ * An unparseable or empty creation month is therefore replaced with the review year, so the goal stays
+ * listed and the result depends only on the injected year. The input goal is never mutated.
+ */
+const withDeterministicCreation = (goal: FinancialGoal, year: number): FinancialGoal =>
+  createdYearOf(goal) > 0 ? goal : { ...goal, goalCreatedIn: String(year) }
 
 const usable = (a: NetWorthAnchor): a is NetWorthAnchor & { month: string } =>
   a.month !== null && (a.status === 'exact' || a.status === 'nearest')
@@ -42,7 +52,7 @@ export function snapshotGoals(
   for (const goal of goals) {
     if (!existedBy(goal, year)) continue
     const target = getFiTarget(
-      goal,
+      withDeterministicCreation(goal, year),
       profileBirthday,
       growth.preBoundaryGrowth,
       growth.postBoundaryGrowth,

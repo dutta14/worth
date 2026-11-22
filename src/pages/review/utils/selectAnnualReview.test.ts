@@ -358,6 +358,9 @@ describe('selectAnnualReview behavior', () => {
     )
     expect(review.goals.map(g => g.goalId)).toEqual([1, 3])
     expect(review.goals[0]).toMatchObject({ startPct: 10, endPct: 100 })
+    const createdIn = vi.mocked(getFiTarget).mock.calls.map(([g]) => g.goalCreatedIn)
+    expect(createdIn).toContain('2025')
+    expect(createdIn).not.toContain('sometime')
   })
 
   it('shows goals with unavailable progress when anchors are missing', () => {

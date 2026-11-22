@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { makeGoal } from '../../../test/factories'
 import { balancesFor, GROWTH, makeAccounts } from '../../../test/reviewFixtures'
 import { getFiTarget } from '../../goal/utils/goalCalculations'
@@ -74,9 +74,41 @@ describe('snapshotGoals', () => {
     expect(snap({ goalCreatedIn: '2025-12' })).toHaveLength(1)
   })
 
-  it('counts a goal with an unparseable creation month as existing', () => {
-    expect(snap({ goalCreatedIn: 'whenever', expenseValue: 0 })).toHaveLength(1)
-    expect(snap({ goalCreatedIn: undefined as unknown as string, expenseValue: 0 })).toHaveLength(1)
+  it.each(['whenever', '', undefined as unknown as string])(
+    'lists a goal with an unparseable creation month (%s) with a finite target',
+    goalCreatedIn => {
+      const [s] = snap({ goalCreatedIn, expenseValue: 60000 })
+      expect(s).toMatchObject({ goalId: 7 })
+      expect(Number.isFinite(s.target)).toBe(true)
+      expect(s.target).toBeGreaterThan(0)
+    },
+  )
+
+  it.each(['whenever', ''])(
+    'computes the same snapshot for creation month %j whatever the system clock says',
+    value => {
+      vi.useFakeTimers()
+      try {
+        vi.setSystemTime(new Date('2020-06-15T12:00:00Z'))
+        const first = snap({ goalCreatedIn: value, expenseValue: 60000 })
+        vi.setSystemTime(new Date('2031-06-15T12:00:00Z'))
+        const second = snap({ goalCreatedIn: value, expenseValue: 60000 })
+        expect(first).toHaveLength(1)
+        expect(second).toEqual(first)
+      } finally {
+        vi.useRealTimers()
+      }
+    },
+  )
+
+  it('values an unparseable creation month as if the goal was created in the review year', () => {
+    expect(snap({ goalCreatedIn: 'whenever' })[0].target).toBe(snap({ goalCreatedIn: '2025-01' })[0].target)
+  })
+
+  it('does not mutate the input goal', () => {
+    const input = { ...goal, goalCreatedIn: 'whenever' }
+    snapshotGoals(2025, [input], '1990-01', GROWTH, [], [], anchor(null, 'missing'), anchor(null, 'missing'))
+    expect(input.goalCreatedIn).toBe('whenever')
   })
 
   it('skips goals without a positive target', () => {
