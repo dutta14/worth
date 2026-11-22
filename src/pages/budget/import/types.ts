@@ -56,3 +56,52 @@ export interface TokenizeError {
   row: number
   message: string
 }
+
+export interface ImportOptions {
+  /** Default true: rows already in the month (or earlier in the batch) are left out. */
+  skipDuplicates: boolean
+  /** Default false: write only the imported rows for each touched month instead of appending. */
+  replaceMonths: boolean
+}
+
+/** A normalized row with the category it will be filed under. */
+export interface PlannedRow extends NormalizedRow {
+  resolvedCategory: string
+  /** True when the file gave no category and the row went to one of the two fallback categories. */
+  fallback: boolean
+  fileName: string
+  fileIndex: number
+}
+
+export interface MonthPlan {
+  added: PlannedRow[]
+  /** Rows recognized as duplicates; they are in `added` only when duplicates are not skipped. */
+  duplicateRows: PlannedRow[]
+  existingCount: number
+}
+
+export interface PlanSkippedRow extends SkippedRow {
+  fileName: string
+  fileIndex: number
+}
+
+export interface PlanFileSummary {
+  name: string
+  newRows: number
+  duplicates: number
+  skipped: number
+}
+
+export interface ImportPlan {
+  /** Keyed by 'YYYY-MM', in ascending order. */
+  months: Record<string, MonthPlan>
+  options: ImportOptions
+  totals: { newRows: number; duplicates: number; skipped: number; spendingCents: number; incomeCents: number }
+  files: PlanFileSummary[]
+  newCategories: { name: string; group: 'expense' | 'income' }[]
+  /** Rows filed under the fallback categories. */
+  fallbackCount: number
+  skipped: PlanSkippedRow[]
+  /** Tokenizer messages, for example an unterminated quote. */
+  notices: string[]
+}

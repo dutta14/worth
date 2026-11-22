@@ -266,6 +266,49 @@ export async function saveBudgetStore(fileStore: FileStore, store: BudgetStore):
   window.dispatchEvent(new Event('budget-changed'))
 }
 
+export class SaveMonthsError extends Error {
+  readonly failedMonths: string[]
+  readonly categoriesFailed: boolean
+
+  constructor(failedMonths: string[], categoriesFailed: boolean) {
+    super(categoriesFailed ? 'Could not save categories.json' : `Could not save ${failedMonths.join(', ')}`)
+    this.name = 'SaveMonthsError'
+    this.failedMonths = failedMonths
+    this.categoriesFailed = categoriesFailed
+  }
+}
+
+export const monthCsvPath = (monthKey: string): string =>
+  `transactions/${parseInt(monthKey.split('-')[0], 10)}/${monthKey}.csv`
+
+/**
+ * Writes only the given months plus categories.json (unlike saveBudgetStore, which rewrites every month).
+ * Every write is awaited; months are written in parallel and categories.json only after all of them succeed.
+ * Throws SaveMonthsError naming the months that failed (or that categories.json failed).
+ */
+export async function saveMonths(fileStore: FileStore, store: BudgetStore, monthKeys: string[]): Promise<void> {
+  const settled = await Promise.allSettled(
+    monthKeys.map(monthKey =>
+      fileStore.writeCSV(monthCsvPath(monthKey), parseCSVRows(store.csvs[monthKey]?.csv ?? '')),
+    ),
+  )
+  const failedMonths = monthKeys.filter((_, i) => settled[i].status === 'rejected')
+  if (failedMonths.length > 0) throw new SaveMonthsError(failedMonths, false)
+
+  const csvYears = Object.keys(store.csvs).map(k => parseInt(k.split('-')[0], 10))
+  const allYears = [...new Set([...store.years, ...csvYears])].sort((a, b) => a - b)
+  try {
+    await fileStore.writeJSON(CATEGORIES_PATH, {
+      version: 1,
+      years: allYears,
+      categoryGroups: normalizeGroups(store.categoryGroups || []),
+    })
+  } catch {
+    throw new SaveMonthsError([], true)
+  }
+  window.dispatchEvent(new Event('budget-changed'))
+}
+
 export async function saveCSVForMonth(
   fileStore: FileStore,
   store: BudgetStore,

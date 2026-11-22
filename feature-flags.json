@@ -16,6 +16,9 @@
     },
     "annual-review": {
       "percentage": 0
+    },
+    "import-wizard": {
+      "percentage": 0
     }
   }
 }

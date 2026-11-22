@@ -37,6 +37,11 @@ describe('monthly-check-in flag', () => {
     expect(featureFlags.flags['modern-design']).toEqual({ percentage: 100 })
   })
 
+  it('registers the import-wizard flag as temporary, off by default and at 0 percent', () => {
+    expect(FLAGS.IMPORT_WIZARD).toMatchObject({ id: 'import-wizard', type: 'boolean', default: false, temporary: true })
+    expect(featureFlags.flags['import-wizard']).toEqual({ percentage: 0 })
+  })
+
   it('gives every flag a unique id', () => {
     const flagIds = Object.values(FLAGS).map(flag => flag.id)
     expect(new Set(flagIds).size).toBe(flagIds.length)

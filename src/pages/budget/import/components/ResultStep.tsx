@@ -1,0 +1,61 @@
+import { FC, useId } from 'react'
+import type { CommitResult } from '../commitImport'
+import { failureMessage } from '../messages'
+import { countLabel } from '../reviewRows'
+
+interface ResultStepProps {
+  result: CommitResult
+  undone: boolean
+  undoFailed: boolean
+  canUndo: boolean
+  onUndo: () => void
+}
+
+const ResultStep: FC<ResultStepProps> = ({ result, undone, undoFailed, canUndo, onUndo }) => {
+  const id = useId()
+
+  if (!result.ok) {
+    return (
+      <section className="iw-result" aria-labelledby={`${id}-title`}>
+        <h3 id={`${id}-title`} className="iw-step-title" tabIndex={-1} data-iw-step-heading>
+          Import did not finish
+        </h3>
+        <p className="iw-error" role="alert">
+          {failureMessage(result)}
+        </p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="iw-result" role="status" aria-labelledby={`${id}-title`}>
+      <h3 id={`${id}-title`} className="iw-step-title" tabIndex={-1} data-iw-step-heading>
+        {undone ? 'Import undone' : 'Import complete'}
+      </h3>
+      {undone ? (
+        <p>Import undone. Your budget is back to how it was.</p>
+      ) : (
+        <>
+          <p>
+            Imported {countLabel(result.imported, 'transaction', 'transactions')} into{' '}
+            {countLabel(result.months.length, 'month', 'months')}.
+          </p>
+          {result.snapshotFailed && (
+            <p className="iw-warning">A backup could not be made before importing. Your import still went through.</p>
+          )}
+          <button type="button" className="iw-btn" aria-disabled={!canUndo} onClick={() => canUndo && onUndo()}>
+            Undo import
+          </button>
+          {!canUndo && <p className="iw-muted">Undo is not available because these months changed after the import.</p>}
+          {undoFailed && (
+            <p className="iw-error" role="alert">
+              Error: The import could not be undone. Check that the worth folder is still available, then try again.
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+export default ResultStep
