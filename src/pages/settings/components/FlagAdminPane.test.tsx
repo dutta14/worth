@@ -115,7 +115,7 @@ describe('FlagAdminPane — basic render', () => {
   it('renders flag list with the MODERN_DESIGN flag', () => {
     renderPane()
     expect(screen.getByText('modern-design')).toBeInTheDocument()
-    expect(screen.getAllByText('boolean')[0]).toBeInTheDocument()
+    expect(screen.getByText('boolean')).toBeInTheDocument()
   })
 
   it('renders My Overrides section heading', () => {
@@ -125,7 +125,7 @@ describe('FlagAdminPane — basic render', () => {
 
   it('renders "using public config" when no override exists', () => {
     renderPane()
-    expect(screen.getAllByText('using public config')[0]).toBeInTheDocument()
+    expect(screen.getByText('using public config')).toBeInTheDocument()
   })
 
   it('shows override label when override exists for a flag', () => {
@@ -200,12 +200,12 @@ describe('FlagAdminPane — admin rollout config', () => {
 
   it('renders rollout percentage input for boolean flags', () => {
     renderPane()
-    expect(screen.getAllByLabelText('Rollout %')[0]).toBeInTheDocument()
+    expect(screen.getByLabelText('Rollout %')).toBeInTheDocument()
   })
 
   it('updates local rollout state when percentage changes', () => {
     renderPane()
-    const input = screen.getAllByLabelText('Rollout %')[0]
+    const input = screen.getByLabelText('Rollout %')
     fireEvent.change(input, { target: { value: '50' } })
 
     // Save button should become enabled (rolloutDirty = true)
@@ -222,7 +222,7 @@ describe('FlagAdminPane — admin rollout config', () => {
     renderPane()
 
     // Make dirty
-    fireEvent.change(screen.getAllByLabelText('Rollout %')[0], { target: { value: '75' } })
+    fireEvent.change(screen.getByLabelText('Rollout %'), { target: { value: '75' } })
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => {
@@ -234,7 +234,7 @@ describe('FlagAdminPane — admin rollout config', () => {
     const user = userEvent.setup()
     renderPane()
 
-    fireEvent.change(screen.getAllByLabelText('Rollout %')[0], { target: { value: '100' } })
+    fireEvent.change(screen.getByLabelText('Rollout %'), { target: { value: '100' } })
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => {
@@ -247,7 +247,7 @@ describe('FlagAdminPane — admin rollout config', () => {
     mockContextValue.saveRolloutConfig = vi.fn().mockRejectedValue(new Error('Push rejected'))
     renderPane()
 
-    fireEvent.change(screen.getAllByLabelText('Rollout %')[0], { target: { value: '50' } })
+    fireEvent.change(screen.getByLabelText('Rollout %'), { target: { value: '50' } })
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => {
@@ -265,7 +265,7 @@ describe('FlagAdminPane — admin rollout config', () => {
     )
     renderPane()
 
-    fireEvent.change(screen.getAllByLabelText('Rollout %')[0], { target: { value: '30' } })
+    fireEvent.change(screen.getByLabelText('Rollout %'), { target: { value: '30' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => {
@@ -288,7 +288,7 @@ describe('FlagAdminPane — admin rollout config', () => {
 
   it('clamps rollout percentage to 0-100 range', () => {
     renderPane()
-    const input = screen.getAllByLabelText('Rollout %')[0]
+    const input = screen.getByLabelText('Rollout %')
 
     fireEvent.change(input, { target: { value: '150' } })
     // The Save button should be enabled (dirty)
