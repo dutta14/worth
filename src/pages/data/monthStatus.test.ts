@@ -7,6 +7,7 @@ import {
   getCheckInState,
   getMonthStatus,
   isMonthKey,
+  monthLabel,
   toDayKey,
 } from './monthStatus'
 import type { Account, BalanceEntry } from './types'
@@ -459,5 +460,18 @@ describe('getCheckInState: reporting month and kind rules', () => {
     getCheckInState(accounts, balances, new Date())
     expect(JSON.stringify(accounts)).toBe(accountsCopy)
     expect(JSON.stringify(balances)).toBe(balancesCopy)
+  })
+})
+
+describe('monthLabel', () => {
+  const today = new Date(2026, 10, 8)
+
+  it('omits the year for the current year', () => {
+    expect(monthLabel('2026-10', today)).toBe('October')
+  })
+
+  it('adds the year for other years', () => {
+    expect(monthLabel('2025-10', today)).toBe('October 2025')
+    expect(monthLabel('2027-01', today)).toBe('January 2027')
   })
 })

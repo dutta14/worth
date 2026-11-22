@@ -1,4 +1,4 @@
-import { FC, KeyboardEvent, useState, useRef, lazy, Suspense } from 'react'
+import { FC, KeyboardEvent, useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { NavLink, useLocation, useNavigate, Routes, Route, Navigate } from 'react-router-dom'
 import { useGoals } from '../../contexts/GoalsContext'
 import { useSettings } from '../../contexts/SettingsContext'
@@ -8,6 +8,8 @@ import { FLAGS } from '../../flags/flagDefinitions'
 import { useFlag, useFlagResolved } from '../../flags/useFlag'
 import { Account, BalanceEntry } from './types'
 import { parseCsvImport } from './csvImport'
+import { getCheckInRequestMonth, hasCheckInRequest } from './checkInRequest'
+import type { MonthKey } from './monthStatus'
 import { exportCsv } from './csvExport'
 import AccountsModal from './AccountsModal'
 import BalanceSpreadsheet from './BalanceSpreadsheet'
@@ -32,6 +34,9 @@ const Data: FC = () => {
   const { accounts, balances, setAccounts: ctxSetAccounts, setBalances: ctxSetBalances } = useData()
   const annualReviewEnabled = useFlag(FLAGS.ANNUAL_REVIEW)
   const annualReviewResolved = useFlagResolved(FLAGS.ANNUAL_REVIEW)
+  const checkInEnabled = useFlag(FLAGS.MONTHLY_CHECK_IN)
+  const checkInResolved = useFlagResolved(FLAGS.MONTHLY_CHECK_IN)
+  const [startCheckInMonth, setStartCheckInMonth] = useState<MonthKey | null>(null)
 
   const [showAccountsModal, setShowAccountsModal] = useState(false)
   const [inlineEntry, setInlineEntry] = useState<{
@@ -220,6 +225,15 @@ const Data: FC = () => {
 
   const location = useLocation()
   const navigate = useNavigate()
+
+  const isDetailsRoute = location.pathname === '/net-worth/dashboard/details'
+  useEffect(() => {
+    if (!checkInEnabled || !checkInResolved || !isDetailsRoute || !hasCheckInRequest(location.state)) return
+    setStartCheckInMonth(getCheckInRequestMonth(location.state, accounts, balances, new Date()))
+    // Clear the request so a reload or Back does not reopen the form.
+    navigate(location.pathname, { replace: true, state: null })
+  }, [checkInEnabled, checkInResolved, isDetailsRoute, location.pathname, location.state, accounts, balances, navigate])
+
   const activeTab = location.pathname.startsWith('/net-worth/allocation')
     ? 'allocation'
     : location.pathname.startsWith('/net-worth/growth')
@@ -325,6 +339,8 @@ const Data: FC = () => {
                 balanceMap={balanceMap}
                 profile={profile}
                 onSaveMonth={handleSaveMonth}
+                startCheckInMonth={startCheckInMonth}
+                onCheckInStarted={() => setStartCheckInMonth(null)}
               />
             ) : dataView === 'manage' ? (
               <AccountsModal

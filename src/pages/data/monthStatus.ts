@@ -19,6 +19,13 @@ export const currentMonthKey = (now: Date): MonthKey => formatMonthKey(now.getFu
 /** Local calendar day as 'YYYY-MM-DD'. */
 export const toDayKey = (now: Date): string => `${currentMonthKey(now)}-${pad2(now.getDate())}`
 
+/** Long month name, with the year added when it is not the current year. */
+export const monthLabel = (month: MonthKey, today: Date): string => {
+  const [year, m] = month.split('-').map(Number)
+  const name = new Date(year, m - 1, 1).toLocaleDateString('en-US', { month: 'long' })
+  return month.slice(0, 4) === currentMonthKey(today).slice(0, 4) ? name : `${name} ${year}`
+}
+
 /** Shifts a month key by `delta` months. An invalid key is returned unchanged. */
 export const addMonths = (month: MonthKey, delta: number): MonthKey => {
   if (!isMonthKey(month)) return month
