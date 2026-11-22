@@ -821,6 +821,35 @@
   font-weight: var(--fw-semibold);
 }
 
+.txn-import-error {
+  flex-basis: 100%;
+  color: var(--color-negative);
+  font-size: var(--fs-sm);
+}
+
+.txn-category-editor-rule {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 0.5rem 0.1rem;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--accent-text-dark);
+  font-size: var(--fs-sm);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.txn-category-editor-rule:hover {
+  text-decoration: underline;
+}
+
+.txn-category-editor-rule:focus-visible {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 2px;
+}
+
 .txn-category-editor-empty {
   margin: 0;
   color: var(--color-text-muted);

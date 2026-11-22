@@ -292,6 +292,9 @@ describe('messages', () => {
     expect(failureMessage({ ...base, reason: 'unmergeable' })).toBe(
       'Oct 2026 already has data Worth cannot add to. Nothing was changed.',
     )
+    expect(failureMessage({ ...base, reason: 'unreadable', failedMonths: [] })).toBe(
+      'Your budget files could not be read, so nothing was imported. Check that the worth folder is still available, then try again.',
+    )
     expect(failureMessage({ ...base, categoriesFailed: true, failedMonths: [] })).toContain(
       'Your categories could not be saved.',
     )

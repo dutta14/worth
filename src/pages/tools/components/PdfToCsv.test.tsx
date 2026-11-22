@@ -54,6 +54,8 @@ vi.mock('pdfjs-dist', () => {
   }
 })
 
+let onUseInWizard: ((csv: string) => void) | undefined
+
 async function loadPdfInComponent(
   pageData: (typeof singlePageItems)[] = [singlePageItems],
   fileName = 'statement.pdf',
@@ -61,7 +63,7 @@ async function loadPdfInComponent(
   pdfMockBehavior = 'success'
   pdfMockPages = pageData.map(items => ({ items }))
 
-  render(<PdfToCsv />)
+  render(<PdfToCsv onUseInWizard={onUseInWizard} />)
   const fileInput = document.querySelector('input[type="file"][accept=".pdf"]') as HTMLInputElement
   const pdfFile = new File(['%PDF-1.4'], fileName, { type: 'application/pdf' })
   fireEvent.change(fileInput, { target: { files: [pdfFile] } })
@@ -75,6 +77,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   pdfMockBehavior = 'hang'
   pdfMockPages = []
+  onUseInWizard = undefined
 })
 
 afterEach(() => {
@@ -396,6 +399,19 @@ describe('PdfToCsv', () => {
       await waitFor(() => {
         expect(screen.getByText('✓ Copied')).toBeInTheDocument()
       })
+    })
+
+    it('has no wizard button unless the host provides one', async () => {
+      await getPreviewTable()
+      expect(screen.queryByRole('button', { name: 'Review in import wizard' })).not.toBeInTheDocument()
+    })
+
+    it('hands the extracted CSV to the import wizard instead of downloading it', async () => {
+      onUseInWizard = vi.fn()
+      await getPreviewTable()
+      fireEvent.click(screen.getByRole('button', { name: 'Review in import wizard' }))
+      expect(onUseInWizard).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(onUseInWizard).mock.calls[0][0]).toContain('\n')
     })
 
     it('downloads CSV when Download button is clicked', async () => {

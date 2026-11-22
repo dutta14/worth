@@ -29,6 +29,8 @@ const Budget: FC = () => {
     store,
     commitImport,
     undoImport,
+    importBlocked,
+    reload,
     years,
     selectedYear,
     setSelectedYear,
@@ -80,7 +82,7 @@ const Budget: FC = () => {
   const location = useLocation()
   const navigate = useNavigate()
   const wizard = useImportWizard(
-    { store, commitImport, undoImport },
+    { store, commitImport, undoImport, blocked: importBlocked, reload },
     { onViewTransactions: () => navigate('/transactions', { state: CASHFLOW_TAB_FOCUS_STATE }) },
   )
   const budgetPath = location.pathname.replace(/\/+$/, '')
@@ -391,6 +393,7 @@ const Budget: FC = () => {
                     monthsWithData={monthsWithData}
                     onUploadCSV={uploadCSV}
                     onRemoveCSV={removeCSV}
+                    onImportCSV={importWizardOn ? () => wizard.open() : undefined}
                     timePeriod={timePeriod}
                   />
                 ) : (
@@ -470,7 +473,16 @@ const Budget: FC = () => {
                     </div>
                   }
                 >
-                  <PdfToCsv />
+                  <PdfToCsv
+                    onUseInWizard={
+                      importWizardOn
+                        ? csvText => {
+                            closePdfModal()
+                            wizard.open({ text: csvText })
+                          }
+                        : undefined
+                    }
+                  />
                 </Suspense>
               </div>
             </div>

@@ -139,17 +139,27 @@ export interface RuleMatchResult {
   skipped: string[]
 }
 
+export interface RuleMatchDetail extends RuleMatchResult {
+  /** The rule that supplied `category`, or null when none did. */
+  ruleId: string | null
+}
+
 /** The first rule that matches and still has a category wins; one whose category is gone is skipped and reported. */
-export function matchRules(compiled: CompiledRule[], description: string): RuleMatchResult {
+export function matchRulesDetailed(compiled: CompiledRule[], description: string): RuleMatchDetail {
   const text = normalizeDescription(description)
   const skipped: string[] = []
-  if (text === '') return { category: null, skipped }
+  if (text === '') return { category: null, ruleId: null, skipped }
   for (const rule of compiled) {
     if (!text.includes(rule.needle)) continue
     if (rule.category === null) skipped.push(rule.id)
-    else return { category: rule.category, skipped }
+    else return { category: rule.category, ruleId: rule.id, skipped }
   }
-  return { category: null, skipped }
+  return { category: null, ruleId: null, skipped }
+}
+
+export function matchRules(compiled: CompiledRule[], description: string): RuleMatchResult {
+  const { category, skipped } = matchRulesDetailed(compiled, description)
+  return { category, skipped }
 }
 
 /** The category the rules give a row, or null. A category supplied by the file is never overridden. */
@@ -178,6 +188,50 @@ export function validateRule(draft: RuleDraft, existing: CategoryRule[]): RuleEr
   const needle = normalizeDescription(value)
   const taken = existing.some(rule => isContainsRule(rule) && normalizeDescription(rule.match.value) === needle)
   return taken ? 'duplicate' : null
+}
+
+const NOISE_WORDS = new Set([
+  'pos',
+  'debit',
+  'credit',
+  'purchase',
+  'card',
+  'checkcard',
+  'recurring',
+  'ach',
+  'online',
+  'authorized',
+  'on',
+  'sq',
+  'tst',
+  'sp',
+  'paypal',
+  'the',
+])
+const SUGGESTION_WORDS = 2
+
+const isNoiseToken = (token: string): boolean =>
+  NOISE_WORDS.has(token.toLowerCase().replace(/[^a-z0-9]/g, '')) ||
+  /^[\d/.,-]+$/.test(token) ||
+  /^[^\p{L}\p{N}]+$/u.test(token)
+
+/**
+ * A starting value for a rule built from a statement description: the merchant name without payment-processor
+ * prefixes, store numbers, dates or reference codes ("SQ *BLUE BOTTLE #1234" becomes "BLUE BOTTLE"). The user can
+ * edit it before saving. When nothing usable is left, the whole description (up to 100 characters) is returned.
+ */
+export function suggestRuleValue(description: string): string {
+  const cleaned = cleanRuleValue(description)
+  const tokens = cleaned.replace(/[*#]/g, ' $& ').split(' ').filter(Boolean)
+  let start = 0
+  while (start < tokens.length && isNoiseToken(tokens[start])) start++
+  const words: string[] = []
+  for (const token of tokens.slice(start)) {
+    if (words.length === SUGGESTION_WORDS || /\d/.test(token) || /^[^\p{L}\p{N}]+$/u.test(token)) break
+    words.push(token)
+  }
+  const merchant = words.join(' ').replace(/[,.;:]+$/, '')
+  return merchant.length >= MIN_RULE_VALUE ? merchant : cleaned.slice(0, MAX_RULE_VALUE).trim()
 }
 
 const idNumber = (id: string): number => {

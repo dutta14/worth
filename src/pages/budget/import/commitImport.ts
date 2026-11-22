@@ -25,8 +25,11 @@ export interface CommitSuccess {
 
 export interface CommitFailure {
   ok: false
-  /** 'unmergeable': an existing month file has no Date, Category and Amount header, so nothing was written. */
-  reason: 'write' | 'unmergeable'
+  /**
+   * 'unmergeable': an existing month file has no Date, Category and Amount header, so nothing was written.
+   * 'unreadable': the budget files could not be read, so the host refused to write over them.
+   */
+  reason: 'write' | 'unmergeable' | 'unreadable'
   /** Months whose write failed, or that could not be merged (nothing is written in that case). */
   failedMonths: string[]
   /** True when the month files were written but categories.json was not. */
@@ -47,7 +50,7 @@ export interface ExecuteImportArgs {
 }
 
 /** Month text as a reload would produce it, so it can be compared with the in-memory store. */
-const normalizeCsv = (text: string): string => serializeCSV(parseCSVRows(text))
+export const normalizeCsv = (text: string): string => serializeCSV(parseCSVRows(text))
 
 const yearOf = (monthKey: string): number => parseInt(monthKey.split('-')[0], 10)
 

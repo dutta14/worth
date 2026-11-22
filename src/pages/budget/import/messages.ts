@@ -11,7 +11,15 @@ export const UNDONE_MESSAGE = 'Import undone. Your budget is back to how it was.
 export const importedMessage = (result: CommitSuccess): string =>
   `Imported ${countLabel(result.imported, 'transaction', 'transactions')} into ${countLabel(result.months.length, 'month', 'months')}.`
 
+export const STORE_UNREADABLE_HEADING = 'Import is paused'
+
+export const STORE_UNREADABLE_MESSAGE =
+  'Worth could not read your budget files, so importing is paused to protect your data. Check that the worth folder is still available, then try again.'
+
 export const failureMessage = (result: CommitFailure): string => {
+  if (result.reason === 'unreadable') {
+    return 'Your budget files could not be read, so nothing was imported. Check that the worth folder is still available, then try again.'
+  }
   if (result.reason === 'unmergeable') {
     return `${formatMonthList(result.failedMonths)} already has data Worth cannot add to. Nothing was changed.`
   }

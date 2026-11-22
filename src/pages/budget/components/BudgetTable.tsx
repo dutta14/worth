@@ -11,6 +11,8 @@ interface BudgetTableProps {
   monthsWithData: Set<string>
   onUploadCSV: (monthKey: string, csv: string) => { ok: boolean; error?: string }
   onRemoveCSV: (monthKey: string) => void
+  /** When given (import wizard on), the month menu opens the wizard instead of the legacy file input. */
+  onImportCSV?: () => void
   timePeriod: TimePeriod
 }
 
@@ -35,6 +37,7 @@ const BudgetTable: FC<BudgetTableProps> = ({
   monthsWithData,
   onUploadCSV,
   onRemoveCSV,
+  onImportCSV,
   timePeriod,
 }) => {
   const navigate = useNavigate()
@@ -164,6 +167,11 @@ const BudgetTable: FC<BudgetTableProps> = ({
 
   const handleUploadClick = () => {
     if (!contextMenu) return
+    if (onImportCSV) {
+      setContextMenu(null)
+      onImportCSV()
+      return
+    }
     pendingMonthRef.current = contextMenu.monthKey
     setContextMenu(null)
     fileInputRef.current?.click()
@@ -428,27 +436,35 @@ const BudgetTable: FC<BudgetTableProps> = ({
           <div className="budget-ctx-backdrop" data-testid="ctx-menu-backdrop" onClick={() => setContextMenu(null)} />
           <div className="budget-ctx-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
             <button className="budget-ctx-item" onClick={handleUploadClick}>
-              Upload CSV for {shortMonthName(parseInt(contextMenu.monthKey.split('-')[1], 10) - 1)}
+              {onImportCSV
+                ? `Import into ${shortMonthName(parseInt(contextMenu.monthKey.split('-')[1], 10) - 1)}…`
+                : `Upload CSV for ${shortMonthName(parseInt(contextMenu.monthKey.split('-')[1], 10) - 1)}`}
             </button>
             {monthsWithData.has(contextMenu.monthKey) && (
               <button className="budget-ctx-item budget-ctx-item--danger" onClick={handleRemoveClick}>
                 Remove CSV
               </button>
             )}
-            <div className="budget-ctx-divider" />
-            <div className="budget-ctx-hint">{getCSVFormatHelp()}</div>
+            {!onImportCSV && (
+              <>
+                <div className="budget-ctx-divider" />
+                <div className="budget-ctx-hint">{getCSVFormatHelp()}</div>
+              </>
+            )}
           </div>
         </>
       )}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv"
-        data-testid="csv-file-input"
-        style={{ display: 'none' }}
-        onChange={handleFileChange}
-      />
+      {!onImportCSV && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          data-testid="csv-file-input"
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+        />
+      )}
     </div>
   )
 }

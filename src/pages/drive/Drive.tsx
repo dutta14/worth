@@ -61,6 +61,8 @@ const Drive: FC = () => {
   const resolved = useMemo(() => resolvePathSegments(root, segments), [root, segments])
 
   const {
+    importWizardOn,
+    wizardElement,
     csvPreview,
     toastMsg,
     dismissToast,
@@ -74,7 +76,7 @@ const Drive: FC = () => {
     handleDrop,
     handleFileInputChange,
     openFilePicker,
-  } = useDriveUpload(refreshTree)
+  } = useDriveUpload(refreshTree, { onViewTransactions: () => navigate('/transactions') })
 
   // ── Rename state ─────────────────────────────────────────────
   const [renameSlug, setRenameSlug] = useState<string | null>(null)
@@ -369,7 +371,9 @@ const Drive: FC = () => {
             {dragOver ? 'Drop CSV files here' : 'Drag & drop CSV files or click to browse'}
           </div>
           <div className="drive-dropzone-hint">
-            Filenames should contain YYYY-MM (e.g. 2025-05.csv) or match "Our Finances - MMM YYYY.csv"
+            {importWizardOn
+              ? 'Drop CSV files here. Worth reads dates from the rows, not the filename.'
+              : 'Filenames should contain YYYY-MM (e.g. 2025-05.csv) or match "Our Finances - MMM YYYY.csv"'}
           </div>
         </div>
       )}
@@ -388,6 +392,8 @@ const Drive: FC = () => {
           </button>
         </div>
       )}
+
+      {importWizardOn && wizardElement}
 
       {/* CSV Preview Modal */}
       {csvPreview && (

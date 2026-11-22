@@ -52,10 +52,22 @@ vi.mock('./hooks/useCSVUpload', () => ({
   }),
 }))
 
-vi.mock('../tools/components/PdfToCsv', () => ({ default: () => <div /> }))
+vi.mock('../tools/components/PdfToCsv', () => ({
+  default: ({ onUseInWizard }: { onUseInWizard?: (csv: string) => void }) =>
+    onUseInWizard ? (
+      <button onClick={() => onUseInWizard('Date,Category,Amount,Description\n2025-01-02,Dining,-6.75,Cafe')}>
+        use-in-wizard
+      </button>
+    ) : (
+      <div data-testid="pdf-legacy" />
+    ),
+}))
 vi.mock('./components/BudgetSummary', () => ({ default: () => <div /> }))
 vi.mock('./components/ManualTransactionEntry', () => ({ default: () => <div /> }))
-vi.mock('./components/BudgetTable', () => ({ default: () => <div /> }))
+vi.mock('./components/BudgetTable', () => ({
+  default: ({ onImportCSV }: { onImportCSV?: () => void }) =>
+    onImportCSV ? <button onClick={onImportCSV}>table-import</button> : <div data-testid="table-legacy" />,
+}))
 vi.mock('./components/BudgetAggregatedView', () => ({ default: () => <div /> }))
 vi.mock('./components/CategoryGroupManager', () => ({ default: () => <div /> }))
 vi.mock('./components/CSVPreviewModal', () => ({ default: () => <div data-testid="csv-preview-modal" /> }))
@@ -91,9 +103,21 @@ beforeEach(() => {
   localStorage.clear()
   mockUseBudget.yearTransactions = { '2025-01': [{ date: '2025-01-15', category: 'Salary', amount: 5000 }] }
   mockUseBudget.monthsWithData = new Set(['2025-01'])
+  mockUseBudget.spreadsheetMode = 'aggregated'
 })
 
 describe('Budget with the import-wizard flag off', () => {
+  it('passes no wizard callbacks to the table or the PDF tool', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('lab-pdf-to-csv', '1')
+    mockUseBudget.spreadsheetMode = 'detailed'
+    renderBudget(false)
+    expect(screen.getByTestId('table-legacy')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'More actions' }))
+    await user.click(screen.getByRole('menuitem', { name: 'PDF → CSV' }))
+    expect(await screen.findByTestId('pdf-legacy')).toBeInTheDocument()
+  })
+
   it('keeps the legacy menu items, preview modal and file inputs, and mounts no wizard input', async () => {
     const user = userEvent.setup()
     renderBudget(false)
@@ -147,5 +171,26 @@ describe('Budget with the import-wizard flag on', () => {
     const click = vi.spyOn(input, 'click')
     await user.click(screen.getByRole('button', { name: 'Import CSV' }))
     expect(click).toHaveBeenCalledOnce()
+  })
+
+  it('opens the wizard from the table month menu callback (E4)', async () => {
+    const user = userEvent.setup()
+    mockUseBudget.spreadsheetMode = 'detailed'
+    renderBudget(true)
+    const input = screen.getByTestId('import-wizard-input') as HTMLInputElement
+    const click = vi.spyOn(input, 'click')
+    await user.click(screen.getByRole('button', { name: 'table-import' }))
+    expect(click).toHaveBeenCalledOnce()
+  })
+
+  it('hands the PDF tool output to the wizard and closes the PDF modal (E6)', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('lab-pdf-to-csv', '1')
+    renderBudget(true)
+    await user.click(screen.getByRole('button', { name: 'More actions' }))
+    await user.click(screen.getByRole('menuitem', { name: 'PDF → CSV' }))
+    await user.click(await screen.findByRole('button', { name: 'use-in-wizard' }))
+    expect(await screen.findByRole('heading', { name: 'Review before importing' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'PDF → CSV' })).not.toBeInTheDocument()
   })
 })
