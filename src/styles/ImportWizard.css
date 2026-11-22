@@ -213,6 +213,11 @@
   gap: 12px;
 }
 
+.iw-formats .iw-warning {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .iw-chip {
   padding: 4px 12px;
   color: var(--color-text);

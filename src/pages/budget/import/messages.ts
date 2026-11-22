@@ -1,6 +1,7 @@
 import type { CommitFailure, CommitSuccess } from './commitImport'
 import { formatMonthList } from './format'
 import type { MappingProblem } from './mapping'
+import type { SignConvention } from './types'
 import type { FormatsLoad } from './importStorage'
 import { countLabel } from './reviewRows'
 import type { FormatNote } from './wizardState'
@@ -47,6 +48,14 @@ export const formatsWarning = (reason: Extract<FormatsLoad, { state: 'unreadable
   reason === 'newer'
     ? 'Your saved formats file was saved by a newer version of Worth. It is left as it is.'
     : 'Your saved formats file could not be read. You can still map columns by hand. The file has not been changed.'
+
+export const SIGN_LABEL: Record<SignConvention, string> = {
+  'negative-is-spending': 'Negative numbers are spending',
+  'positive-is-spending': 'Positive numbers are spending',
+}
+
+export const sameSignMessage = (sign: 'positive' | 'negative'): string =>
+  `Every amount in this column is ${sign}. Check that the sign choice is right.`
 
 export const savedFormatLabel = (name: string): string => `Using saved format: ${name}`
 

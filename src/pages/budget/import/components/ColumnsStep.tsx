@@ -1,7 +1,7 @@
 import { FC, useId, useMemo } from 'react'
 import { columnLabels } from '../columnLabels'
 import type { FormatsLoad } from '../importStorage'
-import { COLUMNS_INTRO, COLUMNS_INTRO_FIRST_TIME, formatsWarning } from '../messages'
+import { COLUMNS_INTRO, COLUMNS_INTRO_FIRST_TIME, formatsWarning, sameSignMessage, SIGN_LABEL } from '../messages'
 import { defaultFormatName, MAX_FORMAT_NAME } from '../savedFormats'
 import { dateInfo, readableDate, sameSignWarning, type MappingDraft } from '../mapping'
 import type { ParseSettings } from '../parseFile'
@@ -203,7 +203,7 @@ const ColumnsStep: FC<ColumnsStepProps> = ({ file, fileIndex, fileCount, formats
               checked={draft.signConvention === 'negative-is-spending'}
               onChange={() => set({ signConvention: 'negative-is-spending' })}
             />
-            Negative numbers are spending
+            {SIGN_LABEL['negative-is-spending']}
           </label>
           <label className="iw-radio">
             <input
@@ -212,11 +212,11 @@ const ColumnsStep: FC<ColumnsStepProps> = ({ file, fileIndex, fileCount, formats
               checked={draft.signConvention === 'positive-is-spending'}
               onChange={() => set({ signConvention: 'positive-is-spending' })}
             />
-            Positive numbers are spending
+            {SIGN_LABEL['positive-is-spending']}
           </label>
           {sameSign && (
             <p className="iw-warning" role="status">
-              Every amount in this column is {sameSign}. Check that the sign choice is right.
+              {sameSignMessage(sameSign)}
             </p>
           )}
         </fieldset>

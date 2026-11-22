@@ -267,6 +267,45 @@ describe('matchSavedFormat', () => {
     expect(matchSavedFormat([older, newer], parseFileText(f01))?.format.name).toBe('New')
   })
 
+  it('ranks the format sharing the most columns first, so a generic format cannot beat the issuer one', () => {
+    const issuerFile = [
+      'Date,Description,Amount,Category,Type,Memo',
+      '2026-10-01,COFFEE,-4.50,Food,DEBIT,a',
+      '2026-10-02,PAYROLL,2000.00,Income,CREDIT,b',
+    ].join('\n')
+    const generic = savedFrom(
+      'Date,Description,Amount\n2026-10-01,COFFEE,4.50\n2026-10-02,PAYROLL,-2000.00',
+      'Generic',
+      { dateFormat: 'YYYY-MM-DD', signConvention: 'positive-is-spending' },
+      'f_generic',
+      '2026-11-09',
+    )
+    const issuer = savedFrom(
+      'Date,Description,Amount,Category,Type\n2026-10-01,COFFEE,-4.50,Food,DEBIT\n2026-10-02,PAYROLL,2000.00,Income,CREDIT',
+      'Issuer',
+      { dateFormat: 'YYYY-MM-DD' },
+      'f_issuer',
+      '2026-01-01',
+    )
+    const match = must(matchSavedFormat([generic, issuer], parseFileText(issuerFile)))
+    expect(match.format.id).toBe('f_issuer')
+    expect(match.mapping.signConvention).toBe('negative-is-spending')
+  })
+
+  it('uses the most recently used as the tie-break between equally close formats', () => {
+    const file = 'Date,Description,Amount,Memo\n2026-10-01,COFFEE,-4.50,a\n2026-10-02,PAYROLL,2000.00,b'
+    const base = savedFrom(file, 'A', { dateFormat: 'YYYY-MM-DD' }, 'f_a', '2026-01-01')
+    const newer = {
+      ...base,
+      id: 'f_b',
+      name: 'B',
+      lastUsed: '2026-05-01',
+      headerSignature: 'date|description|amount|x',
+    }
+    const older = { ...base, id: 'f_a', headerSignature: 'date|description|amount|y' }
+    expect(matchSavedFormat([older, newer], parseFileText(file))?.format.id).toBe('f_b')
+  })
+
   it('falls through to the next candidate when the first one no longer resolves', () => {
     const stale = {
       ...checking(),
@@ -304,6 +343,58 @@ describe('lookupSavedFormat', () => {
     const lookup = must(lookupSavedFormat(odd, parsed, [semicolons]))
     expect(lookup.settings).toMatchObject({ delimiter: ';' })
     expect(lookup.parsed.delimiter).toBe(';')
+  })
+
+  describe('headerless and delimiter overrides', () => {
+    const headerless = (text: string) => {
+      const parsed = parseFileText(text, { delimiter: null, hasHeader: false, headerRow: null })
+      const draft = {
+        amountMode: 'single' as const,
+        date: 0,
+        description: 1,
+        amount: 2,
+        debit: null,
+        credit: null,
+        category: null,
+        signConvention: 'negative-is-spending' as const,
+        dateFormat: 'YYYY-MM-DD' as const,
+        decimalSeparator: '.' as const,
+      }
+      const mapping = must(resolveMapping(parsed.detection.dataRecords, draft).mapping)
+      return { ...formatContent('Headerless bank', parsed, mapping), id: 'f_h', lastUsed: '2026-11-08' }
+    }
+    const saved = headerless('2026-02-01,coffee,-4.50\n2026-02-02,rent,-900.00\n')
+
+    it('does not read a header row of plain text as data for a headerless format', () => {
+      const text = 'Date,Description,Amount\n2026-02-05,coffee,-4.50\n2026-02-06,rent,-900.00\n'
+      expect(saved.headerSignature).toBe('#1|#2|#3')
+      expect(lookupSavedFormat(text, parseFileText(text), [saved])).toBeNull()
+    })
+
+    it('still matches a genuinely headerless file the sniffer reads with a header', () => {
+      const text = '2026-02-05,coffee,-4.50\n2026-02-06,rent,-900.00\n2026-02-07,gas,-30.00\n'
+      const lookup = must(lookupSavedFormat(text, parseFileText(text), [saved]))
+      expect(lookup.match.format.id).toBe('f_h')
+      expect(lookup.parsed.detection.hasHeader).toBe(false)
+      expect(lookup.parsed.detection.dataRecords).toHaveLength(3)
+    })
+
+    it('rejects a headerless re-read whose first row does not start with a date', () => {
+      const text = 'Posted,Memo,Total\nx,coffee,-4.50\ny,rent,-900.00\n'
+      const forced = parseFileText(text, { delimiter: null, hasHeader: true, headerRow: null })
+      expect(lookupSavedFormat(text, forced, [saved])).toBeNull()
+    })
+
+    it('accepts a delimiter override when the detected read looks wrong', () => {
+      const text = 'Date;Memo;Amount\n2026-10-01;one;-5.00\n2026-10-02;two;-6.00\n'
+      const semicolons = savedFrom(text, 'Semicolon bank', { description: 1, amount: 2, dateFormat: 'YYYY-MM-DD' })
+      const wide = parseFileText(text, { delimiter: ',', hasHeader: null, headerRow: null })
+      expect(lookupSavedFormat(text, wide, [semicolons])).not.toBeNull()
+      const commas = 'Date,Memo,Amount\n2026-10-01,one,-5.00\n2026-10-02,two,-6.00\n'
+      const asSemicolon = parseFileText(commas, { delimiter: ';', hasHeader: null, headerRow: null })
+      const commaFormat = savedFrom(commas, 'Comma bank', { description: 1, amount: 2, dateFormat: 'YYYY-MM-DD' })
+      expect(lookupSavedFormat(commas, asSemicolon, [{ ...commaFormat, delimiter: ',' }])).not.toBeNull()
+    })
   })
 
   it('returns null when no saved format fits under any of their settings', () => {

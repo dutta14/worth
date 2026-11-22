@@ -148,6 +148,9 @@ describe('Import wizard saved formats', () => {
     await waitFor(() => expect(review).toHaveFocus())
     expect(screen.queryByRole('heading', { name: 'Columns' })).not.toBeInTheDocument()
     expect(screen.getByText('Using saved format: bank')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('list', { name: 'Saved formats in use' })).getByText('Negative numbers are spending'),
+    ).toBeInTheDocument()
     expect(screen.getAllByText(/Step 1 of 1: Review/).length).toBeGreaterThan(0)
     expect(within(screen.getByRole('dialog')).getAllByRole('status')[0]).toHaveTextContent('Using saved format: bank.')
     expect(screen.getByText(/3 new transactions across 1 month/)).toBeInTheDocument()

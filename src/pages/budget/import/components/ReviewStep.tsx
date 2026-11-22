@@ -1,6 +1,6 @@
 import { FC, useId, useMemo, useState } from 'react'
 import { plural } from '../../../../utils/plural'
-import { savedFormatLabel } from '../messages'
+import { sameSignMessage, savedFormatLabel, SIGN_LABEL } from '../messages'
 import { formatMoney, formatMonth, formatMonthList, formatSignedMoney } from '../format'
 import { UNCATEGORIZED_EXPENSE } from '../constants'
 import {
@@ -11,13 +11,17 @@ import {
   type ReviewEntry,
   type ReviewFilter,
 } from '../reviewRows'
-import type { ImportOptions, ImportPlan } from '../types'
+import type { ImportOptions, ImportPlan, SignConvention } from '../types'
 import PreviewTable, { type PreviewRow } from './PreviewTable'
 
 export interface SavedFormatUse {
   index: number
   fileName: string
   name: string
+  /** The sign choice the format applies, spelled out because the Columns step is skipped; null for debit and credit columns. */
+  sign: SignConvention | null
+  /** Set when every amount has the same sign, a likely sign mistake worth a second look. */
+  sameSign: 'positive' | 'negative' | null
 }
 
 interface ReviewStepProps {
@@ -88,6 +92,7 @@ const ReviewStep: FC<ReviewStepProps> = ({ plan, savedFormats, onChangeFormat, o
                 {savedFormatLabel(saved.name)}
                 {showFile && <span className="iw-muted"> ({saved.fileName})</span>}
               </span>
+              {saved.sign && <span className="iw-muted">{SIGN_LABEL[saved.sign]}</span>}
               <button
                 type="button"
                 className="iw-link"
@@ -96,6 +101,7 @@ const ReviewStep: FC<ReviewStepProps> = ({ plan, savedFormats, onChangeFormat, o
               >
                 Change
               </button>
+              {saved.sameSign && <p className="iw-warning">{sameSignMessage(saved.sameSign)}</p>}
             </li>
           ))}
         </ul>

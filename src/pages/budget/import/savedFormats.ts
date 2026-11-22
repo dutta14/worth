@@ -1,5 +1,6 @@
 import { resolveMapping, type MappingDraft } from './mapping'
-import { DATE_FORMATS } from './parseDate'
+import { parseAmountToCents } from './parseAmount'
+import { DATE_FORMATS, looksLikeDate } from './parseDate'
 import { headerSignature, parseFileText, type ParsedFile, type ParseSettings } from './parseFile'
 import type { AmountMode, ColumnMapping, DateFormat, Delimiter, DecimalSeparator, SignConvention } from './types'
 
@@ -210,10 +211,23 @@ export interface SavedFormatMatch {
 const newestFirst = (a: SavedFormat, b: SavedFormat): number =>
   a.lastUsed < b.lastUsed ? 1 : a.lastUsed > b.lastUsed ? -1 : 0
 
+/** Jaccard similarity of a format's header names and the file's: 1 when they are the same set of columns. */
+function headerOverlap(signature: string, headers: string[]): number {
+  const saved = new Set(signature.split('|'))
+  const file = new Set(headers.map(normalizedName))
+  let shared = 0
+  saved.forEach(name => {
+    if (file.has(name)) shared++
+  })
+  return shared / (saved.size + file.size - shared)
+}
+
 /**
  * Finds the saved format for a parsed file: the same delimiter and header setting, then an exact header
- * signature, then a format whose every named column is present (a reordered or extended export). Formats that
- * point at columns by position only match on an exact signature.
+ * signature, then a format whose every named column is present (a reordered or extended export), the one
+ * sharing the most columns with the file first and the most recently used as the tie-break, so a generic
+ * format cannot beat the issuer-specific one when an export gains a column. Formats that point at columns
+ * by position only match on an exact signature.
  */
 export function matchSavedFormat(formats: SavedFormat[], parsed: ParsedFile): SavedFormatMatch | null {
   const { headers, hasHeader, dataRecords } = parsed.detection
@@ -223,7 +237,9 @@ export function matchSavedFormat(formats: SavedFormat[], parsed: ParsedFile): Sa
   const byName = hasHeader
     ? sameShape
         .filter(f => f.headerSignature !== signature && referencedRefs(f.columns).every(ref => !ref.startsWith('#')))
-        .sort(newestFirst)
+        .map(format => ({ format, overlap: headerOverlap(format.headerSignature, headers) }))
+        .sort((a, b) => b.overlap - a.overlap || newestFirst(a.format, b.format))
+        .map(({ format }) => format)
     : []
   for (const format of [...exact, ...byName]) {
     const mapping = resolveSavedFormat(format, headers, dataRecords)
@@ -240,6 +256,24 @@ export interface FormatLookup {
   parsed: ParsedFile
   match: SavedFormatMatch
 }
+
+const looksLikeData = (cell: string): boolean =>
+  looksLikeDate(cell.trim()) || parseAmountToCents(cell, '.') !== null || parseAmountToCents(cell, ',') !== null
+
+/**
+ * Whether reading the file with a saved format's own settings is believable. A header row of plain text is
+ * not data, so a headerless format never overrides it; and a delimiter override needs the detected read to
+ * look wrong: no header row found, or fewer columns than the saved delimiter gives.
+ */
+function plausibleOverride(format: SavedFormat, detected: ParsedFile, probe: ParsedFile): boolean {
+  if (!format.hasHeader && detected.detection.hasHeader && !detected.detection.headers.some(looksLikeData)) return false
+  if (format.delimiter === detected.delimiter) return true
+  return !detected.detection.hasHeader || probe.detection.headers.length > detected.detection.headers.length
+}
+
+/** A headerless read must start with a transaction: the first row's date cell has to look like a date. */
+const startsWithData = (parsed: ParsedFile, match: SavedFormatMatch): boolean =>
+  parsed.detection.hasHeader || looksLikeDate((parsed.detection.dataRecords[0]?.[match.mapping.date] ?? '').trim())
 
 /**
  * Looks for a saved format for `text`. The file as detected is tried first; if nothing matches, the settings
@@ -259,10 +293,11 @@ export function lookupSavedFormat(text: string, detected: ParsedFile, formats: S
     tried.add(key)
     const settings: ParseSettings = { delimiter: format.delimiter, hasHeader: format.hasHeader, headerRow: null }
     const probe = parseFileText(text.slice(0, PROBE_CHARS), settings)
-    if (probe.detection.dataRecords.length === 0 || matchSavedFormat(formats, probe) === null) continue
+    if (probe.detection.dataRecords.length === 0 || !plausibleOverride(format, detected, probe)) continue
+    if (matchSavedFormat(formats, probe) === null) continue
     const parsed = parseFileText(text, settings)
     const match = matchSavedFormat(formats, parsed)
-    if (match) return { settings, parsed, match }
+    if (match && startsWithData(parsed, match)) return { settings, parsed, match }
   }
   return null
 }

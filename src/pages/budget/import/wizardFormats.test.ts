@@ -46,6 +46,36 @@ const loaded = (...files: WizardFile[]): WizardState =>
 const savedFile = (name = 'bank.csv') => must(createWizardFile(name, f02b, formats))
 
 describe('createWizardFile with saved formats', () => {
+  it('keeps the Columns step for a file with a header row when the only saved format is headerless', () => {
+    const headerless = parseFileText('2026-02-01,coffee,-4.50\n2026-02-02,rent,-900.00\n', {
+      delimiter: null,
+      hasHeader: false,
+      headerRow: null,
+    })
+    const mapping = must(
+      resolveMapping(headerless.detection.dataRecords, {
+        amountMode: 'single',
+        date: 0,
+        description: 1,
+        amount: 2,
+        debit: null,
+        credit: null,
+        category: null,
+        signConvention: 'negative-is-spending',
+        dateFormat: 'YYYY-MM-DD',
+        decimalSeparator: '.',
+      }).mapping,
+    )
+    const only: FormatsFile = {
+      schemaVersion: 1,
+      mappings: [{ ...formatContent('Headerless', headerless, mapping), id: 'f_01', lastUsed: '2026-11-08' }],
+    }
+    const text = 'Date,Description,Amount\n2026-02-05,coffee,-4.50\n2026-02-06,rent,-900.00\n'
+    const file = must(createWizardFile('bank.csv', text, only))
+    expect(file.auto).toBeNull()
+    expect(file.parsed.detection.hasHeader).toBe(true)
+  })
+
   it('applies a matching saved format and skips the Columns step', () => {
     const file = savedFile()
     expect(file.auto).toBe('saved')

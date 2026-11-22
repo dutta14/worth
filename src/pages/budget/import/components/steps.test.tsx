@@ -167,6 +167,32 @@ describe('ReviewStep', () => {
     expect(onOptions).toHaveBeenCalledWith({ replaceMonths: false })
   })
 
+  it('spells out the sign choice of a saved format and warns when every amount has one sign', () => {
+    const plan = planFromTexts([{ name: 'a.csv', text: 'Date,Description,Amount\n2026-10-01,Coffee,-4.50\n' }])
+    const savedFormats = [
+      {
+        index: 0,
+        fileName: 'a.csv',
+        name: 'bank',
+        sign: 'positive-is-spending' as const,
+        sameSign: 'negative' as const,
+      },
+    ]
+    render(<ReviewStep plan={plan} savedFormats={savedFormats} onChangeFormat={vi.fn()} onOptions={vi.fn()} />)
+    const inUse = screen.getByRole('list', { name: 'Saved formats in use' })
+    expect(within(inUse).getByText('Positive numbers are spending')).toBeInTheDocument()
+    expect(
+      within(inUse).getByText('Every amount in this column is negative. Check that the sign choice is right.'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows no sign line for a saved format with separate debit and credit columns', () => {
+    const plan = planFromTexts([{ name: 'a.csv', text: 'Date,Description,Amount\n2026-10-01,Coffee,-4.50\n' }])
+    const savedFormats = [{ index: 0, fileName: 'a.csv', name: 'bank', sign: null, sameSign: null }]
+    render(<ReviewStep plan={plan} savedFormats={savedFormats} onChangeFormat={vi.fn()} onOptions={vi.fn()} />)
+    expect(screen.queryByText(/numbers are spending/)).not.toBeInTheDocument()
+  })
+
   it('asks the user to check the column choices when no row could be read', () => {
     const plan = buildImportPlan({
       files: [{ name: 'a.csv', rows: [], skipped: [{ sourceRow: 2, reason: 'bad-date', raw: 'nope' }] }],
