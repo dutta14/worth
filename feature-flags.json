@@ -4,6 +4,9 @@
   "flags": {
     "modern-design": {
       "percentage": 100
+    },
+    "monthly-check-in": {
+      "percentage": 0
     }
   }
 }

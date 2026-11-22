@@ -33,6 +33,14 @@ vi.mock('../../../flags/FlagContext', () => ({
 
 vi.mock('../../../styles/FlagAdmin.css', () => ({}))
 
+// Pin the registry to the one flag these tests were written against, so adding flags elsewhere does not change them.
+vi.mock('../../../flags/flagDefinitions', async () => {
+  const actual = await vi.importActual<typeof import('../../../flags/flagDefinitions')>(
+    '../../../flags/flagDefinitions',
+  )
+  return { FLAGS: { MODERN_DESIGN: actual.FLAGS.MODERN_DESIGN } }
+})
+
 /* ─── Helpers ─── */
 
 function renderPane() {
