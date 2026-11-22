@@ -38,9 +38,9 @@ A handful of UI preferences stay in `localStorage`: dark mode, accent theme, the
 
 The data folder is ordinary files. Use whatever backup tool you already use: Time Machine, Dropbox, iCloud Drive, git, rsync. If you want to use this on two machines, point both at the same synced folder, or copy the folder from one machine to the other. The app has no built-in sync mechanism because it does not need one.
 
-**Experimental, off by default (feature flag `data-safety-net`):** when it is on, the app also keeps its own safety copies. Before it changes or deletes a JSON or CSV file, it copies the old version into a `_backups` folder inside your data folder, at most once per file per session and then no more often than every six hours, skipping copies identical to the newest one; a delete or a restore always copies first. The newest 10 copies of each file are kept. Tax documents and the derived `budget/summary-cache.json` are not copied. A plain-text `_backups/README.txt` explains the folder, and you can delete it at any time. Your backup and sync tools will see this folder too, so add `_backups/` (and `*.corrupt-*`) to `.gitignore` if the data folder is a git repository. Restore a copy from Settings → Data Folder → Backups, or copy the file back yourself. With the flag off there are no copies and no recycle bin.
+**Data safety net:** the app also keeps its own safety copies. Before it changes or deletes a JSON or CSV file, it copies the old version into a `_backups` folder inside your data folder, at most once per file per session and then no more often than every six hours, skipping copies identical to the newest one; a delete or a restore always copies first. The newest 10 copies of each file are kept. Tax documents and the derived `budget/summary-cache.json` are not copied. A plain-text `_backups/README.txt` explains the folder, and you can delete it at any time. Your backup and sync tools will see this folder too, so add `_backups/` (and `*.corrupt-*`) to `.gitignore` if the data folder is a git repository. Restore a copy from Settings → Data Folder → Backups, or copy the file back yourself. There is no recycle bin.
 
-The same flag also adds: a best-effort save when you switch tabs or close the page, a visible banner with "Try again" when a save fails or folder access is lost, and protection for a JSON file that cannot be read (the app leaves it untouched, saves a copy next to it as `<name>.json.corrupt-<timestamp>`, and pauses saving to it until you choose Restore latest backup or Start fresh). It cannot promise that a write survives the browser being killed mid-save.
+The data safety net also adds: a best-effort save when you switch tabs or close the page, a visible banner with "Try again" when a save fails or folder access is lost, and protection for a JSON file that cannot be read (the app leaves it untouched, saves a copy next to it as `<name>.json.corrupt-<timestamp>`, and pauses saving to it until you choose Restore latest backup or Start fresh). It cannot promise that a write survives the browser being killed mid-save.
 
 ### What this app does not do
 
@@ -102,7 +102,7 @@ Your dashboard. A quick read on where things stand right now, without opening si
 - Use the goals peek to see which targets are on pace and which ones are drifting
 - Check the allocation bar to see where your money is actually sitting today
 - Drag and reorder the cards until the page matches the way you think
-- Experimental, off by default: a check-in strip above the cards tells you when the latest month is missing balances or the data is getting old, and one click opens the balance form for that month (feature flag `monthly-check-in`)
+- A check-in strip above the cards tells you when the latest month is missing balances or the data is getting old, and one click opens the balance form for that month
 
 **One tip:** Put the card you check most often in the top-left slot. The dashboard remembers the order, and the right first glance matters more than one more chart.
 
@@ -133,13 +133,13 @@ This is the spine of the app. The Accounts tab gives you the raw history, Alloca
 
 **How to use it**
 - In Accounts, add accounts and enter monthly balances over time
-- Experimental, off by default: with the monthly check-in flag on, Details opens a guided entry for the month, prefilled from the last one and marking every account you have not updated, and a month that is missing balances is labelled Partial month and left off the trend charts (feature flag `monthly-check-in`)
+- Details opens a guided entry for the month, prefilled from the last one and marking every account you have not updated, and a month that is missing balances is labelled Partial month and left off the trend charts
 - Switch between chart view and spreadsheet view depending on whether you want trend or detail
 - Hover chart points to see deltas and how a month changed relative to the prior one
 - Filter the accounts table when you want to isolate cash, retirement, debt, or other slices
 - In Allocation, create custom ratio tabs for your ideal asset mix
 - In Growth, log yearly income, expenses, and savings to keep the balance history grounded in behavior
-- Experimental, off by default: open the Review tab for a one-page look at a single year (net worth change, income, expenses, savings rate, top spending groups, goal progress), then print it, save it as a PDF, or download it as a CSV (feature flag `annual-review`)
+- Open the Review tab for a one-page look at a single year (net worth change, income, expenses, savings rate, top spending groups, goal progress), then print it, save it as a PDF, or download it as a CSV
 
 **One tip:** Use Accounts for what happened, Allocation for what you want, and Growth for why the gap exists. The three tabs make more sense when you think of them as history, target, and explanation.
 
@@ -161,9 +161,9 @@ A year-based budgeting workspace that is more interested in patterns than ceremo
 - Switch to Aggregated when you only want group totals
 - Use Cashflow to read income against expenses over time
 - Change the period between monthly, quarterly, and half-yearly views
-- Experimental, off by default: set a monthly target per expense group in Spreadsheet → Aggregated and compare it with what you spent (feature flag `category-budget-targets`)
+- Set a monthly target per expense group in Spreadsheet → Aggregated and compare it with what you spent
 - Use the built-in PDF → CSV converter when the bank only gives you a statement PDF
-- Experimental, off by default: turn on the `import-wizard` flag to import bank CSVs with any column names. The wizard asks which column is the date, description and amount (and whether spending is negative), splits a statement into the right months whatever the filename says, skips transactions you already have, shows everything for review before it writes anything, and offers Undo. It remembers the mapping for the next file from the same bank. It also adds categorization rules ("description contains Starbucks → Dining") that run on every import, from Transactions (Import, Rules, Apply rules to uncategorized) and from the category menu on a row. Nothing leaves your machine; rules live in `budget/category-rules.json` and saved mappings in `budget/import-formats.json`
+- Import bank CSVs with any column names. The wizard asks which column is the date, description and amount (and whether spending is negative), splits a statement into the right months whatever the filename says, skips transactions you already have, shows everything for review before it writes anything, and offers Undo. It remembers the mapping for the next file from the same bank. It also adds categorization rules ("description contains Starbucks → Dining") that run on every import, from Transactions (Import, Rules, Apply rules to uncategorized) and from the category menu on a row. Nothing leaves your machine; rules live in `budget/category-rules.json` and saved mappings in `budget/import-formats.json`
 
 **One tip:** Start in Aggregated view the first time you import a messy file. It lets you find the categories that matter before you get lost in line items.
 
@@ -228,8 +228,8 @@ Profile, data folder, appearance, and the slightly more dangerous switches all l
 - Change or disconnect your data folder in Data Folder
 - Toggle dark mode and accent preferences in Appearance
 - Toggle the "Allow CSV imports & resets" switch in Advanced when you want bulk data entry tools
-- Explore experimental features in Labs and Feature Flags when you are curious
-- Experimental, off by default: with the `data-safety-net` flag on, Data Folder lists the safety copies in `_backups` and restores one after you confirm (the current file is copied first)
+- Explore Labs when you are curious
+- Data Folder lists the safety copies in `_backups` and restores one after you confirm (the current file is copied first)
 
 **One tip:** If you move or rename the folder on disk, use Settings → Data Folder → Change Folder to reconnect it. Disconnecting only forgets the handle; your files stay exactly where they are.
 
@@ -249,7 +249,7 @@ A folder on your own machine. On first run you pick a folder; the app stores eve
 
 Point both at the same folder. If the folder is inside a synced directory (iCloud Drive, Dropbox, or similar) both devices see the same files automatically. If it is not synced, copy the folder manually from one machine to the other. The app has no built-in sync mechanism because plain files already have a thousand backup tools designed for them.
 
-Experimental, off by default (feature flag `data-safety-net`): when you return to the tab, the app checks whether a file it has loaded was changed outside it, for example from the other machine or by a sync tool. If so it pauses saving to that file and asks you to Reload (take what is on disk) or Keep my version (save yours; the version on disk is copied to `_backups` first). Reload keeps your unsaved edits in `_backups` too. It does not notice new files that appear in a folder, such as a new `balances/{year}.csv`, until you reload.
+When you return to the tab, the app checks whether a file it has loaded was changed outside it, for example from the other machine or by a sync tool. If so it pauses saving to that file and asks you to Reload (take what is on disk) or Keep my version (save yours; the version on disk is copied to `_backups` first). Reload keeps your unsaved edits in `_backups` too. It does not notice new files that appear in a folder, such as a new `balances/{year}.csv`, until you reload.
 
 ### What if I move or rename the folder?
 

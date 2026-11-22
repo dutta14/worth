@@ -1,7 +1,11 @@
 import { Page, Locator } from '@playwright/test'
+import { ImportWizardPage } from './import-wizard.page'
+
+type FilePayload = { name: string; mimeType: string; buffer: Buffer }
 
 export class BudgetPage {
   readonly page: Page
+  readonly wizard: ImportWizardPage
 
   // Title / shell
   readonly title: Locator
@@ -26,14 +30,6 @@ export class BudgetPage {
   readonly addTxnMenuItem: Locator
   readonly uploadCsvMenuItem: Locator
   readonly bulkUploadMenuItem: Locator
-  readonly quickUploadInput: Locator
-  readonly bulkUploadInput: Locator
-
-  // CSV Preview modal
-  readonly previewModal: Locator
-  readonly previewTable: Locator
-  readonly previewCancel: Locator
-  readonly previewConfirm: Locator
 
   // Manual transaction entry
   readonly addTxnBtn: Locator
@@ -65,6 +61,7 @@ export class BudgetPage {
 
   constructor(page: Page) {
     this.page = page
+    this.wizard = new ImportWizardPage(page)
 
     this.title = page.locator('.budget-title')
     this.emptyState = page.locator('.budget-empty-year')
@@ -87,15 +84,8 @@ export class BudgetPage {
     this.uploadDropDown = page.locator('.budget-overflow-btn')
     this.uploadMenu = page.locator('.budget-upload-menu')
     this.addTxnMenuItem = this.uploadMenu.getByRole('menuitem', { name: 'Add Transaction' })
-    this.uploadCsvMenuItem = this.uploadMenu.getByRole('menuitem', { name: 'Upload CSV' })
-    this.bulkUploadMenuItem = this.uploadMenu.getByRole('menuitem', { name: 'Bulk Upload' })
-    this.quickUploadInput = page.locator('input[data-testid="quick-upload-input"]')
-    this.bulkUploadInput = page.locator('input[data-testid="bulk-upload-input"]')
-
-    this.previewModal = page.locator('.csv-preview-modal')
-    this.previewTable = page.locator('.csv-preview-table')
-    this.previewCancel = page.locator('.csv-preview-btn--cancel')
-    this.previewConfirm = page.locator('.csv-preview-btn--confirm')
+    this.uploadCsvMenuItem = this.uploadMenu.getByRole('menuitem', { name: 'Import CSV…' })
+    this.bulkUploadMenuItem = this.uploadMenu.getByRole('menuitem', { name: 'Import several CSVs…' })
 
     this.addTxnBtn = this.addTxnMenuItem
     this.txnForm = page.locator('form.budget-txn-form')
@@ -162,21 +152,27 @@ export class BudgetPage {
     await this.page.locator('.budget-header-right .tab-bar').locator('.tab-btn', { hasText: period }).click()
   }
 
-  /** Upload a single CSV via the quick upload input and wait for preview. */
-  async uploadCSV(name: string, csv: string) {
-    await this.quickUploadInput.setInputFiles({ name, mimeType: 'text/csv', buffer: Buffer.from(csv) })
-    await this.previewModal.waitFor({ state: 'visible' })
+  /**
+   * Opens the import wizard and hands it one or more CSVs. An empty year offers only the single-file button;
+   * several files need the overflow menu, which appears once the year has data.
+   */
+  async startImport(...files: FilePayload[]) {
+    if (files.length === 1 && (await this.emptyImportBtn.isVisible())) {
+      await this.emptyImportBtn.click()
+    } else {
+      await this.uploadDropDown.click()
+      await (files.length > 1 ? this.bulkUploadMenuItem : this.uploadCsvMenuItem).click()
+    }
+    await this.wizard.pick(...files)
   }
 
-  /** Upload multiple CSVs via the bulk upload input. */
-  async bulkUploadCSVs(files: Array<{ name: string; mimeType?: string; buffer?: Buffer; csv?: string }>) {
-    await this.bulkUploadInput.setInputFiles(
-      files.map(f => ({
-        name: f.name,
-        mimeType: f.mimeType ?? 'text/csv',
-        buffer: f.buffer ?? Buffer.from(f.csv ?? ''),
-      })),
-    )
+  /** Imports one canonical-shape CSV through the wizard and closes it. */
+  async importCSV(name: string, csv: string) {
+    await this.startImport({ name, mimeType: 'text/csv', buffer: Buffer.from(csv) })
+    await this.wizard.heading('Review before importing').waitFor()
+    await this.wizard.importBtn.click()
+    await this.wizard.heading('Import complete').waitFor()
+    await this.wizard.close()
   }
 
   /** Open the manual transaction entry form. */

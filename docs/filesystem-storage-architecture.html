@@ -185,13 +185,13 @@
 │   ├── 2022.csv                     ← month,accountId,balance
 │   ├── 2023.csv
 │   └── 2024.csv
-├── _backups/                        ← safety copies, newest 10 per file (flag: data-safety-net)
+├── _backups/                        ← safety copies, newest 10 per file
 ├── budget/
 │   ├── categories.json              ← category groups (expense &amp; income)
-│   ├── import-formats.json          ← saved CSV column formats (flag: import-wizard)
-│   ├── category-rules.json          ← import categorization rules (flag: import-wizard)
+│   ├── import-formats.json          ← saved CSV column formats
+│   ├── category-rules.json          ← import categorization rules
 │   ├── summary-cache.json           ← derived: annualSavings, saveRate, monthsOfData
-│   └── targets.json                 ← monthly targets per expense group (flag: category-budget-targets)
+│   └── targets.json                 ← monthly targets per expense group
 ├── transactions/
 │   ├── 2023/
 │   │   ├── 2023-01.csv              ← bank transactions for Jan 2023
@@ -289,15 +289,15 @@ interface FileStore {
   <li>Writes are <strong>debounced</strong> (300ms) to batch rapid edits</li>
   <li>Folder handle persisted in IndexedDB for session continuity</li>
   <li>Uses <code>navigator.locks</code> (lock name <code>filestore:${path}</code>) to prevent concurrent writes from multiple tabs</li>
-  <li>Optional data safety net (flag <code>data-safety-net</code>, off by default): see <a href="#data-safety-net">Data safety net</a> below</li>
+  <li>Data safety net: see <a href="#data-safety-net">Data safety net</a> below</li>
   <li>Uses <code>BroadcastChannel</code> for cross-tab cache invalidation — when any tab writes, it broadcasts <code>{ path, timestamp }</code>; other tabs invalidate their cache for that path and re-read from disk</li>
   <li><code>MemoryFileStore</code> — same interface backed by a Map, used for demo mode and all unit tests</li>
 </ul>
 
-<h2 id="data-safety-net">Data safety net (experimental, off by default)</h2>
-<p>Added after the migration and gated by the <code>data-safety-net</code> feature flag (0% rollout; enable locally with <code>flag-overrides</code>). Spec: <code>docs/specs/data-safety-net.md</code>. With the flag off the store behaves exactly as described above.</p>
+<h2 id="data-safety-net">Data safety net</h2>
+<p>Added after the migration. Spec: <code>docs/specs/data-safety-net.md</code>. For a real folder (never in demo mode) the store described above also does the following.</p>
 <ul>
-  <li><strong>Where it lives:</strong> <code>FileSystemFileStore</code> implements the optional <code>SafetyNetStore</code> interface; <code>MemoryFileStore</code> does not, so demo mode and e2e runs never touch a real folder. <code>SafetyNetProvider</code> reads the flag and calls <code>configureSafety({ enabled: true })</code>. Pure helpers are in <code>safetyNet.ts</code>; snapshot, list, prune and restore are in <code>backupManager.ts</code>.</li>
+  <li><strong>Where it lives:</strong> <code>FileSystemFileStore</code> implements the optional <code>SafetyNetStore</code> interface; <code>MemoryFileStore</code> does not, so demo mode and e2e runs never touch a real folder. <code>SafetyNetProvider</code> calls <code>configureSafety({ enabled: true })</code> for a real folder. Pure helpers are in <code>safetyNet.ts</code>; snapshot, list, prune and restore are in <code>backupManager.ts</code>.</li>
   <li><strong>Page hide:</strong> the debounce drops from 300ms to 120ms, and <code>pagehide</code> / <code>visibilitychange</code> (hidden) start <code>flush()</code>. <code>beforeunload</code> prompts only while <code>hasUnsavedWork()</code>. Best effort: browsers do not guarantee async writes finish on a real close.</li>
   <li><strong>Write failures:</strong> the payload is kept in memory and on screen, classified (<code>permission</code>, <code>disk-full</code>, <code>other</code>) and shown in a banner with a retry. Permission loss is detected with <code>queryPermission</code> on focus.</li>
   <li><strong>Corrupt JSON:</strong> a file that fails to parse is copied byte-for-byte to <code>&lt;path&gt;.corrupt-&lt;stamp&gt;</code>, writes to it are held, and the user picks Restore latest backup or Start fresh. CSV is not checked.</li>
@@ -332,8 +332,8 @@ interface FileStore {
   <tr><td><code>data-balances</code></td><td><code>balances/{year}.csv</code></td><td>CSV</td></tr>
   <tr><td><code>budget-store</code> (csvs only)</td><td><code>transactions/{year}/{yyyy-mm}.csv</code></td><td>CSV</td></tr>
   <tr><td><code>budget-config</code> + <code>budget-store</code> (categoryGroups, years)</td><td><code>budget/categories.json</code></td><td>JSON</td></tr>
-  <tr><td>Saved import formats (new, flag <code>import-wizard</code>)</td><td><code>budget/import-formats.json</code></td><td>JSON</td></tr>
-  <tr><td>Categorization rules (new, flag <code>import-wizard</code>)</td><td><code>budget/category-rules.json</code></td><td>JSON</td></tr>
+  <tr><td>Saved import formats</td><td><code>budget/import-formats.json</code></td><td>JSON</td></tr>
+  <tr><td>Categorization rules</td><td><code>budget/category-rules.json</code></td><td>JSON</td></tr>
   <tr><td><code>budget-summary</code></td><td><code>budget/summary-cache.json</code></td><td>JSON</td></tr>
   <tr><td><code>tax-store</code></td><td><code>taxes/{year}.json</code></td><td>JSON</td></tr>
   <tr><td><code>tax-templates</code></td><td><code>taxes/templates.json</code></td><td>JSON</td></tr>
@@ -649,8 +649,8 @@ interface FileStore {
   <tr><td>Two tabs writing simultaneously</td><td><code>navigator.locks</code> API for write coordination</td></tr>
   <tr><td>Browser permission revoked mid-session</td><td>Catch <code>NotAllowedError</code>, show "Re-grant access" prompt</td></tr>
   <tr><td>File System Access API not supported</td><td>Show "Use Chrome or Edge" message (acceptable for personal tool)</td></tr>
-  <tr><td>Google Drive sync conflict</td><td>Last-write-wins; yearly files limit blast radius. With the <code>data-safety-net</code> flag on, a changed file is detected and the user chooses Reload or Keep my version, and the overwritten version is kept in <code>_backups/</code></td></tr>
-  <tr><td>Corrupted JSON file</td><td>Validate on read, show error with path; user can fix in text editor. With the <code>data-safety-net</code> flag on, the file is left untouched and a <code>.corrupt-</code> copy is saved</td></tr>
+  <tr><td>Google Drive sync conflict</td><td>Last-write-wins; yearly files limit blast radius. A changed file is detected and the user chooses Reload or Keep my version, and the overwritten version is kept in <code>_backups/</code></td></tr>
+  <tr><td>Corrupted JSON file</td><td>Validate on read, show error with path; user can fix in text editor. The file is left untouched and a <code>.corrupt-</code> copy is saved</td></tr>
 </table>
 
 <!-- ─── Pros & Cons ─── -->

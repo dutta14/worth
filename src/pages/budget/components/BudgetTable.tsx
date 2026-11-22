@@ -1,7 +1,7 @@
-import { FC, useState, useRef } from 'react'
+import { FC, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CategoryGroup, TimePeriod } from '../types'
-import { shortMonthName, buildMonthKey, getCSVFormatHelp } from '../utils/csvParser'
+import { shortMonthName, buildMonthKey } from '../utils/csvParser'
 
 interface BudgetTableProps {
   year: number
@@ -9,10 +9,8 @@ interface BudgetTableProps {
   categoryGroups: CategoryGroup[]
   categorySums: Record<string, Record<string, number>>
   monthsWithData: Set<string>
-  onUploadCSV: (monthKey: string, csv: string) => { ok: boolean; error?: string }
   onRemoveCSV: (monthKey: string) => void
-  /** When given (import wizard on), the month menu opens the wizard instead of the legacy file input. */
-  onImportCSV?: () => void
+  onImportCSV: () => void
   timePeriod: TimePeriod
 }
 
@@ -35,17 +33,13 @@ const BudgetTable: FC<BudgetTableProps> = ({
   categoryGroups,
   categorySums,
   monthsWithData,
-  onUploadCSV,
   onRemoveCSV,
   onImportCSV,
   timePeriod,
 }) => {
   const navigate = useNavigate()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; monthKey: string } | null>(null)
-  const [csvError, setCsvError] = useState<string | null>(null)
   const [showPct, setShowPct] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const pendingMonthRef = useRef<string>('')
 
   // Show all categories that are in the provided groups and have data in categorySums
   const relevantCategories = new Set<string>()
@@ -167,36 +161,14 @@ const BudgetTable: FC<BudgetTableProps> = ({
 
   const handleUploadClick = () => {
     if (!contextMenu) return
-    if (onImportCSV) {
-      setContextMenu(null)
-      onImportCSV()
-      return
-    }
-    pendingMonthRef.current = contextMenu.monthKey
     setContextMenu(null)
-    fileInputRef.current?.click()
+    onImportCSV()
   }
 
   const handleRemoveClick = () => {
     if (!contextMenu) return
     onRemoveCSV(contextMenu.monthKey)
     setContextMenu(null)
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const text = ev.target?.result as string
-      const result = onUploadCSV(pendingMonthRef.current, text)
-      if (!result.ok) {
-        setCsvError(result.error || 'Upload failed')
-        setTimeout(() => setCsvError(null), 5000)
-      }
-    }
-    reader.readAsText(file)
-    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const navigateToTransactions = (monthKey: string | null, categories: string[]) => {
@@ -226,15 +198,6 @@ const BudgetTable: FC<BudgetTableProps> = ({
   return (
     <div className="budget-table-section">
       <h3 className="budget-table-title">{type === 'income' ? 'Income' : 'Expenses'}</h3>
-
-      {csvError && (
-        <div className="budget-csv-error" role="alert" aria-live="polite">
-          <span>⚠ {csvError}</span>
-          <button aria-label="Dismiss error" onClick={() => setCsvError(null)}>
-            ×
-          </button>
-        </div>
-      )}
 
       {relevantGroups.map(group => (
         <div key={group.id} className="budget-table-group-block">
@@ -436,34 +399,15 @@ const BudgetTable: FC<BudgetTableProps> = ({
           <div className="budget-ctx-backdrop" data-testid="ctx-menu-backdrop" onClick={() => setContextMenu(null)} />
           <div className="budget-ctx-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
             <button className="budget-ctx-item" onClick={handleUploadClick}>
-              {onImportCSV
-                ? `Import into ${shortMonthName(parseInt(contextMenu.monthKey.split('-')[1], 10) - 1)}…`
-                : `Upload CSV for ${shortMonthName(parseInt(contextMenu.monthKey.split('-')[1], 10) - 1)}`}
+              {`Import into ${shortMonthName(parseInt(contextMenu.monthKey.split('-')[1], 10) - 1)}…`}
             </button>
             {monthsWithData.has(contextMenu.monthKey) && (
               <button className="budget-ctx-item budget-ctx-item--danger" onClick={handleRemoveClick}>
                 Remove CSV
               </button>
             )}
-            {!onImportCSV && (
-              <>
-                <div className="budget-ctx-divider" />
-                <div className="budget-ctx-hint">{getCSVFormatHelp()}</div>
-              </>
-            )}
           </div>
         </>
-      )}
-
-      {!onImportCSV && (
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv"
-          data-testid="csv-file-input"
-          style={{ display: 'none' }}
-          onChange={handleFileChange}
-        />
       )}
     </div>
   )

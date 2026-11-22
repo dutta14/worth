@@ -29,7 +29,6 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 )
 
 interface HookProps {
-  enabled: boolean
   groups: CategoryGroup[]
   groupsLoaded: boolean
 }
@@ -37,7 +36,7 @@ interface HookProps {
 const setup = (initial: Partial<HookProps> = {}) =>
   renderHook((props: HookProps) => useBudgetTargets(props), {
     wrapper,
-    initialProps: { enabled: true, groups: GROUPS, groupsLoaded: true, ...initial },
+    initialProps: { groups: GROUPS, groupsLoaded: true, ...initial },
   })
 
 const stageUnreadable = async (content: unknown) => {
@@ -67,34 +66,6 @@ describe('currentMonthKey', () => {
 })
 
 describe('useBudgetTargets', () => {
-  describe('flag off', () => {
-    it('reports off and never touches the file store', async () => {
-      const exists = vi.spyOn(store, 'exists')
-      const readJSON = vi.spyOn(store, 'readJSON')
-      const subscribe = vi.spyOn(store, 'subscribe')
-      const { result } = setup({ enabled: false })
-
-      expect(result.current.status).toBe('off')
-      expect(result.current.targets.groups).toEqual({})
-      expect(exists).not.toHaveBeenCalled()
-      expect(readJSON).not.toHaveBeenCalled()
-      expect(subscribe).not.toHaveBeenCalled()
-    })
-
-    it('refuses to write', async () => {
-      const write = vi.spyOn(store, 'writeJSON')
-      const { result } = setup({ enabled: false })
-
-      let outcome: { ok: boolean } | undefined
-      await act(async () => {
-        outcome = await result.current.setTarget('dining', 'Dining', 500)
-      })
-
-      expect(outcome).toEqual({ ok: false })
-      expect(write).not.toHaveBeenCalled()
-    })
-  })
-
   describe('loading', () => {
     it('starts loading, then ready and empty when the file does not exist', async () => {
       const { result } = setup()
@@ -484,7 +455,7 @@ describe('useBudgetTargets', () => {
       const { result, rerender } = setup({ groupsLoaded: false, groups: [] })
       await waitFor(() => expect(result.current.status).toBe('ready'))
 
-      rerender({ enabled: true, groups: GROUPS, groupsLoaded: true })
+      rerender({ groups: GROUPS, groupsLoaded: true })
 
       expect(Object.keys(result.current.targets.groups)).toEqual(['dining'])
     })
@@ -536,13 +507,6 @@ describe('useBudgetTargets', () => {
 
       expect(exists).toHaveBeenCalledTimes(1) // the pre-write safety check only
       expect(result.current.targets.groups.dining).toBeDefined()
-    })
-
-    it('turns off cleanly when the flag is switched off', async () => {
-      const { result, rerender } = setup()
-      await waitFor(() => expect(result.current.status).toBe('ready'))
-      rerender({ enabled: false, groups: GROUPS, groupsLoaded: true })
-      expect(result.current.status).toBe('off')
     })
   })
 })

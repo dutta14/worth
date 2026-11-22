@@ -4,8 +4,6 @@ import { useGoals } from '../../contexts/GoalsContext'
 import { useSettings } from '../../contexts/SettingsContext'
 import { useData } from '../../contexts/DataContext'
 import ErrorBoundary from '../../components/ErrorBoundary'
-import { FLAGS } from '../../flags/flagDefinitions'
-import { useFlag, useFlagResolved } from '../../flags/useFlag'
 import { Account, BalanceEntry } from './types'
 import { parseCsvImport } from './csvImport'
 import { getCheckInRequestMonth, hasCheckInRequest } from './checkInRequest'
@@ -32,10 +30,6 @@ const Data: FC = () => {
   const { profile } = useGoals()
   const { allowCsvImport } = useSettings()
   const { accounts, balances, setAccounts: ctxSetAccounts, setBalances: ctxSetBalances } = useData()
-  const annualReviewEnabled = useFlag(FLAGS.ANNUAL_REVIEW)
-  const annualReviewResolved = useFlagResolved(FLAGS.ANNUAL_REVIEW)
-  const checkInEnabled = useFlag(FLAGS.MONTHLY_CHECK_IN)
-  const checkInResolved = useFlagResolved(FLAGS.MONTHLY_CHECK_IN)
   const [startCheckInMonth, setStartCheckInMonth] = useState<MonthKey | null>(null)
 
   const [showAccountsModal, setShowAccountsModal] = useState(false)
@@ -222,24 +216,24 @@ const Data: FC = () => {
   const allMonths = [...new Set(balances.map(b => b.month))].sort((a, b) => b.localeCompare(a))
   const balanceMap = new Map<string, number>()
   for (const b of balances) balanceMap.set(`${b.accountId}:${b.month}`, b.balance)
-  const partialMonth = checkInEnabled ? getPartialMonth(accounts, balances, allMonths[0]) : null
+  const partialMonth = getPartialMonth(accounts, balances, allMonths[0])
 
   const location = useLocation()
   const navigate = useNavigate()
 
   const isDetailsRoute = location.pathname === '/net-worth/dashboard/details'
   useEffect(() => {
-    if (!checkInEnabled || !checkInResolved || !isDetailsRoute || !hasCheckInRequest(location.state)) return
+    if (!isDetailsRoute || !hasCheckInRequest(location.state)) return
     setStartCheckInMonth(getCheckInRequestMonth(location.state, accounts, balances, new Date()))
     // Clear the request so a reload or Back does not reopen the form.
     navigate(location.pathname, { replace: true, state: null })
-  }, [checkInEnabled, checkInResolved, isDetailsRoute, location.pathname, location.state, accounts, balances, navigate])
+  }, [isDetailsRoute, location.pathname, location.state, accounts, balances, navigate])
 
   const activeTab = location.pathname.startsWith('/net-worth/allocation')
     ? 'allocation'
     : location.pathname.startsWith('/net-worth/growth')
       ? 'growth'
-      : annualReviewEnabled && location.pathname.startsWith('/net-worth/review')
+      : location.pathname.startsWith('/net-worth/review')
         ? 'review'
         : 'accounts'
   const accountsPath = location.pathname
@@ -535,11 +529,9 @@ const Data: FC = () => {
           <NavLink to="/net-worth/growth" className={({ isActive }) => `tab-btn${isActive ? ' active' : ''}`}>
             Growth
           </NavLink>
-          {annualReviewEnabled && (
-            <NavLink to="/net-worth/review" className={() => `tab-btn${activeTab === 'review' ? ' active' : ''}`}>
-              Review
-            </NavLink>
-          )}
+          <NavLink to="/net-worth/review" className={() => `tab-btn${activeTab === 'review' ? ' active' : ''}`}>
+            Review
+          </NavLink>
         </nav>
         <div className="data-header-right">
           {activeTab === 'accounts' && hasAccounts && (
@@ -630,23 +622,19 @@ const Data: FC = () => {
             }
           />
           <Route
-            path={annualReviewEnabled ? 'review/:year?' : 'review/*'}
+            path="review/:year?"
             element={
-              annualReviewEnabled ? (
-                <ErrorBoundary variant="card" resetKey={location.pathname}>
-                  <Suspense
-                    fallback={
-                      <div className="nw-tab-loading" role="status">
-                        Loading…
-                      </div>
-                    }
-                  >
-                    <AnnualReview />
-                  </Suspense>
-                </ErrorBoundary>
-              ) : annualReviewResolved ? (
-                <Navigate to="/net-worth/dashboard" replace />
-              ) : null
+              <ErrorBoundary variant="card" resetKey={location.pathname}>
+                <Suspense
+                  fallback={
+                    <div className="nw-tab-loading" role="status">
+                      Loading…
+                    </div>
+                  }
+                >
+                  <AnnualReview />
+                </Suspense>
+              </ErrorBoundary>
             }
           />
         </Routes>

@@ -63,7 +63,6 @@ const targetFor = (...history: Array<{ from: string | null; monthly: number | nu
 const targetsFile = (groups: Record<string, ReturnType<typeof targetFor>>) => ({ version: 1, groups })
 
 interface SeedOptions {
-  flag?: boolean
   targets?: unknown
   darkMode?: boolean
 }
@@ -71,12 +70,12 @@ interface SeedOptions {
 /**
  * Seeds the file store once per tab (so edits survive a reload, unlike seedBudget) and pins the clock.
  */
-async function seed(page: Page, { flag = true, targets, darkMode = false }: SeedOptions = {}) {
+async function seed(page: Page, { targets, darkMode = false }: SeedOptions = {}) {
   const entries =
     targets === undefined ? BUDGET_FILES : [...BUDGET_FILES, { path: TARGETS, type: 'json' as const, data: targets }]
   await seedFileStore(page, entries, { onceKey: 'targets-e2e-seeded' })
   await page.addInitScript(
-    ({ flag, darkMode }) => {
+    ({ darkMode }) => {
       if (sessionStorage.getItem('targets-e2e-init') !== '1') {
         localStorage.clear()
         sessionStorage.setItem('targets-e2e-init', '1')
@@ -84,9 +83,8 @@ async function seed(page: Page, { flag = true, targets, darkMode = false }: Seed
       localStorage.setItem('_e2eMode', '1')
       localStorage.setItem('encryption-enabled', '0')
       localStorage.setItem('darkMode', darkMode ? '1' : '0')
-      if (flag) localStorage.setItem('flag-overrides', JSON.stringify({ 'category-budget-targets': true }))
     },
-    { flag, darkMode },
+    { darkMode },
   )
   await page.clock.setFixedTime(NOW)
 }
@@ -301,7 +299,7 @@ test.describe('Category budget targets', () => {
     await page.reload()
     await expect(targetButton(page, 'Dining')).toHaveText('$777')
 
-    // The flag config and the Google Fonts stylesheet predate this feature.
+    // The flag config and the Google Fonts stylesheet are the only expected external requests.
     const allowed = ['https://api.github.com/repos/dutta14/worth/', 'https://fonts.googleapis.com/']
     expect([...new Set(external)].filter(url => !allowed.some(prefix => url.startsWith(prefix)))).toEqual([])
     expect(withBody).toEqual([])
@@ -367,17 +365,6 @@ test.describe('Category budget targets on Home', () => {
 
     await expect(spendingCard(page).getByText(/this month|last month/)).toBeVisible()
     await expect(page.locator('.spending-peek-targets')).toHaveCount(0)
-  })
-
-  test('shows nothing and never touches the targets file with the flag off', async ({ page }) => {
-    const targets = targetsFile({ [DINING]: targetFor({ from: null, monthly: 200 }) })
-    await seed(page, { flag: false, targets })
-    const home = new HomePage(page)
-    await home.goto()
-
-    await expect(spendingCard(page).getByText(/this month|last month/)).toBeVisible()
-    await expect(page.locator('.spending-peek-targets')).toHaveCount(0)
-    expect(await readTargets(page)).toEqual(targets)
   })
 
   for (const darkMode of [false, true]) {

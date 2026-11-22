@@ -62,7 +62,7 @@ src/
 │   │   ├── Home.tsx
 │   │   ├── GoalsPeek.tsx    # Top 3 goals with progress bars
 │   │   ├── NetWorthSummary, MiniCharts, AllocationBreakdown
-│   │   ├── CheckIn{Strip,Card}.tsx, checkInSnooze.ts  # Monthly check-in strip (flag-gated)
+│   │   ├── CheckIn{Strip,Card}.tsx, checkInSnooze.ts  # Monthly check-in strip
 │   │   └── WelcomeGuide.tsx # First-visit onboarding
 │   ├── goal/                # FI goals + withdrawal goals
 │   │   ├── Goal.tsx         # Goal list page
@@ -72,12 +72,12 @@ src/
 │   │   ├── hooks/           # useFinancialGoals, useGwGoals
 │   │   └── utils/           # FI math, formatting
 │   ├── data/                # Accounts, balances, charts; monthStatus.ts holds the pure month-state
-│   │                        # rules (missing/partial/due/stale) used by Home and Details (monthly-check-in flag)
+│   │                        # rules (missing/partial/due/stale) used by Home and Details
 │   ├── budget/              # CSV-based budget tracking; monthly targets live in
 │   │                        # utils/budgetTargets*.ts, hooks/useBudgetTargets.ts,
-│   │                        # components/BudgetTarget{Cell,Status}.tsx (flag-gated); the import wizard
-│   │                        # (flag `import-wizard`, spec docs/specs/import-wizard.md) lives in import/
-│   ├── review/              # Annual Review tab under Wealth (flag-gated `annual-review`);
+│   │                        # components/BudgetTarget{Cell,Status}.tsx; the import wizard
+│   │                        # (spec docs/specs/import-wizard.md) lives in import/
+│   ├── review/              # Annual Review tab under Wealth;
 │   │                        # pure selectors in utils/, hooks/useAnnualReview.ts, components/Review*.tsx
 │   ├── allocation/          # Asset allocation & rebalancing
 │   ├── taxes/               # Tax document management
@@ -111,15 +111,15 @@ All financial data is stored as plain files in a folder the user chooses on thei
 - `FileSystemFileStore` (`src/utils/fileStore.ts`) — the production implementation. Backed by a `FileSystemDirectoryHandle`. Writes are debounced 300ms and guarded with `navigator.locks` so concurrent tabs never interleave. Cross-tab cache invalidation uses a `BroadcastChannel`.
 - `MemoryFileStore` (`src/utils/memoryFileStore.ts`) — an in-memory implementation used for tests and Demo Mode.
 
-#### Data safety net (flag `data-safety-net`, off by default)
+#### Data safety net
 
 Spec: `docs/specs/data-safety-net.md`. All protection lives in `FileSystemFileStore`, so the roughly 30 `.catch(console.error)` call sites need no change.
 
-- **Inert until enabled.** The store behaves exactly as before (300ms debounce, no checks, no copies) until `configureSafety({ enabled: true })` is called. `SafetyNetProvider` (`src/contexts/SafetyNetContext.tsx`) does that; it sits inside `FlagProvider` and only enables a store for a real folder, never in Demo Mode. `FileStoreProvider` cannot read flags, which is why the store is configured from a child.
+- **Inert until enabled.** The store behaves exactly as before (300ms debounce, no checks, no copies) until `configureSafety({ enabled: true })` is called. `SafetyNetProvider` (`src/contexts/SafetyNetContext.tsx`) does that, and only enables a store for a real folder, never in Demo Mode. The store is configured from this child provider.
 - **Optional interface.** `SafetyNetStore` and `isSafetyNetStore()` live in `src/utils/fileStoreTypes.ts`. The `FileStore` contract is unchanged and `MemoryFileStore` never implements the safety API, so Demo Mode and e2e tests cannot touch a real folder.
 - **What it does when enabled.** The debounce drops to 120ms. `usePageHideFlush` starts `flush()` on `pagehide` and `visibilitychange` (hidden) and asks the browser to confirm leaving only while `hasUnsavedWork()`; this is best effort, a hard close can still lose a write. A failed write keeps the edit in memory and raises a banner with a retry. Permission loss is detected on focus and offers a reconnect. A JSON file that does not parse is never overwritten: the bytes are copied to `<path>.corrupt-<stamp>` and writes to it are held until the user chooses Restore latest backup or Start fresh. On focus (throttled to every 5s) the store compares each loaded file's `lastModified` and size, then a content hash only on an mtime-only mismatch, with what this tab last read or wrote; a changed file is `stale` and writes to it are held until the user chooses Reload or Keep my version. CSV corruption is not detected, and new files appearing in a directory are only caught by the delete guard.
 - **Backups.** `backupManager.ts` copies a JSON or CSV file to `_backups/` before it is overwritten or deleted: once per file per session, then at most every 6 hours, skipping bytes identical to the newest copy, always before a delete, restore or Keep my version. The newest 10 copies per file are kept (`BACKUPS_PER_FILE`). A failed copy sets `backupsHealthy` and never blocks the user's write.
-- **UI.** `DataSafetyBanner` is a single sticky `role="alert"` region; the Backups list and restore live in `BackupsSection`, rendered in Settings → Data Folder only when the flag is on. Styles use the `dsn-` prefix in `src/styles/DataSafetyNet.css`. After Reload the provider remounts the app shell through `key={epoch}` and dispatches `data-changed`.
+- **UI.** `DataSafetyBanner` is a single sticky `role="alert"` region; the Backups list and restore live in `BackupsSection`, rendered in Settings → Data Folder. Styles use the `dsn-` prefix in `src/styles/DataSafetyNet.css`. After Reload the provider remounts the app shell through `key={epoch}` and dispatches `data-changed`.
 - **Writing code that uses the store.** Keep `.catch(console.error)`; held writes reject with `FileStoreError` (`stale-blocked`, `corrupt-blocked`, `unseen-file`). Queue every write before awaiting any I/O (see `saveBalances`) so a page-hide `flush()` sees all of them.
 
 `FileStoreContext` (`src/contexts/FileStoreContext.tsx`) owns the active store instance and exposes `pickFolder`, `disconnect`, `enterDemo`, and `exitDemo`. Components get the store via `useFileStore()`.
@@ -138,10 +138,10 @@ The chosen folder handle is persisted in IndexedDB via `src/utils/handlePersiste
 | `budget/import-formats.json` | Saved CSV import column formats |
 | `budget/category-rules.json` | Import categorization rules (`{ schemaVersion, rules }`) |
 | `budget/summary-cache.json` | Derived savings-rate summary |
-| `budget/targets.json` | Monthly targets per expense group, keyed by group id (only read and written when the `category-budget-targets` flag is on) |
+| `budget/targets.json` | Monthly targets per expense group, keyed by group id |
 | `goals.json` | `{ financialGoals, gwGoals }` |
-| `_backups/` | Safety copies, `_backups/{path without extension}/{yyyymmddThhmmssmmmZ}[-unsaved].{json,csv}`, plus a `README.txt`. Created only when the `data-safety-net` flag is on; the newest 10 per file are kept. No loader reads it |
-| `{path}.corrupt-{stamp}` | Byte-for-byte copy of a JSON file that failed to parse, saved next to the original (flag `data-safety-net` only). No loader reads it |
+| `_backups/` | Safety copies, `_backups/{path without extension}/{yyyymmddThhmmssmmmZ}[-unsaved].{json,csv}`, plus a `README.txt`. Created before a file is overwritten or deleted; the newest 10 per file are kept. No loader reads it |
+| `{path}.corrupt-{stamp}` | Byte-for-byte copy of a JSON file that failed to parse, saved next to the original No loader reads it |
 | `taxes/{year}.json` | Tax checklist for that year |
 | `taxes/templates.json` | Reusable tax checklists |
 | `taxes/{year}/files/{filename}` | Uploaded tax documents |
@@ -208,7 +208,7 @@ The flag system in `src/flags/` controls runtime feature rollout:
 3. **Usage** — `const enabled = useFlag(FLAGS.MODERN_DESIGN)` in any component.
 4. **Adding a flag** — Define in `flagDefinitions.ts`, add rollout config to `feature-flags.json`.
 5. **Local override** — Set `flag-overrides` in localStorage (JSON object of `{ "flag-name": true/false }`) for development/testing.
-6. **Experimental flags** — `monthly-check-in`, `annual-review` (Review tab under Wealth, route `/net-worth/review/:year?`), `category-budget-targets`, `data-safety-net` and `import-wizard` default to off at 0% rollout. Turn one on in Settings → Labs → Feature previews (it writes the same `flag-overrides` entry; add new experimental flags to `FEATURE_PREVIEWS` in `FeaturePreviewsSection.tsx`), or enable it from the console with `localStorage.setItem('flag-overrides', JSON.stringify({ 'annual-review': true }))`; e2e specs do the same in an init script (see `e2e/fixtures/annual-review.fixtures.ts`). With the flag off the tab, route, and search entry do not exist. The import wizard Playwright suite, `e2e/import-wizard.spec.ts`, turns its flag on after `seedBudget` (which clears localStorage) with `enableImportWizard` from `e2e/fixtures/import-wizard.fixtures.ts`; it never hardcodes a port or origin, so it runs unchanged against `vite preview` at `/worth` in CI. The check-in Playwright suite, `e2e/monthly-check-in.spec.ts`, pins the clock with `page.clock.setFixedTime`.
+6. **Retired flags** — The feature flags used while building the monthly check-in, annual review, category budget targets, data safety net and import wizard have been removed; those features are permanent.
 7. **ModernDesignToggle** — A special component that adds/removes `body.modern-design` class based on the `modern-design` flag.
 
 ## Modern Design
@@ -238,6 +238,7 @@ npm run test:coverage  # With coverage report
 - Global setup in `src/test/setup.ts` (jsdom, `@testing-library/jest-dom` matchers).
 - Mock network requests with `msw` when testing flag fetching.
 - Test file naming: `*.test.ts` or `*.test.tsx`.
+- Playwright: `e2e/import-wizard.spec.ts` never hardcodes a port or origin, so it runs unchanged against `vite preview` at `/worth` in CI. `e2e/monthly-check-in.spec.ts` pins the clock with `page.clock.setFixedTime`.
 
 **Seeding data in tests:** Do not seed `localStorage` for financial data. Use a `MemoryFileStore` and wrap the component under test with `FileStoreTestProvider`:
 

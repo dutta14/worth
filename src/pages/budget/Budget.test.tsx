@@ -12,7 +12,11 @@ const mockUseBudget = {
   setViewMode: vi.fn(),
   spreadsheetMode: 'aggregated' as SpreadsheetMode,
   setSpreadsheetMode: vi.fn(),
-  uploadCSV: vi.fn(),
+  store: { csvs: {}, configs: {}, years: [], categoryGroups: [] },
+  commitImport: vi.fn(),
+  undoImport: vi.fn(),
+  importBlocked: false,
+  reload: vi.fn(),
   removeCSV: vi.fn(),
   createYear: vi.fn(),
   updateCategoryGroups: vi.fn(),
@@ -40,19 +44,6 @@ const budgetAggregatedViewSpy = vi.fn()
 
 vi.mock('./hooks/useBudget', () => ({
   useBudget: () => mockUseBudget,
-}))
-
-vi.mock('./hooks/useCSVUpload', () => ({
-  useCSVUpload: () => ({
-    csvPreview: null,
-    toastMsg: null,
-    quickUploadRef: { current: null },
-    bulkUploadRef: { current: null },
-    handleQuickUpload: vi.fn(),
-    handleBulkUpload: vi.fn(),
-    handlePreviewConfirm: vi.fn(),
-    handlePreviewCancel: vi.fn(),
-  }),
 }))
 
 vi.mock('../tools/components/PdfToCsv', () => ({
@@ -86,10 +77,6 @@ vi.mock('./components/BudgetAggregatedView', () => ({
 
 vi.mock('./components/CategoryGroupManager', () => ({
   default: () => <div data-testid="category-group-manager" />,
-}))
-
-vi.mock('./components/CSVPreviewModal', () => ({
-  default: () => <div data-testid="csv-preview-modal" />,
 }))
 
 vi.mock('./components/CashflowBarChart', () => ({
@@ -140,7 +127,7 @@ describe('Budget PDF → CSV upload menu item', () => {
     renderBudget()
     await openMoreActions(user)
 
-    expect(screen.getByText('Bulk Upload')).toBeInTheDocument()
+    expect(screen.getByText('Import several CSVs…')).toBeInTheDocument()
     expect(screen.queryByText('PDF → CSV')).not.toBeInTheDocument()
   })
 
@@ -345,32 +332,6 @@ describe('Budget with data', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Add Transaction' }))
 
     expect(screen.getByTestId('manual-transaction-entry')).toHaveTextContent('open')
-  })
-
-  it('triggers the hidden quick-upload input from the more actions menu', async () => {
-    const user = userEvent.setup()
-    renderBudget()
-    const quickUploadInput = screen.getByTestId('quick-upload-input')
-    const clickSpy = vi.spyOn(quickUploadInput, 'click')
-
-    await openMoreActions(user)
-    await user.click(screen.getByRole('menuitem', { name: 'Upload CSV' }))
-
-    expect(clickSpy).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
-  })
-
-  it('triggers the hidden bulk-upload input from the more actions menu', async () => {
-    const user = userEvent.setup()
-    renderBudget()
-    const bulkUploadInput = screen.getByTestId('bulk-upload-input')
-    const clickSpy = vi.spyOn(bulkUploadInput, 'click')
-
-    await openMoreActions(user)
-    await user.click(screen.getByRole('menuitem', { name: 'Bulk Upload' }))
-
-    expect(clickSpy).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
   it('closes the more actions menu when the backdrop is clicked', async () => {

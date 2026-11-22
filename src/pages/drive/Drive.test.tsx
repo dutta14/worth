@@ -29,22 +29,13 @@ vi.mock('./CSVViewer', () => ({
   ),
 }))
 
-vi.mock('../budget/components/CSVPreviewModal', () => ({
-  default: () => <div data-testid="csv-preview-modal">Preview Modal</div>,
-}))
-
-const driveUploadFlags = { importWizardOn: false }
 vi.mock('./useDriveUpload', () => ({
   useDriveUpload: () => ({
-    importWizardOn: driveUploadFlags.importWizardOn,
     wizardElement: <div data-testid="wizard-element" />,
-    csvPreview: null,
     toastMsg: null,
     dismissToast: vi.fn(),
     dragOver: false,
     fileInputRef: { current: null },
-    handlePreviewConfirm: vi.fn(),
-    handlePreviewCancel: vi.fn(),
     handleDragEnter: vi.fn(),
     handleDragLeave: vi.fn(),
     handleDragOver: vi.fn(),
@@ -176,7 +167,6 @@ function makeTreeWithMetaFiles(): DriveFolder {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  driveUploadFlags.importWizardOn = false
   mockBuildDriveTree.mockResolvedValue(makeTreeWithFiles())
 })
 
@@ -786,15 +776,8 @@ describe('Drive — breadcrumb for invalid segments', () => {
   })
 })
 
-describe('Drive — import wizard flag', () => {
-  it('keeps the filename hint and mounts no wizard when the flag is off', async () => {
-    renderDrive('/drive/budget/2025')
-    expect(await screen.findByText(/Filenames should contain YYYY-MM/)).toBeInTheDocument()
-    expect(screen.queryByTestId('wizard-element')).not.toBeInTheDocument()
-  })
-
-  it('says dates come from the rows and mounts the wizard when the flag is on', async () => {
-    driveUploadFlags.importWizardOn = true
+describe('Drive — import wizard', () => {
+  it('says dates come from the rows and mounts the wizard', async () => {
     renderDrive('/drive/budget/2025')
     expect(
       await screen.findByText('Drop CSV files here. Worth reads dates from the rows, not the filename.'),

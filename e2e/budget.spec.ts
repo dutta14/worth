@@ -50,8 +50,8 @@ test.describe('Budget Page E2E', () => {
     })
   })
 
-  test.describe('CSV Upload Flow', () => {
-    test('quick upload opens preview modal with parsed transactions', async ({ page }) => {
+  test.describe('CSV Import Flow', () => {
+    test('Import CSV opens the wizard on the review step with the parsed transactions', async ({ page }) => {
       await seedEmptyBudget(page)
       const budget = new BudgetPage(page)
       await budget.goto()
@@ -60,15 +60,14 @@ test.describe('Budget Page E2E', () => {
         { date: `${CURRENT_YEAR}-05-01`, category: 'Salary', amount: 5000, description: 'Paycheck' },
         { date: `${CURRENT_YEAR}-05-02`, category: 'Groceries', amount: -85.5, description: 'TJ' },
       ])
-      await budget.uploadCSV(`${CURRENT_YEAR}-05.csv`, csv)
+      await budget.startImport(csvFile(`${CURRENT_YEAR}-05.csv`, csv))
 
-      await expect(budget.previewModal).toBeVisible()
-      await expect(budget.previewModal).toContainText(`May ${CURRENT_YEAR}`)
-      await expect(budget.previewModal).toContainText('Salary')
-      await expect(budget.previewModal).toContainText('Groceries')
+      await expect(budget.wizard.dialog).toBeVisible()
+      await expect(budget.wizard.heading('Review before importing')).toBeFocused()
+      await expect(budget.wizard.dialog).toContainText('2 new transactions across 1 month')
     })
 
-    test('CSV preview modal shows transaction count and month label', async ({ page }) => {
+    test('the review step shows the transaction count for a larger file', async ({ page }) => {
       await seedEmptyBudget(page)
       const budget = new BudgetPage(page)
       await budget.goto()
@@ -79,12 +78,9 @@ test.describe('Budget Page E2E', () => {
         amount: i === 0 ? 5000 : -(i + 10),
         description: `Tx ${i + 1}`,
       }))
-      const csv = buildCSV(rows)
-      await budget.uploadCSV(`${CURRENT_YEAR}-01.csv`, csv)
+      await budget.startImport(csvFile(`${CURRENT_YEAR}-01.csv`, buildCSV(rows)))
 
-      await expect(budget.previewModal).toContainText(`Jan ${CURRENT_YEAR}`)
-      await expect(budget.previewModal).toContainText('15 rows')
-      await expect(budget.previewTable.locator('tbody tr')).toHaveCount(8) // Capped at MAX_PREVIEW_ROWS
+      await expect(budget.wizard.dialog).toContainText('15 new transactions across 1 month')
     })
 
     test('confirming CSV import persists data and shows budget summary', async ({ page }) => {
@@ -96,17 +92,15 @@ test.describe('Budget Page E2E', () => {
         { date: `${CURRENT_YEAR}-05-01`, category: 'Salary', amount: 6000 },
         { date: `${CURRENT_YEAR}-05-02`, category: 'Groceries', amount: -200 },
       ])
-      await budget.uploadCSV(`${CURRENT_YEAR}-05.csv`, csv)
-      await budget.previewConfirm.click()
+      await budget.importCSV(`${CURRENT_YEAR}-05.csv`, csv)
 
-      await expect(budget.previewModal).not.toBeVisible()
+      await expect(budget.wizard.dialog).toBeHidden()
       await expect(budget.summaryIncome).toBeVisible()
       await expect(budget.incomeValue).toContainText('$6,000')
       await expect(budget.expenseValue).toContainText('$200')
       // Save rate ≈ (6000-200)/6000 ≈ 96.7%
       await expect(budget.saveRateValue).toContainText(/96\.7%/)
 
-      // Verify storage contains the parsed data
       const stored = await page.evaluate(() => localStorage.getItem('budget-store'))
       expect(stored).not.toBeNull()
       expect(stored!.length).toBeGreaterThan(10)
@@ -115,16 +109,17 @@ test.describe('Budget Page E2E', () => {
       expect(parsed.csvs[`${CURRENT_YEAR}-05`].csv).toContain('Salary')
     })
 
-    test('canceling CSV preview discards the upload', async ({ page }) => {
+    test('closing the wizard before importing discards the upload', async ({ page }) => {
       await seedEmptyBudget(page)
       const budget = new BudgetPage(page)
       await budget.goto()
 
       const csv = buildCSV([{ date: `${CURRENT_YEAR}-05-01`, category: 'Salary', amount: 5000 }])
-      await budget.uploadCSV(`${CURRENT_YEAR}-05.csv`, csv)
-      await budget.previewCancel.click()
+      await budget.startImport(csvFile(`${CURRENT_YEAR}-05.csv`, csv))
+      await expect(budget.wizard.heading('Review before importing')).toBeVisible()
+      await page.keyboard.press('Escape')
 
-      await expect(budget.previewModal).not.toBeVisible()
+      await expect(budget.wizard.dialog).toBeHidden()
       await expect(budget.emptyState).toBeVisible()
 
       // budget-store should not contain the unconfirmed upload
@@ -137,38 +132,32 @@ test.describe('Budget Page E2E', () => {
       }
     })
 
-    test('bulk upload imports multiple months sequentially', async ({ page }) => {
+    test('importing several CSVs adds every month in one pass', async ({ page }) => {
       await seedEmptyBudget(page)
       const budget = new BudgetPage(page)
       await budget.goto()
 
-      const jan = buildCSV([
-        { date: `${CURRENT_YEAR}-01-01`, category: 'Salary', amount: 5000 },
-        { date: `${CURRENT_YEAR}-01-05`, category: 'Rent', amount: -1500 },
-      ])
-      const feb = buildCSV([
-        { date: `${CURRENT_YEAR}-02-01`, category: 'Salary', amount: 5000 },
-        { date: `${CURRENT_YEAR}-02-05`, category: 'Rent', amount: -1500 },
-      ])
-      const mar = buildCSV([
-        { date: `${CURRENT_YEAR}-03-01`, category: 'Salary', amount: 5000 },
-        { date: `${CURRENT_YEAR}-03-05`, category: 'Rent', amount: -1500 },
-      ])
+      // The overflow menu with the multi-file option appears once the year has data.
+      await budget.importCSV(
+        `${CURRENT_YEAR}-04.csv`,
+        buildCSV([{ date: `${CURRENT_YEAR}-04-01`, category: 'Salary', amount: 5000 }]),
+      )
 
-      await budget.bulkUploadCSVs([
-        csvFile(`${CURRENT_YEAR}-01.csv`, jan),
-        csvFile(`${CURRENT_YEAR}-02.csv`, feb),
-        csvFile(`${CURRENT_YEAR}-03.csv`, mar),
-      ])
+      const month = (mm: string) =>
+        buildCSV([
+          { date: `${CURRENT_YEAR}-${mm}-01`, category: 'Salary', amount: 5000 },
+          { date: `${CURRENT_YEAR}-${mm}-05`, category: 'Rent', amount: -1500 },
+        ])
 
-      // Confirm each month sequentially
-      for (const expectedLabel of [`Jan ${CURRENT_YEAR}`, `Feb ${CURRENT_YEAR}`, `Mar ${CURRENT_YEAR}`]) {
-        await expect(budget.previewModal).toBeVisible()
-        await expect(budget.previewModal).toContainText(expectedLabel)
-        await budget.previewConfirm.click()
-      }
-
-      await expect(budget.previewModal).not.toBeVisible()
+      await budget.startImport(
+        csvFile(`${CURRENT_YEAR}-01.csv`, month('01')),
+        csvFile(`${CURRENT_YEAR}-02.csv`, month('02')),
+        csvFile(`${CURRENT_YEAR}-03.csv`, month('03')),
+      )
+      await expect(budget.wizard.dialog).toContainText('6 new transactions across 3 months')
+      await budget.wizard.importBtn.click()
+      await expect(budget.wizard.heading('Import complete')).toBeVisible()
+      await budget.wizard.close()
 
       const stored = await page.evaluate(() => localStorage.getItem('budget-store'))
       expect(stored).not.toBeNull()
@@ -176,6 +165,7 @@ test.describe('Budget Page E2E', () => {
       expect(parsed.csvs[`${CURRENT_YEAR}-01`]).toBeDefined()
       expect(parsed.csvs[`${CURRENT_YEAR}-02`]).toBeDefined()
       expect(parsed.csvs[`${CURRENT_YEAR}-03`]).toBeDefined()
+      expect(parsed.csvs[`${CURRENT_YEAR}-04`]).toBeDefined()
     })
   })
 
@@ -618,8 +608,7 @@ test.describe('Budget Page E2E', () => {
         },
         { date: `${CURRENT_YEAR}-05-03`, category: 'Groceries', amount: -75, description: 'emoji 🍕 pizza' },
       ])
-      await budget.uploadCSV(`${CURRENT_YEAR}-05.csv`, csv)
-      await budget.previewConfirm.click()
+      await budget.importCSV(`${CURRENT_YEAR}-05.csv`, csv)
 
       await expect(budget.summaryIncome).toBeVisible()
       await expect(budget.incomeValue).toContainText('$5,000')
@@ -636,13 +625,12 @@ test.describe('Budget Page E2E', () => {
       await budget.goto()
 
       const csv = largeCSV(500, `${CURRENT_YEAR}-04`)
-      await budget.uploadCSV(`${CURRENT_YEAR}-04.csv`, csv)
-      await expect(budget.previewModal).toContainText(`Apr ${CURRENT_YEAR}`)
-      // Total row count text on the modal
-      await expect(budget.previewModal).toContainText(/501 rows/)
+      await budget.startImport(csvFile(`${CURRENT_YEAR}-04.csv`, csv))
+      await expect(budget.wizard.dialog).toContainText(/\d+ new transactions across 1 month/)
 
-      await budget.previewConfirm.click()
-      await expect(budget.previewModal).not.toBeVisible()
+      await budget.wizard.importBtn.click()
+      await budget.wizard.heading('Import complete').waitFor()
+      await budget.wizard.close()
       await expect(budget.summaryIncome).toBeVisible()
       await expect(budget.incomeValue).toContainText('$10,000')
     })
@@ -682,14 +670,7 @@ test.describe('Budget Page E2E', () => {
         { date: `${CURRENT_YEAR}-05-04`, category: 'Groceries', amount: -30, description: '@SUM(1+9)*cmd' },
         { date: `${CURRENT_YEAR}-05-05`, category: 'Groceries', amount: -10, description: '-2+3' },
       ])
-      await budget.uploadCSV(`${CURRENT_YEAR}-05.csv`, csv)
-
-      // Preview shows literal formula strings
-      await expect(budget.previewTable).toContainText('=SUM(A1:A10)')
-      await expect(budget.previewTable).toContainText("+CMD('calc')")
-      await expect(budget.previewTable).toContainText('@SUM(1+9)*cmd')
-
-      await budget.previewConfirm.click()
+      await budget.importCSV(`${CURRENT_YEAR}-05.csv`, csv)
       await expect(budget.summaryIncome).toBeVisible()
       await expect(budget.incomeValue).toContainText('$5,000')
 
@@ -717,11 +698,13 @@ test.describe('Budget Page E2E', () => {
         `${CURRENT_YEAR}-05-01,Salary,5000,"Line1\tLine2\nLine3"\n` +
         `${CURRENT_YEAR}-05-02,Groceries,-50,Normal description\n`
 
-      await budget.uploadCSV(`${CURRENT_YEAR}-05.csv`, csv)
-      // Modal reports 2 rows (the multi-line description is one logical row)
-      await expect(budget.previewModal).toContainText('2 rows')
+      await budget.startImport(csvFile(`${CURRENT_YEAR}-05.csv`, csv))
+      // The multi-line description is one logical row
+      await expect(budget.wizard.dialog).toContainText('2 new transactions')
 
-      await budget.previewConfirm.click()
+      await budget.wizard.importBtn.click()
+      await budget.wizard.heading('Import complete').waitFor()
+      await budget.wizard.close()
       await expect(budget.summaryIncome).toBeVisible()
       await expect(budget.incomeValue).toContainText('$5,000')
       await expect(budget.expenseValue).toContainText('$50')
@@ -729,25 +712,30 @@ test.describe('Budget Page E2E', () => {
   })
 
   test.describe('Malformed CSV Handling', () => {
-    test('CSV with inconsistent column count does not crash and imports valid rows', async ({ page }) => {
+    test('CSV with inconsistent column count does not crash, and the wizard reports the rows it skipped', async ({
+      page,
+    }) => {
       await seedEmptyBudget(page)
       const budget = new BudgetPage(page)
       await budget.goto()
 
-      // Header has 4 cols; some rows have 3 (no description), one has 5 (extra)
+      // Header has 4 cols; one row has 3 (no description), one has 5 (extra)
       const csv =
         'Date,Category,Amount,Description\n' +
         `${CURRENT_YEAR}-05-01,Salary,5000\n` +
         `${CURRENT_YEAR}-05-02,Groceries,-100,Normal,ExtraField\n` +
         `${CURRENT_YEAR}-05-03,Rent,-1500,Apartment\n`
 
-      await budget.uploadCSV(`${CURRENT_YEAR}-05.csv`, csv)
-      await budget.previewConfirm.click()
+      await budget.startImport(csvFile(`${CURRENT_YEAR}-05.csv`, csv))
+      await expect(budget.wizard.dialog).toContainText('2 rows could not be read')
+      await expect(budget.wizard.dialog.getByText('Skipped: Wrong number of columns').first()).toBeVisible()
+      await budget.wizard.importBtn.click()
+      await budget.wizard.heading('Import complete').waitFor()
+      await budget.wizard.close()
 
-      // Page does not crash; valid rows are imported
+      // Page does not crash; the readable row is imported
       await expect(budget.summaryIncome).toBeVisible()
-      await expect(budget.incomeValue).toContainText('$5,000')
-      await expect(budget.expenseValue).toContainText('$1,600')
+      await expect(budget.expenseValue).toContainText('$100')
 
       const bodyText = await page.locator('.budget-page').innerText()
       expect(bodyText).not.toContain('NaN')
@@ -766,8 +754,7 @@ test.describe('Budget Page E2E', () => {
         `${CURRENT_YEAR}-05-04,Groceries,,Empty\n` +
         `${CURRENT_YEAR}-05-05,Rent,-1500,Valid expense\n`
 
-      await budget.uploadCSV(`${CURRENT_YEAR}-05.csv`, csv)
-      await budget.previewConfirm.click()
+      await budget.importCSV(`${CURRENT_YEAR}-05.csv`, csv)
 
       // Only the two valid rows count toward summary
       await expect(budget.incomeValue).toContainText('$5,000')
@@ -917,8 +904,7 @@ test.describe('Budget Page E2E', () => {
         { date: `${CURRENT_YEAR}-05-02`, category: 'Groceries', amount: -3000 },
         { date: `${CURRENT_YEAR}-05-03`, category: 'Rent', amount: -2000 },
       ])
-      await budget.uploadCSV(`${CURRENT_YEAR}-05.csv`, csv)
-      await budget.previewConfirm.click()
+      await budget.importCSV(`${CURRENT_YEAR}-05.csv`, csv)
       await expect(budget.summaryIncome).toBeVisible()
       await expect(budget.saveRateValue).toContainText(/37\.5%/)
 
@@ -1093,38 +1079,34 @@ test.describe('Budget Page E2E', () => {
       expect(alertTexts.some(t => /required|valid/i.test(t))).toBe(true)
     })
 
-    test('CSV upload errors render in an aria-live region (AC #36)', async ({ page }) => {
-      // Seed one month of valid data so the expense BudgetTable (which owns the
-      // error region) renders.
+    test('import wizard announces why it cannot continue in a live region (AC #36)', async ({ page }) => {
+      // Seed one month of valid data so the expense BudgetTable (which offers "Import into May…") renders.
       await seedKnownBudget(page)
       const budget = new BudgetPage(page)
       await budget.goto()
       await budget.setSpreadsheetMode('detailed')
 
-      // Right-click May (index 4) on the expense table and pick "Upload CSV for May".
-      // The menu item clicks the hidden <input type="file"> — Playwright intercepts
-      // the file chooser so we can supply a malformed CSV that the parser rejects.
       await budget.openMonthContextMenu(4)
-      const [chooser] = await Promise.all([
-        page.waitForEvent('filechooser'),
-        page
-          .locator('.budget-ctx-item', { hasText: /^Upload CSV for/ })
-          .first()
-          .click(),
-      ])
-      await chooser.setFiles({
+      await page
+        .locator('.budget-ctx-item', { hasText: /^Import into/ })
+        .first()
+        .click()
+      await budget.wizard.pick({
         name: 'bad.csv',
         mimeType: 'text/csv',
         buffer: Buffer.from('Date,Category,Amount\nnot-a-date,Bad,not-a-number\n'),
       })
 
-      // The error renders inside a live region with role=alert + aria-live=polite
-      const errorRegion = page.locator('.budget-csv-error').first()
-      await expect(errorRegion).toBeVisible()
-      await expect(errorRegion).toHaveAttribute('role', 'alert')
-      await expect(errorRegion).toHaveAttribute('aria-live', 'polite')
-      // Text is the failure message the screen reader announces
-      await expect(errorRegion).toContainText(/No valid transactions/i)
+      // The wizard keeps the user on the Columns step and says why it cannot continue.
+      await expect(budget.wizard.heading('Columns')).toBeFocused()
+      await expect(budget.wizard.liveRegion).toHaveAttribute('role', 'status')
+      await expect(budget.wizard.liveRegion).toHaveAttribute('aria-live', 'polite')
+      await expect(budget.wizard.liveRegion).toHaveText('Step 1 of 2: Columns')
+      await expect(budget.wizard.dialog.locator('#iw-reason')).toHaveText('Choose a date column to continue.')
+      await expect(budget.wizard.dialog.getByRole('button', { name: 'Continue to review' })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      )
     })
   })
 })

@@ -1,6 +1,6 @@
 # Category Budget Targets
 
-- **Status:** Proposed
+- **Status:** Built and shipped (flag removed 2026-11-22). Sections that mention the flag record the original rollout design
 - **Owner:** Anindya
 - **Last updated:** 2026-11-08
 - **Priority:** 4 of 5 in the next-features list
@@ -15,10 +15,10 @@
 **Success metrics (no telemetry; all verifiable by test or by hand).**
 
 1. With a $500 Dining target and $620 net Dining spend in a completed month, the Dining row's "Vs target" cell reads exactly "$120 over" (unit test on the pure function plus component test plus e2e).
-2. With the flag off, the DOM of the Budget and Home pages is byte-identical to today (existing tests pass unmodified; no read of `budget/targets.json` happens).
+2. While the feature was behind its flag, the DOM of the Budget and Home pages with the flag off was byte-identical to before (existing tests passed unmodified; no read of `budget/targets.json` happened). Retired with the flag.
 3. Groups with no target render no target indicator anywhere (component test asserts absence of the indicator elements, not just of text).
 4. The target editor is operable with the keyboard alone and announces results (Playwright keyboard test plus RTL role/name assertions).
-5. No new network request is made by the feature (Playwright test asserts that, with the flag on and targets edited, no request leaves the app origin other than the existing flag-config fetch; see 3.9).
+5. No new network request is made by the feature (Playwright test asserts that, with targets edited, no request leaves the app origin other than the existing flag-config fetch; see 3.9).
 6. Manual check: set a target, reload the page, close and reopen the browser, point a second tab at the same folder; the target persists and shows in both tabs. Open `budget/targets.json` in a text editor and read it.
 
 ## 2. Current behavior (verified)
@@ -52,7 +52,7 @@ Every item below was read in the code on 2026-11-08.
 | D5  | In-progress month           | Compare actual with the full target; show "left" instead of "under"; no pace marker in v1                                                                                                         | Rent and annual bills land on day 1; a linear pace line would be wrong for most groups and adds a second visual state to make accessible.                                                                                                                                                                                           |
 | D6  | Edit surface                | Aggregated view only, in a "Monthly target" column                                                                                                                                                | That is where the user sees the effect. CategoryGroupManager keeps one job (structure). Two editors double the test and a11y surface for M effort.                                                                                                                                                                                  |
 | D7  | Home                        | One quiet line in SpendingPeek; absent when no targets apply                                                                                                                                      | Home is a peek. A per-group list competes with the chart and needs a truncation story.                                                                                                                                                                                                                                              |
-| D8  | Rollout                     | Flag `category-budget-targets`, default off                                                                                                                                                       | Matches `src/flags/`. Off means no reads and no UI.                                                                                                                                                                                                                                                                                 |
+| D8  | Rollout                     | Flag `category-budget-targets`, default off; rolled out at 100% and removed on 2026-11-22                                                                                                                                                       | Matches `src/flags/`. Off means no reads and no UI.                                                                                                                                                                                                                                                                                 |
 
 ### 3.2 File format (NEW): `budget/targets.json`
 
@@ -168,7 +168,7 @@ Target amounts are user data. They are written only through `FileStore.writeJSON
 
 Setting and storing
 
-- **AC-1** With the flag on, the Expenses tab of Aggregated view shows two extra columns after Total: "Monthly target" and "Vs target". The Income tab, the Detailed view and the Cashflow view are unchanged.
+- **AC-1** The Expenses tab of Aggregated view shows two extra columns after Total: "Monthly target" and "Vs target". The Income tab, the Detailed view and the Cashflow view are unchanged.
 - **AC-2** A group row with no target shows a "Set target" button in Monthly target and an empty Vs target cell, with no icon, no text and no color treatment anywhere in the row.
 - **AC-3** Entering `500` in Dining's editor and pressing Enter stores `monthly: 500` with `from: null` when the group has no history, writes `budget/targets.json`, shows "$500" in the button and announces "Dining target set to $500 a month."
 - **AC-4** Accepted input: digits with optional leading `$`, thousands commas, and up to two decimals (`$1,250.50`). Blank after trimming means clear (AC-6). Rejected: negatives, letters, exponent notation, more than two decimal places, and values above 9,999,999.99. A rejected value keeps the editor open, sets `aria-invalid="true"` and shows "Enter an amount from 0 to 9,999,999."
@@ -194,13 +194,13 @@ Comparison
 
 Home
 
-- **AC-21** With the flag on and at least one expense group with a target in effect for the anchor month, SpendingPeek shows exactly one line under its controls (copy in section 6); otherwise it renders nothing extra and its DOM is unchanged.
+- **AC-21** With at least one expense group with a target in effect for the anchor month, SpendingPeek shows exactly one line under its controls (copy in section 6); otherwise it renders nothing extra and its DOM is unchanged.
 - **AC-22** The anchor month is the same month the chart calls "last month"/"this month" (newest month with data). The line is prefixed with the month name and "so far" when that month is the current calendar month.
 - **AC-23** The line includes an icon and is followed by a "See targets" link-style button that calls `onOpenTargets`.
 
 Safety and states
 
-- **AC-24** With the flag off: no read or write of `budget/targets.json`, no new DOM, no new CSS effects.
+- **AC-24** (Retired with the flag, 2026-11-22.) With the flag off: no read or write of `budget/targets.json`, no new DOM, no new CSS effects.
 - **AC-25** If `budget/targets.json` exists but cannot be parsed or has `version > 1`, targets are not applied, editing is disabled, a `role="alert"` message explains it, and the file is never overwritten.
 - **AC-26** If a write fails, the UI reverts to the previous value and shows the save error inside the cell's live region.
 - **AC-27** Changes made in another tab appear without reload (subscription).
@@ -226,7 +226,7 @@ Safety and states
 
 | State                                      | Behavior                                                                                                                                |
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| First-time, flag on, zero targets anywhere | Intro line above the Expenses table (section 6). "Set target" in every row.                                                             |
+| First-time, zero targets anywhere | Intro line above the Expenses table (section 6). "Set target" in every row.                                                             |
 | First-time, no budget data for the year    | Existing empty year state; the feature adds nothing.                                                                                    |
 | Loading                                    | New columns are not rendered until targets have loaded, so the table does not shift; Home shows no target line until loaded.            |
 | Returning, some targets                    | Populated cells, caption note under the table.                                                                                          |
@@ -286,7 +286,7 @@ Class prefix: `budget-target-` for table pieces, `spending-peek-targets` for Hom
 ### 5.1 Component hierarchy
 
 ```
-BudgetAggregatedView (Expenses, flag on)
+BudgetAggregatedView (Expenses)
  section.budget-table-section
   h3.budget-table-title "Expenses"
   p.budget-target-intro            (only when zero targets exist)
@@ -502,11 +502,11 @@ export function useBudgetTargets(opts: { enabled: boolean; groups: CategoryGroup
 
 1. **Pure core and flag.** `budgetTargets.ts` plus tests at ~100%, `budgetTargetsStorage.ts` plus tests, flag definition and `feature-flags.json`. No UI. Mergeable alone; coverage gate (90% statements, `vite.config.js`) unaffected.
 2. **Hook.** `useBudgetTargets` with subscription, prune after `groupsLoaded`, unreadable-file handling, rollback on write failure. Tests with `MemoryFileStore`.
-3. **Aggregated view UI.** `BudgetTargetCell`, `BudgetTargetStatus`, CSS, modifications to `BudgetAggregatedView` and `Budget.tsx`. Component tests including keyboard flows. Flag still default off.
+3. **Aggregated view UI.** `BudgetTargetCell`, `BudgetTargetStatus`, CSS, modifications to `BudgetAggregatedView` and `Budget.tsx`. Component tests including keyboard flows. Flag default off.
 4. **Home line.** `SpendingPeek`, `Home`, CSS, tests.
 5. **E2E, a11y checks, demo data.** Playwright spec, fixtures, demoMode seed.
 6. **Docs.** README, Guide, CONTRIBUTING file-layout row, `docs/specs/budget.md`; regenerate Budget and Home screenshots only if the flag is promoted (CONTRIBUTING screenshot rules).
-7. **Promote and remove flag.** After the author has used it daily with the override on and slices 1-6 are green: raise rollout to 100, then delete the flag and the off-branches in a later cleanup PR (per the repo's "clean up dead code immediately" preference).
+7. **Promote and remove flag.** After the author has used it daily with the override on and slices 1-6 are green: raise rollout to 100 (done 2026-11-22), then delete the flag and the off-branches (done 2026-11-22) (per the repo's "clean up dead code immediately" preference).
 
 ### 7.4 Test plan
 
@@ -569,5 +569,5 @@ Items marked BLOCKING need approval before slice 1.
 | Q9  | Fix Home chart so refunds net like Budget?                              | Leave for a separate issue; note the divergence in code comments and tests. Align the target line with Budget.                                                                                     | No       |
 | Q10 | Should the Vs target total only count months with data?                 | Yes (3.3); label with "n of 12 months" so it is never misleading.                                                                                                                                  | No       |
 | Q11 | Show groups that have a target but no spend?                            | Yes, so a target can always be edited or cleared (4.4). Groups with neither spend nor target stay hidden as today, so a brand-new group cannot get a target until it has spend in the viewed year. | No       |
-| Q12 | Rollout path?                                                           | Flag default 0%, author uses it via `flag-overrides`, promote after slice 6, then delete flag.                                                                                                     | No       |
+| Q12 | Rollout path?                                                           | Flag default 0%, author uses it via `flag-overrides`, promote after slice 6, then delete flag. Decided: rolled out at 100% and the flag removed on 2026-11-22.                                                                                                     | No       |
 | Q13 | Sibling specs (import-wizard, annual-review, check-in, data-safety-net) | Section 8 was reconciled against them on 2026-11-08. Re-check it if any sibling changes its file or flag names.                                                                                    | No       |

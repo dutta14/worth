@@ -12,10 +12,9 @@ import {
 import type { BudgetTargetsFile, GroupTargetRecord } from '../utils/budgetTargets'
 import { TARGETS_PATH, loadBudgetTargets, saveBudgetTargets } from '../utils/budgetTargetsStorage'
 
-export type BudgetTargetsStatus = 'off' | 'loading' | 'ready' | 'unreadable'
+export type BudgetTargetsStatus = 'loading' | 'ready' | 'unreadable'
 
 export interface UseBudgetTargetsOptions {
-  enabled: boolean
   groups: CategoryGroup[]
   groupsLoaded: boolean
 }
@@ -32,7 +31,7 @@ export interface UseBudgetTargetsResult {
 
 export const SAVE_ERROR_MESSAGE = "Couldn't save the target. Check that your data folder is still available."
 
-const OFF_TARGETS = emptyTargetsFile()
+const EMPTY_TARGETS = emptyTargetsFile()
 
 // Same local-time convention as SpendingPeek.
 export const currentMonthKey = (now: Date = new Date()): string => buildMonthKey(now.getFullYear(), now.getMonth())
@@ -41,7 +40,7 @@ export const currentMonthKey = (now: Date = new Date()): string => buildMonthKey
 const isTargetable = (group: CategoryGroup): boolean => group.type !== 'income' && group.id !== 'removed'
 
 interface LoadedState {
-  status: Exclude<BudgetTargetsStatus, 'off'>
+  status: BudgetTargetsStatus
   targets: BudgetTargetsFile
 }
 
@@ -61,9 +60,9 @@ function changedLabels(from: BudgetTargetsFile, to: BudgetTargetsFile): string[]
     .map(id => from.groups[id]?.label ?? to.groups[id]?.label ?? id)
 }
 
-export function useBudgetTargets({ enabled, groups, groupsLoaded }: UseBudgetTargetsOptions): UseBudgetTargetsResult {
+export function useBudgetTargets({ groups, groupsLoaded }: UseBudgetTargetsOptions): UseBudgetTargetsResult {
   const { fileStore } = useFileStore()
-  const [state, setState] = useState<LoadedState>({ status: 'loading', targets: OFF_TARGETS })
+  const [state, setState] = useState<LoadedState>({ status: 'loading', targets: EMPTY_TARGETS })
   const [announcement, setAnnouncement] = useState<Announcement>({ text: '', id: 0 })
   const stateRef = useRef(state)
   // Last state known to be on disk. Optimistic edits can stack, so a failed write rolls back to this, not to the call-time state.
@@ -73,12 +72,10 @@ export function useBudgetTargets({ enabled, groups, groupsLoaded }: UseBudgetTar
   const validIds = useMemo(() => new Set(groups.filter(isTargetable).map(g => g.id)), [groups])
   const validIdsRef = useRef(validIds)
   const groupsLoadedRef = useRef(groupsLoaded)
-  const enabledRef = useRef(enabled)
   useEffect(() => {
     validIdsRef.current = validIds
     groupsLoadedRef.current = groupsLoaded
-    enabledRef.current = enabled
-  }, [validIds, groupsLoaded, enabled])
+  }, [validIds, groupsLoaded])
 
   const commit = useCallback((next: LoadedState) => {
     stateRef.current = next
@@ -96,7 +93,6 @@ export function useBudgetTargets({ enabled, groups, groupsLoaded }: UseBudgetTar
   const announce = useCallback((text: string) => setAnnouncement(prev => ({ text, id: prev.id + 1 })), [])
 
   useEffect(() => {
-    if (!enabled) return
     let cancelled = false
     // A local save announces itself on this path; its own optimistic state is the truth meanwhile.
     const refresh = () => {
@@ -116,12 +112,12 @@ export function useBudgetTargets({ enabled, groups, groupsLoaded }: UseBudgetTar
       cancelled = true
       unsubscribe()
     }
-  }, [enabled, fileStore, commitConfirmed])
+  }, [fileStore, commitConfirmed])
 
   const setTarget = useCallback(
     async (groupId: string, label: string, value: number | null): Promise<{ ok: boolean }> => {
       const previous = stateRef.current
-      if (!enabledRef.current || previous.status !== 'ready') return { ok: false }
+      if (previous.status !== 'ready') return { ok: false }
       if (groupsLoadedRef.current && !validIdsRef.current.has(groupId)) return { ok: false }
 
       // Orphans are only dropped here, once groups are known, so reading never writes.
@@ -166,10 +162,9 @@ export function useBudgetTargets({ enabled, groups, groupsLoaded }: UseBudgetTar
   )
 
   const targets = useMemo(
-    () => (enabled && groupsLoaded ? pruneTargets(state.targets, validIds) : state.targets),
-    [enabled, groupsLoaded, state.targets, validIds],
+    () => (groupsLoaded ? pruneTargets(state.targets, validIds) : state.targets),
+    [groupsLoaded, state.targets, validIds],
   )
 
-  if (!enabled) return { status: 'off', targets: OFF_TARGETS, setTarget, message: '', messageId: 0 }
   return { status: state.status, targets, setTarget, message: announcement.text, messageId: announcement.id }
 }

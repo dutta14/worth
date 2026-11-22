@@ -3,10 +3,7 @@ import { balanceEntriesToEntries, seedFileStore } from './seed-filestore'
 
 /**
  * Seed helpers for the Monthly check-in E2E suite (docs/specs/monthly-check-in.md, section 7.4).
- * The feature flag is switched on through `flag-overrides`, exactly like a developer would locally.
  */
-
-export const CHECK_IN_FLAG = 'monthly-check-in'
 
 /** Nine active accounts; ids 8 and 9 are the ones left out of a partial month. */
 export const CHECK_IN_ACCOUNTS = [
@@ -55,7 +52,6 @@ export const COMPLETE_OCTOBER = [...COMPLETE_SEPTEMBER, ...monthBalances('2026-1
 
 interface SeedCheckInOptions {
   balances: Array<{ accountId: number; month: string; balance: number }>
-  flag?: boolean
   darkMode?: boolean
   onboardingDismissed?: boolean
 }
@@ -66,7 +62,7 @@ interface SeedCheckInOptions {
  */
 export async function seedCheckIn(
   page: Page,
-  { balances, flag = true, darkMode = false, onboardingDismissed = true }: SeedCheckInOptions,
+  { balances, darkMode = false, onboardingDismissed = true }: SeedCheckInOptions,
 ): Promise<void> {
   await seedFileStore(
     page,
@@ -77,7 +73,7 @@ export async function seedCheckIn(
     { onceKey: 'check-in-e2e-seeded' },
   )
   await page.addInitScript(
-    ({ flag, darkMode, onboardingDismissed, flagName }) => {
+    ({ darkMode, onboardingDismissed }) => {
       if (sessionStorage.getItem('check-in-e2e-init') !== '1') {
         localStorage.clear()
         sessionStorage.setItem('check-in-e2e-init', '1')
@@ -86,8 +82,7 @@ export async function seedCheckIn(
       localStorage.setItem('_e2eMode', '1')
       localStorage.setItem('encryption-enabled', '0')
       localStorage.setItem('darkMode', darkMode ? '1' : '0')
-      if (flag) localStorage.setItem('flag-overrides', JSON.stringify({ [flagName]: true }))
     },
-    { flag, darkMode, onboardingDismissed, flagName: CHECK_IN_FLAG },
+    { darkMode, onboardingDismissed },
   )
 }

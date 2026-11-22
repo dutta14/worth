@@ -1,24 +1,9 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-21T21:07:15.826Z",
+  "updatedAt": "2026-11-22T19:35:43.000Z",
   "flags": {
     "modern-design": {
       "percentage": 100
-    },
-    "monthly-check-in": {
-      "percentage": 0
-    },
-    "category-budget-targets": {
-      "percentage": 0
-    },
-    "data-safety-net": {
-      "percentage": 0
-    },
-    "annual-review": {
-      "percentage": 0
-    },
-    "import-wizard": {
-      "percentage": 0
     }
   }
 }

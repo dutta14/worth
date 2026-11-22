@@ -1,6 +1,6 @@
 # Annual Review
 
-- **Status:** Built behind the `annual-review` flag (default off, 0% rollout); experimental until the owner enables it
+- **Status:** Built and shipped (flag removed 2026-11-22). Sections that mention the flag record the original rollout design
 - **Owner:** Anindya
 - **Last updated:** 2026-11-22
 - **Priority:** 5 of 5 in the next-features list
@@ -79,7 +79,7 @@ Why not the alternatives:
 - Home card only: not linkable or printable, and Home is a glance surface. A year-end Home nudge is OUT for v1 (monthly-check-in owns prompts).
 - Wealth already hosts Growth, the nearest sibling (yearly, savings, income). Search and `currentPage` need no new page type.
 
-`/net-worth/review` with no year redirects (replace) to `/net-worth/review/{defaultYear}`. A non-4-digit param redirects to `/net-worth/review`. Flag off: `/net-worth/review*` redirects to `/net-worth/dashboard`.
+`/net-worth/review` with no year redirects (replace) to `/net-worth/review/{defaultYear}`. A non-4-digit param redirects to `/net-worth/review`.
 
 ### 3.2 Modules (all NEW unless marked)
 
@@ -272,9 +272,9 @@ export function getAvailableYears(i: Pick<ReviewInputs, 'balances' | 'transactio
 
 Reuse: `useData`, `useGoals`, `useFileStore`, `loadBudgetStore`, `getExpenseGroups`, `getIncomeGroups`, `parseCSV` (budget), `getFiTarget`, `useGrowthSettings`, `formatMonth` and `formatCurrency` (`src/pages/data/types.ts`), `serializeCSV`, `.sr-only`, `.tab-bar`/`.tab-btn`, `ErrorBoundary`. New: everything in 3.2. Not reused: Recharts (colors cannot follow print media), `YearNav` (gaps in years make prev/next awkward; a native select lists real years), `csvExport.ts` `escapeCell` (private, no newline quoting).
 
-### 3.7 Rollout and storage
+### 3.7 Rollout (history) and storage
 
-New flag `ANNUAL_REVIEW = defineFlag('annual-review', { type: 'boolean', default: false, description: 'Shows the Annual Review tab under Wealth', temporary: true })` plus `"annual-review": { "percentage": 0 }` in `feature-flags.json`. Owner enables it with `localStorage` `flag-overrides` `{"annual-review": true}`; later 100%; then delete the flag in a cleanup PR. **No new on-disk data**: the selected year lives in the URL, nothing is cached, and the CSV is a browser download. The only read of a non-obvious file is `savings-tracker-overrides.json`, already in the folder.
+New flag `ANNUAL_REVIEW = defineFlag('annual-review', { type: 'boolean', default: false, description: 'Shows the Annual Review tab under Wealth', temporary: true })` plus `"annual-review": { "percentage": 0 }` in `feature-flags.json`. Rolled out at 100% and the flag removed on 2026-11-22. **No new on-disk data**: the selected year lives in the URL, nothing is cached, and the CSV is a browser download. The only read of a non-obvious file is `savings-tracker-overrides.json`, already in the folder.
 
 ## 4. Product requirements
 
@@ -290,7 +290,7 @@ New flag `ANNUAL_REVIEW = defineFlag('annual-review', { type: 'boolean', default
 
 Navigation and years
 
-- AC-1: With the flag on, Wealth shows a fourth tab "Review" after Growth; it links to `/net-worth/review`, and Wealth stays highlighted in the sidebar. With the flag off there is no tab, no search entry, and `/net-worth/review/2025` redirects to `/net-worth/dashboard`.
+- AC-1: Wealth shows a fourth tab "Review" after Growth; it links to `/net-worth/review`, and Wealth stays highlighted in the sidebar.
 - AC-2: `/net-worth/review` redirects (replace) to `/net-worth/review/{defaultYear}` per 3.4. A param that is not exactly four digits redirects to `/net-worth/review`.
 - AC-3: The year `<select>` lists `getAvailableYears` descending, shows the route year as selected, and changing it navigates with replace and announces "Showing the review for {year}." in a polite live region. A route year that is not in the list is still rendered (and typically shows the empty state).
 - AC-4: The selected year survives reload and is part of the copied URL.
@@ -625,12 +625,12 @@ Spec of `formatDelta`: rounds once with `Intl.NumberFormat` (not `toFixed`), ret
 ### 7.3 Implementation order (PR-sized slices, each green on the pre-commit checklist in `.github/copilot-instructions.md`)
 
 1. **Selectors and types.** `types.ts`, `netWorth.ts`, `cashflow.ts`, `spending.ts`, `goals.ts`, `availableYears.ts`, `selectAnnualReview.ts`, `format.ts`, `savingsOverrides.ts` (+ SGT import swap), with tests for W1 to W13. No UI, no flag. Coverage stays above the 90% statements gate.
-2. **Flag, route, data hook, empty/loading states.** Flag definition, `useAnnualReview`, `AnnualReview` shell with header, year select, live region, empty and loading states, Data tab and route, search entry, `DataContext.isLoaded`. Flag defaults off.
+2. **Flag, route, data hook, empty/loading states.** Flag definition, `useAnnualReview`, `AnnualReview` shell with header, year select, live region, empty and loading states, Data tab and route, search entry, `DataContext.isLoaded`. Flag defaulted off.
 3. **Sections.** Net worth with SVG chart and table, cashflow, spending, goals, notes, prior-year lines.
 4. **Print and CSV.** `AnnualReview.css` print block, document title handling, `reviewCsv.ts`, buttons.
-5. **E2E, docs, enable.** Playwright specs, Guide, README, CONTRIBUTING, demo-data screenshot optional, then set the flag to 100% and schedule flag removal.
+5. **E2E, docs, enable.** Playwright specs, Guide, README, CONTRIBUTING, demo-data screenshot optional, then set the flag to 100% and remove it (both done 2026-11-22).
    - Landed: `e2e/annual-review.spec.ts` (page object and fixtures alongside), Guide, README, CONTRIBUTING and this spec. Demo mode needed no seed changes (it already carries balances, goals and budget CSVs).
-   - Not done on purpose: raising the flag from 0% is the owner's call, so the flag stays off and the docs call the feature experimental. O-12 (Growth year cards linking to the review) stays a follow-up.
+   - Decided: the owner raised the flag from 0% to 100% and removed it on 2026-11-22, so the docs describe the feature as a permanent one. O-12 (Growth year cards linking to the review) stays a follow-up.
    - Deviations from the plan in 7.4: the keyboard test changes the year by typing it into the focused select, because Chrome on macOS opens the list on an arrow key instead of changing the value; the chart is an `<svg role="img">` whose `aria-label` is the summary sentence (backed by the monthly table) rather than a `figcaption`; the no-outside-requests test ignores the shell's own flag-registry and web-font requests.
 
 ### 7.4 Test plan

@@ -1,35 +1,34 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { makeFlagContextValue } from '../test/flagTestUtils'
-import { FlagContext } from '../flags/FlagContext'
 import { FileStoreTestProvider } from '../test/fileStoreTestUtils'
+import { MemoryFileStore } from '../utils/memoryFileStore'
 import { useSearchIndexData } from './useSearchIndexData'
 
 vi.mock('../contexts/GoalsContext', () => ({ useGoals: () => ({ goals: [], gwGoals: [] }) }))
 vi.mock('../contexts/DataContext', () => ({ useData: () => ({ accounts: [] }) }))
 
-const flagValue = (annualReview: boolean) => makeFlagContextValue({ 'annual-review': annualReview })
+const groups = [{ id: 'food', name: 'Food', categories: ['Groceries'] }]
 
-const wrapperFor =
-  (annualReview: boolean) =>
-  ({ children }: { children: ReactNode }) => (
-    <FlagContext.Provider value={flagValue(annualReview)}>
-      <FileStoreTestProvider>{children}</FileStoreTestProvider>
-    </FlagContext.Provider>
-  )
+const makeWrapper = (store: MemoryFileStore) =>
+  function Wrapper({ children }: { children: ReactNode }) {
+    return <FileStoreTestProvider store={store}>{children}</FileStoreTestProvider>
+  }
 
 describe('useSearchIndexData', () => {
-  it('reports the annual-review flag as on so the search entry appears', async () => {
-    const { result } = renderHook(() => useSearchIndexData(true), { wrapper: wrapperFor(true) })
+  it('loads the file-backed slices while enabled', async () => {
+    const store = new MemoryFileStore()
+    await store.writeJSON('budget/categories.json', { categoryGroups: groups })
+    const { result } = renderHook(() => useSearchIndexData(true), { wrapper: makeWrapper(store) })
 
-    await waitFor(() => expect(result.current.categoryGroups).toEqual([]))
-    expect(result.current.annualReviewEnabled).toBe(true)
+    await waitFor(() => expect(result.current.categoryGroups).toEqual(groups))
   })
 
-  it('reports the annual-review flag as off by default', () => {
-    const { result } = renderHook(() => useSearchIndexData(false), { wrapper: wrapperFor(false) })
+  it('reads nothing from the data folder while disabled', async () => {
+    const store = new MemoryFileStore()
+    await store.writeJSON('budget/categories.json', { categoryGroups: groups })
+    const { result } = renderHook(() => useSearchIndexData(false), { wrapper: makeWrapper(store) })
 
-    expect(result.current.annualReviewEnabled).toBe(false)
+    expect(result.current.categoryGroups).toEqual([])
   })
 })

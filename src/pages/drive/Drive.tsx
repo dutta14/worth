@@ -1,6 +1,5 @@
 import { FC, useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import CSVPreviewModal from '../budget/components/CSVPreviewModal'
 import '../../styles/Drive.css'
 import { FileIcon, getFileExt, FolderIcon, BackIcon, UploadIcon, RenameIcon } from './driveIcons'
 import { buildDriveTree } from './buildBudgetTree'
@@ -61,15 +60,11 @@ const Drive: FC = () => {
   const resolved = useMemo(() => resolvePathSegments(root, segments), [root, segments])
 
   const {
-    importWizardOn,
     wizardElement,
-    csvPreview,
     toastMsg,
     dismissToast,
     dragOver,
     fileInputRef,
-    handlePreviewConfirm,
-    handlePreviewCancel,
     handleDragEnter,
     handleDragLeave,
     handleDragOver,
@@ -371,9 +366,7 @@ const Drive: FC = () => {
             {dragOver ? 'Drop CSV files here' : 'Drag & drop CSV files or click to browse'}
           </div>
           <div className="drive-dropzone-hint">
-            {importWizardOn
-              ? 'Drop CSV files here. Worth reads dates from the rows, not the filename.'
-              : 'Filenames should contain YYYY-MM (e.g. 2025-05.csv) or match "Our Finances - MMM YYYY.csv"'}
+            Drop CSV files here. Worth reads dates from the rows, not the filename.
           </div>
         </div>
       )}
@@ -393,17 +386,7 @@ const Drive: FC = () => {
         </div>
       )}
 
-      {importWizardOn && wizardElement}
-
-      {/* CSV Preview Modal */}
-      {csvPreview && (
-        <CSVPreviewModal
-          csv={csvPreview.csv}
-          monthKey={csvPreview.monthKey}
-          onConfirm={handlePreviewConfirm}
-          onCancel={handlePreviewCancel}
-        />
-      )}
+      {wizardElement}
     </div>
   )
 }

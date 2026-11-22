@@ -1,9 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { FlagContext } from '../../../../flags/FlagContext'
 import { FileStoreTestProvider } from '../../../../test/fileStoreTestUtils'
-import { makeFlagContextValue } from '../../../../test/flagTestUtils'
 import { parseCSV } from '../../../../utils/csvUtils'
 import { MemoryFileStore } from '../../../../utils/memoryFileStore'
 import { useBudget } from '../../hooks/useBudget'
@@ -49,11 +47,9 @@ const setup = async () => {
   }
   const writeCSV = vi.spyOn(fileStore, 'writeCSV')
   render(
-    <FlagContext.Provider value={makeFlagContextValue({ 'import-wizard': true })}>
-      <FileStoreTestProvider store={fileStore}>
-        <Host />
-      </FileStoreTestProvider>
-    </FlagContext.Provider>,
+    <FileStoreTestProvider store={fileStore}>
+      <Host />
+    </FileStoreTestProvider>,
   )
   return {
     fileStore,

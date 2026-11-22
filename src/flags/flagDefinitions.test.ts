@@ -2,48 +2,27 @@ import { describe, expect, it } from 'vitest'
 import featureFlags from '../../feature-flags.json'
 import { FLAGS } from './flagDefinitions'
 
-describe('annual-review flag', () => {
-  it('is a temporary boolean flag that defaults to off', () => {
-    expect(FLAGS.ANNUAL_REVIEW).toEqual({
-      id: 'annual-review',
+describe('flag definitions', () => {
+  it('defines modern-design as a temporary boolean flag that defaults to off', () => {
+    expect(FLAGS.MODERN_DESIGN).toMatchObject({
+      id: 'modern-design',
       type: 'boolean',
       default: false,
-      description: 'Shows the Annual Review tab under Wealth',
       temporary: true,
     })
   })
 
-  it('is registered in feature-flags.json at 0 percent', () => {
-    expect(featureFlags.flags['annual-review']).toEqual({ percentage: 0 })
-  })
-})
-
-describe('monthly-check-in flag', () => {
-  it('is a temporary boolean flag that defaults to off', () => {
-    expect(FLAGS.MONTHLY_CHECK_IN).toEqual({
-      id: 'monthly-check-in',
-      type: 'boolean',
-      default: false,
-      description: 'Home check-in strip, partial-month indicators, and Details check-in mode',
-      temporary: true,
-    })
-  })
-
-  it('is registered in feature-flags.json at 0 percent', () => {
-    expect(featureFlags.flags['monthly-check-in']).toEqual({ percentage: 0 })
-  })
-
-  it('leaves the modern-design rollout untouched', () => {
+  it('keeps the modern-design rollout at 100 percent', () => {
     expect(featureFlags.flags['modern-design']).toEqual({ percentage: 100 })
-  })
-
-  it('registers the import-wizard flag as temporary, off by default and at 0 percent', () => {
-    expect(FLAGS.IMPORT_WIZARD).toMatchObject({ id: 'import-wizard', type: 'boolean', default: false, temporary: true })
-    expect(featureFlags.flags['import-wizard']).toEqual({ percentage: 0 })
   })
 
   it('gives every flag a unique id', () => {
     const flagIds = Object.values(FLAGS).map(flag => flag.id)
     expect(new Set(flagIds).size).toBe(flagIds.length)
+  })
+
+  it('registers every defined flag in feature-flags.json and nothing else', () => {
+    const flagIds = Object.values(FLAGS).map(flag => flag.id)
+    expect(Object.keys(featureFlags.flags).sort()).toEqual([...flagIds].sort())
   })
 })

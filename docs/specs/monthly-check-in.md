@@ -1,6 +1,6 @@
 # Monthly Check-in
 
-- **Status:** Built behind the `monthly-check-in` flag (off by default, 0% rollout); experimental
+- **Status:** Built and shipped (flag removed 2026-11-22)
 - **Owner:** Anindya
 - **Last updated:** 2026-11-22
 - **Priority:** 2 of 5 in the next-features list
@@ -52,9 +52,9 @@ Every item below was read in the code on 2026-11-08.
 - Announcements: one `aria-live="polite"` `.sr-only` region for card moves (line 282).
 - Grep for reminder, lastUpdated, stale, snooze, and "Partial month" finds no user-facing feature. The PM finding is confirmed.
 
-**Storage, flags, demo**
+**Storage, demo**
 - UI preferences live in `localStorage` through `src/utils/storage.ts` (typed `StorageSchema`, validators, `JSON_KEYS`); `CONTRIBUTING.md` lists the keys (line 130). Financial data lives only in the folder.
-- Flags: `src/flags/flagDefinitions.ts` (`FLAGS`, `defineFlag`), `useFlag(FLAGS.X)`, `feature-flags.json` (`modern-design` at 100). `FlagContext` default `resolveFlag` returns `flag.default`, and a local override (`flag-overrides` in localStorage) wins over rollout.
+- Flags (at design time): `src/flags/flagDefinitions.ts` (`FLAGS`, `defineFlag`), `useFlag(FLAGS.X)`, `feature-flags.json`. The temporary flag used while building this feature was removed on 2026-11-22.
 - Demo mode: `enterDemo` seeds a `MemoryFileStore` (`FileStoreContext.tsx`); `isDemoActive()` reads `_demoMode`. `demoBalances()` (`demoMode.ts`) generates balances for the 5 demo accounts (all `active`) through the current month, so demo data is always complete.
 - Repo breakpoints used by Home are 1100px and 640px (`Home.css`), and 900px for the sidebar. There is no 480/768/992 rule in Home today.
 - Quality gates: 90% statement coverage threshold (`vite.config.js`), `eslint --max-warnings=0`, prettier, `tsc`, Playwright, "exhaustive tests for every new file" (`.github/copilot-instructions.md`).
@@ -135,8 +135,8 @@ Worked examples (today is 2026-11-08, so `C = 2026-11`, `P = 2026-10`):
 
 ### 3.4 Flow
 
-1. `Home` reads `accounts` and `balances` from `useData()`, `now` from `useNow()`, and the flag. It computes `checkIn = useMemo(() => getCheckInState(accounts, balances, now), [accounts, balances, todayKey])`, where `todayKey` is `YYYY-MM-DD`, so the work reruns only when data or the day changes.
-2. If the flag is on, `dataLoaded` is true, `kind !== 'hidden'`, and the strip is not snoozed, Home renders `CheckInCard` after `SetupProgress` and before `.home-grid`, inside `ErrorBoundary variant="card"`.
+1. `Home` reads `accounts` and `balances` from `useData()`, `now` from `useNow()`. It computes `checkIn = useMemo(() => getCheckInState(accounts, balances, now), [accounts, balances, todayKey])`, where `todayKey` is `YYYY-MM-DD`, so the work reruns only when data or the day changes.
+2. If `dataLoaded` is true, `kind !== 'hidden'`, and the strip is not snoozed, Home renders `CheckInCard` after `SetupProgress` and before `.home-grid`, inside `ErrorBoundary variant="card"`.
 3. The CTA calls `navigate('/net-worth/dashboard/details', { state: { checkIn: { month: T } } })`. `Data.tsx` validates the state (shape and month key), keeps it in a local `startCheckInMonth`, and immediately calls `navigate(location.pathname, { replace: true, state: null })` so reload and Back do not reopen the form.
 4. `BalanceDetails` receives `startCheckInMonth` and, if it is not already editing, enters `editMode` for that month:
    - Month not in `allMonths` (the `due` case): every active account is prefilled from `latestMonth` (copy-forward, same rule as `handleStartEditMode`), and each prefilled field is tracked in a UI-only `copied` set.
@@ -171,9 +171,11 @@ Worked examples (today is 2026-11-08, so `C = 2026-11`, `P = 2026-10`):
 - Router state is untrusted: validated by `isMonthKey` and by "month is `<= C` and not already complete"; anything else is ignored.
 - Two tabs: `DataContext` already refreshes on `data-changed`; the strip recomputes. No new cross-tab logic.
 
-### 3.7 Rollout and back-compat
+### 3.7 Rollout and back-compat (history)
 
-- New flag `FLAGS.MONTHLY_CHECK_IN = defineFlag('monthly-check-in', { type: 'boolean', default: false, description: 'Home check-in strip, partial-month indicators, and Details check-in mode', temporary: true })`; `feature-flags.json` gets `"monthly-check-in": { "percentage": 0 }`. Turn it on locally with `flag-overrides`, then raise the percentage. One flag gates every surface (strip, badge, chart omission, Details check-in). With it off, behavior is byte-for-byte today's.
+The feature shipped behind a temporary flag, which was removed on 2026-11-22; the bullets below record the original plan.
+
+- New flag `FLAGS.MONTHLY_CHECK_IN = defineFlag('monthly-check-in', { type: 'boolean', default: false, description: 'Home check-in strip, partial-month indicators, and Details check-in mode', temporary: true })`; `feature-flags.json` gets `"monthly-check-in": { "percentage": 0 }`, raised to 100% on 2026-11-22. The flag was removed on 2026-11-22. One flag gated every surface (strip, badge, chart omission, Details check-in).
 - Unit tests that render without `FlagProvider` get `default: false`, so existing Home and Details tests stay valid.
 - Data folder: no new files and no format change. The only new persisted value is `localStorage['checkin-snooze']`:
 
@@ -196,9 +198,9 @@ Worked examples (today is 2026-11-08, so `C = 2026-11`, `P = 2026-10`):
 ### 4.2 Acceptance criteria
 
 Strip
-- AC-1: With the flag on, 9 active accounts, and 7 of 9 balances in the latest month (October, today in November), Home shows "2 accounts missing for October" and lists both account names.
+- AC-1: With 9 active accounts, and 7 of 9 balances in the latest month (October, today in November), Home shows "2 accounts missing for October" and lists both account names.
 - AC-2: One missing account reads "1 account missing for October"; the pluralization rule is in section 6.
-- AC-3: The strip is hidden when there are no accounts, no valid balances, no active accounts, or the flag is off.
+- AC-3: The strip is hidden when there are no accounts, no valid balances, or no active accounts.
 - AC-4: `due`: latest complete month is before last month. The strip reads "{Month} balances are ready to record" with the CTA "Start {Month} check-in", where the month is the one after the latest recorded month.
 - AC-5: `up-to-date`: the strip reads "{Month} is complete" with the count of active accounts and a "Review balances" link. No snooze button.
 - AC-6: The staleness boundary is exact: last day of latest month plus 35 days is not stale, plus 36 days is stale. A stale strip uses the warning tone and the "Last balances are from..." line.
@@ -255,7 +257,6 @@ Accessibility
 | Due | Neutral, or warning when stale | Normal (latest month is complete) |
 | Snoozed | Hidden | Badge still shows when partial |
 | Error in strip | `ErrorBoundary` card variant; the rest of Home is unaffected | n/a |
-| Flag off | Hidden | Today's behavior |
 
 ### 4.5 Keyboard and screen reader behavior
 
@@ -273,7 +274,6 @@ Accessibility
 - Liability balances use the app's existing sign convention; this feature never edits or re-signs values.
 - Account names that are empty fall back to "Unnamed account" in the list.
 - More than 6 missing: the list shows the first 6 (sheet order) and "and {n} more".
-- Flag turned off mid-session: the strip and badges disappear on the next render; no data is affected.
 
 ## 5. Design spec
 
@@ -555,10 +555,9 @@ interface BalanceDetailsProps { /* existing */ startCheckInMonth?: MonthKey | nu
 
 - `CheckInStrip.tsx` owns the clock, snooze, and navigation so that `useNow` re-renders never reach the rest of Home; `CheckInCard` stays presentational. `PartialMonthCaption.tsx` is a small shared component for the chart caption.
 - In Details check-in mode the first balance field in DOM order is focused, and accounts are listed by balance, so it is not always the first account in the sheet.
-- Save, Cancel, and Escape in Details unmount the focused button. With the flag on, focus then moves to **+ Add Entry** (found by the Playwright suite; the spec did not say where focus should go). With the flag off nothing changes.
+- Save, Cancel, and Escape in Details unmount the focused button. Focus then moves to **+ Add Entry** (found by the Playwright suite; the spec did not say where focus should go).
 - The E2E-7 network assertion allows the Inter stylesheet and font files from `fonts.googleapis.com` and `fonts.gstatic.com`, which `index.html` loads in every build.
 - E2E-5 covers the snooze in three tests: hide and reload, expiry after seven days, and a snooze for an earlier month not hiding a new one.
-- Screenshots are not regenerated while the flag is at 0.
 
 ## 9. Open questions and decisions
 
@@ -573,6 +572,6 @@ interface BalanceDetailsProps { /* existing */ startCheckInMonth?: MonthKey | nu
 | 7 | Should goal, allocation, and leverage math use the latest complete month when the latest is partial? | Worth doing, but separately: it changes projected FI dates and has its own test surface. Track as a follow-up | No |
 | 8 | Add a one-line "partial" note to the Home Allocation card? | Not in v1; the card shows a mix, not a total | No |
 | 9 | Show future-dated months differently on the Net Worth card, whose default month is the maximum month? | Leave as is. The strip notes them; the card marks a partial future month with the badge | No |
-| 10 | Rollout path | Flag at 0, own browser override for a week of daily use, then 100, then delete the flag (it is `temporary`) | No |
+| 10 | Rollout path | Flag at 0, own browser override for a week of daily use, then 100, then delete the flag (it is `temporary`). Decided: rolled out at 100% on 2026-11-22, then the flag was removed | No |
 | 11 | Remove the spreadsheet "Copy from last month" duplicate once Details check-in exists? | No. Leave both; consolidating entry UIs is out of scope | No |
 | 12 | Add a `DataContext` loaded flag to avoid the post-load layout shift? | Optional later; Home's `dataLoaded` is enough for v1 | No |

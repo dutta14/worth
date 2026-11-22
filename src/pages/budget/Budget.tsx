@@ -2,7 +2,6 @@ import { FC, useState, lazy, Suspense, useEffect, useRef, useCallback } from 're
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useBudget } from './hooks/useBudget'
 import { currentMonthKey, useBudgetTargets } from './hooks/useBudgetTargets'
-import { useCSVUpload } from './hooks/useCSVUpload'
 import { useImportWizard } from './import/hooks/useImportWizard'
 import { BudgetViewMode, TimePeriod } from './types'
 import BudgetHeader from './components/BudgetHeader'
@@ -12,14 +11,11 @@ import BudgetSummary from './components/BudgetSummary'
 import BudgetTable from './components/BudgetTable'
 import BudgetAggregatedView from './components/BudgetAggregatedView'
 import CategoryGroupManager from './components/CategoryGroupManager'
-import CSVPreviewModal from './components/CSVPreviewModal'
 import CashflowBarChart from './components/CashflowBarChart'
 import CashflowSankey from './components/CashflowSankey'
 import { getCSVFormatHelp } from './utils/csvParser'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { getStorageItem } from '../../utils/storage'
-import { useFlag } from '../../flags/useFlag'
-import { FLAGS } from '../../flags/flagDefinitions'
 import '../../styles/Budget.css'
 
 const PdfToCsv = lazy(() => import('../tools/components/PdfToCsv'))
@@ -36,7 +32,6 @@ const Budget: FC = () => {
     setSelectedYear,
     spreadsheetMode,
     setSpreadsheetMode,
-    uploadCSV,
     removeCSV,
     updateCategoryGroups,
     updateIncomeCategoryGroups,
@@ -56,21 +51,8 @@ const Budget: FC = () => {
     loaded: groupsLoaded,
   } = useBudget()
 
-  const targetsOn = useFlag(FLAGS.CATEGORY_BUDGET_TARGETS)
-  const budgetTargets = useBudgetTargets({ enabled: targetsOn, groups: categoryGroups, groupsLoaded })
+  const budgetTargets = useBudgetTargets({ groups: categoryGroups, groupsLoaded })
 
-  const {
-    csvPreview,
-    toastMsg,
-    quickUploadRef,
-    bulkUploadRef,
-    handleQuickUpload,
-    handleBulkUpload,
-    handlePreviewConfirm,
-    handlePreviewCancel,
-  } = useCSVUpload(uploadCSV)
-
-  const importWizardOn = useFlag(FLAGS.IMPORT_WIZARD)
   const [showFormatHelp, setShowFormatHelp] = useState(false)
   const [showUploadMenu, setShowUploadMenu] = useState(false)
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('month')
@@ -171,42 +153,10 @@ const Budget: FC = () => {
               isOpen={txnFormOpen}
               onToggle={setTxnFormOpen}
             />
-            {!importWizardOn && (
-              <>
-                <input
-                  ref={quickUploadRef}
-                  type="file"
-                  accept=".csv"
-                  data-testid="quick-upload-input"
-                  style={{ display: 'none' }}
-                  onChange={handleQuickUpload}
-                />
-                <input
-                  ref={bulkUploadRef}
-                  type="file"
-                  accept=".csv"
-                  multiple
-                  data-testid="bulk-upload-input"
-                  style={{ display: 'none' }}
-                  onChange={handleBulkUpload}
-                />
-              </>
-            )}
           </div>
         )}
 
-        {importWizardOn && wizard.element}
-
-        {!importWizardOn && csvPreview && (
-          <CSVPreviewModal
-            csv={csvPreview.csv}
-            monthKey={csvPreview.monthKey}
-            onConfirm={handlePreviewConfirm}
-            onCancel={handlePreviewCancel}
-          />
-        )}
-
-        {toastMsg && <div className="budget-sync-msg">{toastMsg}</div>}
+        {wizard.element}
 
         {Object.keys(yearTransactions).length === 0 && monthsWithData.size === 0 ? (
           <div className="budget-empty-year">
@@ -229,10 +179,7 @@ const Budget: FC = () => {
             </p>
             <div className="budget-empty-year-actions">
               {selectedYear <= currentYear && (
-                <button
-                  className="budget-action-btn budget-action-btn--accent"
-                  onClick={() => (importWizardOn ? wizard.open() : quickUploadRef.current?.click())}
-                >
+                <button className="budget-action-btn budget-action-btn--accent" onClick={() => wizard.open()}>
                   Import CSV
                 </button>
               )}
@@ -333,22 +280,20 @@ const Budget: FC = () => {
                                 role="menuitem"
                                 onClick={() => {
                                   setShowUploadMenu(false)
-                                  if (importWizardOn) wizard.open()
-                                  else quickUploadRef.current?.click()
+                                  wizard.open()
                                 }}
                               >
-                                {importWizardOn ? 'Import CSV…' : 'Upload CSV'}
+                                Import CSV…
                               </button>
                               <button
                                 className="budget-upload-menu-item"
                                 role="menuitem"
                                 onClick={() => {
                                   setShowUploadMenu(false)
-                                  if (importWizardOn) wizard.open({ multiple: true })
-                                  else bulkUploadRef.current?.click()
+                                  wizard.open({ multiple: true })
                                 }}
                               >
-                                {importWizardOn ? 'Import several CSVs…' : 'Bulk Upload'}
+                                Import several CSVs…
                               </button>
                               {pdfToCsvEnabled && (
                                 <button
@@ -391,9 +336,8 @@ const Budget: FC = () => {
                     categoryGroups={aggTab === 'income' ? incomeCategoryGroups : categoryGroups}
                     categorySums={categorySums}
                     monthsWithData={monthsWithData}
-                    onUploadCSV={uploadCSV}
                     onRemoveCSV={removeCSV}
-                    onImportCSV={importWizardOn ? () => wizard.open() : undefined}
+                    onImportCSV={() => wizard.open()}
                     timePeriod={timePeriod}
                   />
                 ) : (
@@ -474,14 +418,10 @@ const Budget: FC = () => {
                   }
                 >
                   <PdfToCsv
-                    onUseInWizard={
-                      importWizardOn
-                        ? csvText => {
-                            closePdfModal()
-                            wizard.open({ text: csvText })
-                          }
-                        : undefined
-                    }
+                    onUseInWizard={csvText => {
+                      closePdfModal()
+                      wizard.open({ text: csvText })
+                    }}
                   />
                 </Suspense>
               </div>

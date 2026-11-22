@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures/base'
 import { BudgetPage } from './pages/budget.page'
 import { ImportWizardPage } from './pages/import-wizard.page'
-import { CURRENT_YEAR, csvFile, seedEmptyBudget } from './fixtures/budget.fixtures'
+import { CURRENT_YEAR, csvFile } from './fixtures/budget.fixtures'
 import { readCsvFile, readJsonFile } from './fixtures/filestore-helpers'
 import {
   AMBIGUOUS_CSV,
@@ -33,7 +33,7 @@ const MARCH = monthPath('03')
 const APRIL = monthPath('04')
 const HEADER = ['Date', 'Category', 'Amount', 'Description']
 
-test.describe('Import wizard (flag on)', () => {
+test.describe('Import wizard', () => {
   test.beforeEach(async ({ page }) => {
     await seedWizardEmpty(page)
   })
@@ -110,17 +110,6 @@ test.describe('Import wizard (flag on)', () => {
     await dialog.getByRole('button', { name: 'Undo import' }).click()
     await expect(dialog.getByRole('heading', { name: 'Import undone' })).toBeVisible()
     expect(await readCsvFile(page, MARCH)).toEqual([])
-  })
-})
-
-test.describe('Import wizard (flag off)', () => {
-  test('keeps the legacy upload menu and preview modal', async ({ page }) => {
-    await seedEmptyBudget(page)
-    const budget = new BudgetPage(page)
-    await budget.goto()
-    await expect(page.getByTestId('import-wizard-input')).toHaveCount(0)
-    await budget.emptyImportBtn.click()
-    await expect(page.getByRole('dialog', { name: 'Import transactions' })).toHaveCount(0)
   })
 })
 
@@ -765,7 +754,6 @@ test.describe('Import wizard: entry points (AC-41, AC-42)', () => {
     await page.getByRole('button', { name: 'Import into Mar…' }).click()
     await (await chooser).setFiles(csvFile('bank.csv', BANK_CSV))
     await expect(wizard.heading('Columns')).toBeFocused()
-    await expect(page.getByTestId('csv-file-input')).toHaveCount(0)
   })
 
   test('E5: Drive shows the wizard hint and sends dropped CSVs through the wizard', async ({ page }) => {

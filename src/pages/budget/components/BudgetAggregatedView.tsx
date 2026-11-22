@@ -27,7 +27,7 @@ interface BudgetAggregatedViewProps {
   categorySums: Record<string, Record<string, number>>
   timePeriod: TimePeriod
   incomeCategoryGroups?: CategoryGroup[]
-  /** Present only when the targets flag is on and the Expenses tab is shown; absent renders the original table. */
+  /** Present only when the Expenses tab is shown and the targets file has finished loading; absent renders the plain table. */
   targetsConfig?: BudgetTargetsConfig
 }
 

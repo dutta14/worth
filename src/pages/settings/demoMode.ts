@@ -241,7 +241,6 @@ function demoBalances(): BalanceEntry[] {
   return balances
 }
 
-// Ignored unless the category-budget-targets flag is on.
 function demoBudgetTargets(): BudgetTargetsFile {
   const target = (label: string, monthly: number) => ({ label, history: [{ from: null, monthly }] })
   return {

@@ -35,9 +35,8 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>Check the allocation bar to see where your money is actually sitting today.</li>
         <li>Drag and reorder the cards until the page matches the way you think.</li>
         <li>
-          Experimental, off by default: turn on the Monthly check-in feature flag to see a strip above the cards when
-          the latest month is missing balances or your data is getting old. One click opens the balance form for that
-          month, and you can snooze the reminder for 7 days.
+          A check-in strip above the cards tells you when the latest month is missing balances or your data is getting
+          old. One click opens the balance form for that month, and you can snooze the reminder for 7 days.
         </li>
       </ul>
       <p>
@@ -78,9 +77,9 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
       <ul className="guide-bullet-list">
         <li>In Accounts, add accounts and enter monthly balances over time.</li>
         <li>
-          Experimental, off by default: with the Monthly check-in feature flag on, Details opens a guided entry for the
-          month. Amounts are copied from the last month, every account you have not touched is marked, and a month with
-          missing balances is labelled Partial month and left off the trend charts until it is complete.
+          Details opens a guided entry for the month. Amounts are copied from the last month, every account you have not
+          touched is marked, and a month with missing balances is labelled Partial month and left off the trend charts
+          until it is complete.
         </li>
         <li>Switch between chart view and spreadsheet view depending on whether you want trend or detail.</li>
         <li>Hover chart points to see deltas and how a month changed relative to the prior one.</li>
@@ -88,9 +87,9 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>In Allocation, create custom ratio tabs for your ideal asset mix.</li>
         <li>In Growth, log yearly income, expenses, and savings to keep the balance history grounded in behavior.</li>
         <li>
-          Experimental, off by default: turn on the Annual review feature flag to get a Review tab. Pick a year to see
-          net worth, income, expenses, savings rate, top spending groups, and goal progress on one page, then print it,
-          save it as a PDF, or download it as a CSV. Anything missing from your files is listed under Things to know.
+          The Review tab shows one year at a glance. Pick a year to see net worth, income, expenses, savings rate, top
+          spending groups, and goal progress on one page, then print it, save it as a PDF, or download it as a CSV.
+          Anything missing from your files is listed under Things to know.
         </li>
       </ul>
       <p>
@@ -114,21 +113,20 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>Use Overview to read income against expenses over time.</li>
         <li>Change the period between monthly, quarterly, and half-yearly views.</li>
         <li>
-          Experimental, off by default: turn on the Category budget targets feature flag to set a monthly target per
-          expense group in the Aggregated view of Spreadsheet and see how each period compares.
+          Set a monthly target per expense group in the Aggregated view of Spreadsheet and see how each period compares.
         </li>
         <li>Use the built-in PDF → CSV converter when the bank only gives you a statement PDF.</li>
         <li>
-          Experimental, off by default: turn on the Import wizard feature flag to import a bank CSV with any column
-          names. Importing a bank CSV takes three steps. Choose which column is the date, description and amount, and
-          whether spending is negative. Check the review, which lists new rows, duplicates it will skip and rows it
-          could not read. Then import. Rows go into the month their date belongs to, whatever the file is called, and
-          Undo import puts the old files back. Worth remembers the mapping for the next file from the same bank.
+          Import a bank CSV with any column names. Importing a bank CSV takes three steps. Choose which column is the
+          date, description and amount, and whether spending is negative. Check the review, which lists new rows,
+          duplicates it will skip and rows it could not read. Then import. Rows go into the month their date belongs to,
+          whatever the file is called, and Undo import puts the old files back. Worth remembers the mapping for the next
+          file from the same bank.
         </li>
         <li>
-          Experimental, off by default: with the Import wizard flag on, Rules sort transactions for you. A rule says
-          that a description containing, say, Starbucks belongs in Dining. The first matching rule wins, rules run on
-          every import, and you can reorder, turn off or delete them from Rules on the Transactions tab.
+          Rules sort transactions for you. A rule says that a description containing, say, Starbucks belongs in Dining.
+          The first matching rule wins, rules run on every import, and you can reorder, turn off or delete them from
+          Rules on the Transactions tab.
         </li>
       </ul>
       <p>
@@ -152,9 +150,8 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>Categorize or recategorize items before they pollute your longer-term summaries.</li>
         <li>Use it as the place for cleanup work, not just for reading totals.</li>
         <li>
-          Experimental, off by default: with the Import wizard flag on, this tab also has Import, Rules and Apply rules
-          to uncategorized. Open a row&apos;s category menu and choose Always categorize merchants like this to create a
-          rule from it.
+          This tab also has Import, Rules and Apply rules to uncategorized. Open a row&apos;s category menu and choose
+          Always categorize merchants like this to create a rule from it.
         </li>
       </ul>
       <p>
@@ -215,10 +212,9 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
       <ul className="guide-bullet-list">
         <li>See and change your connected data folder in Data Folder.</li>
         <li>Toggle dark mode and accent preferences in Appearance.</li>
-        <li>Explore experimental features in Labs and Feature Flags when you are curious.</li>
+        <li>Explore Labs when you are curious.</li>
         <li>
-          Experimental, off by default: turn on the Data safety net feature flag to see the safety copies kept in{' '}
-          <code>_backups</code> under Data Folder and restore one after you confirm.
+          Data Folder lists the safety copies kept in <code>_backups</code> and restores one after you confirm.
         </li>
       </ul>
       <p>

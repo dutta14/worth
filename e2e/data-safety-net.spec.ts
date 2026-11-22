@@ -14,10 +14,7 @@ import type { FakeFsaControls } from './fixtures/fake-fsa'
 const PERSISTENT = 1000
 const FLAGS_URL = 'https://api.github.com/repos/dutta14/worth/contents/feature-flags.json'
 
-async function openApp(
-  page: Page,
-  { flagOn = true, seed = {} }: { flagOn?: boolean; seed?: Record<string, string> } = {},
-) {
+async function openApp(page: Page, { seed = {} }: { seed?: Record<string, string> } = {}) {
   await page.route(FLAGS_URL, route =>
     route.fulfill({
       status: 200,
@@ -28,9 +25,6 @@ async function openApp(
       }),
     }),
   )
-  await page.addInitScript(enabled => {
-    if (enabled) localStorage.setItem('flag-overrides', JSON.stringify({ 'data-safety-net': true }))
-  }, flagOn)
   await installFakeFsa(page, seed)
   await page.goto('/worth/#/net-worth/dashboard')
   await page.getByRole('button', { name: 'Choose Folder' }).click()
@@ -39,12 +33,6 @@ async function openApp(
 
 const disk = (page: Page, path: string) =>
   page.evaluate(p => (window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa?.files.get(p) ?? null, path)
-
-const fakeFsa = (page: Page) =>
-  page.evaluate(() => {
-    const { failCloseTimes } = (window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa!
-    return { failCloseTimes }
-  })
 
 const setFsa = (page: Page, patch: Partial<FakeFsaControls>) =>
   page.evaluate(values => Object.assign((window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa!, values), patch)
@@ -115,20 +103,6 @@ test.describe('Data safety net: save failures', () => {
     await expect(alert).toBeHidden()
     await expect(page.locator('#main-content')).toBeFocused()
     expect(await disk(page, 'accounts.json')).toContain('Rainy Day Fund')
-  })
-
-  test('shows nothing when the flag is off', async ({ page }) => {
-    await openApp(page, { flagOn: false })
-    await setFsa(page, { failCloseTimes: PERSISTENT, failClosePath: 'accounts.json' })
-
-    await addAccount(page, 'Rainy Day Fund')
-
-    // The injected failure being consumed proves a save was attempted and rejected.
-    await expect.poll(async () => (await fakeFsa(page)).failCloseTimes).toBeLessThan(PERSISTENT)
-    expect(await disk(page, 'accounts.json')).not.toContain('Rainy Day Fund')
-    await expect(page.getByRole('region', { name: 'Data safety' })).toHaveCount(0)
-    await expect(page.getByRole('alert')).toHaveCount(0)
-    await expect(page.getByRole('status').filter({ hasText: 'All changes saved.' })).toHaveCount(0)
   })
 })
 
@@ -302,17 +276,6 @@ test.describe('Data safety net: backups', () => {
       dialog.getByText("The last backup copy couldn't be saved. Your changes were saved normally."),
     ).toBeVisible()
   })
-
-  test('has no Backups section and writes no _backups folder when the flag is off', async ({ page }) => {
-    await openApp(page, { flagOn: false, seed: { 'accounts.json': '[]' } })
-    await addAccount(page, 'Rainy Day Fund')
-    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
-
-    const dialog = await openDataFolderSettings(page)
-    await expect(dialog.getByRole('heading', { name: 'Data Folder' })).toBeVisible()
-    await expect(dialog.getByRole('heading', { name: 'Backups' })).toHaveCount(0)
-    expect(await backupPaths(page, '_backups')).toHaveLength(0)
-  })
 })
 
 test.describe('Data safety net: corrupt files', () => {
@@ -453,21 +416,6 @@ test.describe('Data safety net: corrupt files', () => {
 
     await addAccount(page, 'Rainy Day Fund')
     await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
-  })
-
-  test('behaves as before when the flag is off: no banner, no copy, the next save replaces the file', async ({
-    page,
-  }) => {
-    await openApp(page, { flagOn: false, seed: { 'accounts.json': CORRUPT } })
-
-    await expect(page.getByText('No accounts yet')).toBeVisible()
-    await expect(page.getByRole('alert')).toHaveCount(0)
-    expect(await keys(page, 'accounts.json.corrupt-')).toEqual([])
-
-    await addAccount(page, 'Rainy Day Fund')
-    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
-    expect(await keys(page, 'accounts.json.corrupt-')).toEqual([])
-    expect(await keys(page, '_backups/')).toEqual([])
   })
 })
 
@@ -663,17 +611,5 @@ test.describe('Data safety net: external changes', () => {
 
     await expect(page.getByRole('button', { name: 'Reload' })).toHaveCount(0)
     await expect(page.locator('#main-content')).toBeFocused()
-  })
-
-  test('does nothing when the flag is off: no banner, and the next save replaces the file', async ({ page }) => {
-    await openApp(page, { flagOn: false, seed: { 'accounts.json': '[]' } })
-    await changeOnDisk(page, 'accounts.json', OTHER_COMPUTER)
-    await focusWindow(page)
-    await page.waitForTimeout(600)
-    await expect(page.getByRole('region', { name: 'Data safety' })).toHaveCount(0)
-
-    await addAccount(page, 'Rainy Day Fund')
-    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
-    expect(await keys(page, '_backups/')).toEqual([])
   })
 })

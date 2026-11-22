@@ -6,8 +6,8 @@ import type { TextItem } from '../utils/pdfCsvUtils'
 import '../../../styles/PdfToCsv.css'
 
 interface PdfToCsvProps {
-  /** When given, a button hands the extracted CSV text to the import wizard without a download. */
-  onUseInWizard?: (csvText: string) => void
+  /** Hands the extracted CSV text to the import wizard without a download. */
+  onUseInWizard: (csvText: string) => void
 }
 
 const PdfToCsv: FC<PdfToCsvProps> = ({ onUseInWizard }) => {
@@ -400,11 +400,9 @@ const PdfToCsv: FC<PdfToCsvProps> = ({ onUseInWizard }) => {
               <button className="pdf2csv-btn pdf2csv-btn--primary" onClick={handleDownload}>
                 Download .csv
               </button>
-              {onUseInWizard && (
-                <button className="pdf2csv-btn" onClick={() => onUseInWizard(currentCsv)}>
-                  Review in import wizard
-                </button>
-              )}
+              <button className="pdf2csv-btn" onClick={() => onUseInWizard(currentCsv)}>
+                Review in import wizard
+              </button>
             </div>
           </div>
           <div className="pdf2csv-table-wrap">

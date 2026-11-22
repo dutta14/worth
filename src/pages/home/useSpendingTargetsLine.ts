@@ -9,20 +9,12 @@ import type { SpendingTargetsLine } from './spendingTargetsLine'
 
 /**
  * Loads budget/targets.json once (Home has no subscription either) and derives the line for the newest
- * month with data. With `enabled` false nothing is read. An unreadable file or any failure yields no line.
+ * month with data. An unreadable file or any failure yields no line.
  */
-export function useSpendingTargetsLine(
-  fileStore: FileStore,
-  enabled: boolean,
-  store: BudgetStore | null,
-): SpendingTargetsLine | null {
+export function useSpendingTargetsLine(fileStore: FileStore, store: BudgetStore | null): SpendingTargetsLine | null {
   const [targets, setTargets] = useState<BudgetTargetsFile | null>(null)
 
   useEffect(() => {
-    if (!enabled) {
-      setTargets(null)
-      return
-    }
     let active = true
     loadBudgetTargets(fileStore)
       .then(result => {
@@ -34,10 +26,10 @@ export function useSpendingTargetsLine(
     return () => {
       active = false
     }
-  }, [enabled, fileStore])
+  }, [fileStore])
 
   return useMemo(() => {
-    if (!enabled || !targets || !store) return null
+    if (!targets || !store) return null
     const [anchorMonth] = Object.keys(store.csvs ?? {}).sort((a, b) => b.localeCompare(a))
     if (!anchorMonth) return null
     const year = anchorMonth.slice(0, 4)
@@ -53,5 +45,5 @@ export function useSpendingTargetsLine(
       transactionsByMonth,
       nowMonth: currentMonthKey(),
     })
-  }, [enabled, targets, store])
+  }, [targets, store])
 }

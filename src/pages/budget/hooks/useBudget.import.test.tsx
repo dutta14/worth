@@ -4,22 +4,20 @@ import { FC, ReactNode } from 'react'
 import { FileStoreTestProvider } from '../../../test/fileStoreTestUtils'
 import { planFromTexts } from '../../../test/importHelpers'
 import { MemoryFileStore } from '../../../utils/memoryFileStore'
-import { FlagContext } from '../../../flags/FlagContext'
-import { makeFlagContextValue } from '../../../test/flagTestUtils'
 import { parseCSV } from '../../../utils/csvUtils'
 import { useBudget } from './useBudget'
 
 const TEXT = 'Date,Category,Amount,Description\n2026-10-01,Salary,3200.00,Payroll\n2026-10-02,Dining,-6.75,Starbucks'
 
-describe('useBudget commitImport and undoImport', () => {
-  const setup = () => {
-    const fileStore = new MemoryFileStore()
-    const wrapper: FC<{ children: ReactNode }> = ({ children }) => (
-      <FileStoreTestProvider store={fileStore}>{children}</FileStoreTestProvider>
-    )
-    return { fileStore, ...renderHook(() => useBudget(), { wrapper }) }
-  }
+const setup = () => {
+  const fileStore = new MemoryFileStore()
+  const wrapper: FC<{ children: ReactNode }> = ({ children }) => (
+    <FileStoreTestProvider store={fileStore}>{children}</FileStoreTestProvider>
+  )
+  return { fileStore, ...renderHook(() => useBudget(), { wrapper }) }
+}
 
+describe('useBudget commitImport and undoImport', () => {
   it('writes through the file store, updates the store, and can undo', async () => {
     const { fileStore, result } = setup()
     await waitFor(() => expect(result.current.store.categoryGroups?.length).toBeGreaterThan(0))
@@ -56,19 +54,9 @@ describe('useBudget commitImport and undoImport', () => {
   })
 })
 
-describe('useBudget commitImport when the budget files cannot be read (import wizard on)', () => {
-  const setupFlagged = () => {
-    const fileStore = new MemoryFileStore()
-    const wrapper: FC<{ children: ReactNode }> = ({ children }) => (
-      <FlagContext.Provider value={makeFlagContextValue({ 'import-wizard': true })}>
-        <FileStoreTestProvider store={fileStore}>{children}</FileStoreTestProvider>
-      </FlagContext.Provider>
-    )
-    return { fileStore, ...renderHook(() => useBudget(), { wrapper }) }
-  }
-
+describe('useBudget commitImport when the budget files cannot be read', () => {
   it('reports importBlocked, refuses to commit and writes nothing', async () => {
-    const { fileStore, result } = setupFlagged()
+    const { fileStore, result } = setup()
     await waitFor(() => expect(result.current.loaded).toBe(true))
     await fileStore.writeCSV('transactions/2026/2026-10.csv', parseCSV(TEXT))
     const listFiles = fileStore.listFiles.bind(fileStore)
@@ -98,9 +86,7 @@ describe('useBudget commitImport when the budget files cannot be read (import wi
     }
     const writeCSV = vi.spyOn(fileStore, 'writeCSV')
     const wrapper: FC<{ children: ReactNode }> = ({ children }) => (
-      <FlagContext.Provider value={makeFlagContextValue({ 'import-wizard': true })}>
-        <FileStoreTestProvider store={fileStore}>{children}</FileStoreTestProvider>
-      </FlagContext.Provider>
+      <FileStoreTestProvider store={fileStore}>{children}</FileStoreTestProvider>
     )
     const { result } = renderHook(() => useBudget(), { wrapper })
     await waitFor(() => expect(result.current.importBlocked).toBe(true))

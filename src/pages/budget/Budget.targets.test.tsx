@@ -6,8 +6,6 @@ import Budget from './Budget'
 import type { BudgetViewMode, CategoryGroup, SpreadsheetMode } from './types'
 import { FileStoreContext } from '../../contexts/FileStoreContext'
 import type { FileStoreContextValue } from '../../contexts/FileStoreContext'
-import { FlagContext } from '../../flags/FlagContext'
-import type { FlagContextValue } from '../../flags/FlagContext'
 import { MemoryFileStore } from '../../utils/memoryFileStore'
 import { TARGETS_PATH } from './utils/budgetTargetsStorage'
 
@@ -24,7 +22,11 @@ const mockUseBudget = {
   setViewMode: vi.fn(),
   spreadsheetMode: 'aggregated' as SpreadsheetMode,
   setSpreadsheetMode: vi.fn(),
-  uploadCSV: vi.fn(),
+  store: { csvs: {}, configs: {}, years: [], categoryGroups: [] },
+  commitImport: vi.fn(),
+  undoImport: vi.fn(),
+  importBlocked: false,
+  reload: vi.fn(),
   removeCSV: vi.fn(),
   createYear: vi.fn(),
   updateCategoryGroups: vi.fn(),
@@ -49,19 +51,6 @@ const mockUseBudget = {
 
 vi.mock('./hooks/useBudget', () => ({ useBudget: () => mockUseBudget }))
 
-vi.mock('./hooks/useCSVUpload', () => ({
-  useCSVUpload: () => ({
-    csvPreview: null,
-    toastMsg: null,
-    quickUploadRef: { current: null },
-    bulkUploadRef: { current: null },
-    handleQuickUpload: vi.fn(),
-    handleBulkUpload: vi.fn(),
-    handlePreviewConfirm: vi.fn(),
-    handlePreviewCancel: vi.fn(),
-  }),
-}))
-
 vi.mock('../tools/components/PdfToCsv', () => ({ default: () => <div /> }))
 vi.mock('./components/BudgetSummary', () => ({ default: () => <div /> }))
 vi.mock('./components/BudgetTable', () => ({ default: () => <div data-testid="budget-table" /> }))
@@ -71,15 +60,13 @@ vi.mock('./components/CashflowSankey', () => ({ default: () => <div /> }))
 
 let store: MemoryFileStore
 
-const renderBudget = (flagOn: boolean) =>
+const renderBudget = () =>
   render(
-    <FlagContext.Provider value={{ resolveFlag: () => flagOn } as unknown as FlagContextValue}>
-      <FileStoreContext.Provider value={{ fileStore: store, isReady: true } as unknown as FileStoreContextValue}>
-        <MemoryRouter initialEntries={['/budget/spreadsheet']}>
-          <Budget />
-        </MemoryRouter>
-      </FileStoreContext.Provider>
-    </FlagContext.Provider>,
+    <FileStoreContext.Provider value={{ fileStore: store, isReady: true } as unknown as FileStoreContextValue}>
+      <MemoryRouter initialEntries={['/budget/spreadsheet']}>
+        <Budget />
+      </MemoryRouter>
+    </FileStoreContext.Provider>,
   )
 
 const headers = () => screen.getAllByRole('columnheader').map(h => h.textContent)
@@ -97,36 +84,9 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('Budget with the category-budget-targets flag off', () => {
-  it('renders the original aggregated table with no target columns, elements or live region', () => {
-    const { container } = renderBudget(false)
-
-    expect(headers()).toEqual(['Group', ...'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' '), 'Total'])
-    expect(container.innerHTML).not.toContain('budget-target')
-    expect(screen.queryByRole('button', { name: /monthly target/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
-  })
-
-  it('never reads, subscribes to or writes budget/targets.json', async () => {
-    await store.writeJSON(TARGETS_PATH, { version: 1, groups: {} })
-    const exists = vi.spyOn(store, 'exists')
-    const readJSON = vi.spyOn(store, 'readJSON')
-    const subscribe = vi.spyOn(store, 'subscribe')
-    const writeJSON = vi.spyOn(store, 'writeJSON')
-
-    renderBudget(false)
-    await Promise.resolve()
-
-    expect(exists).not.toHaveBeenCalled()
-    expect(readJSON).not.toHaveBeenCalled()
-    expect(subscribe).not.toHaveBeenCalled()
-    expect(writeJSON).not.toHaveBeenCalled()
-  })
-})
-
-describe('Budget with the category-budget-targets flag on', () => {
+describe('Budget category budget targets', () => {
   it('adds the columns once targets have loaded', async () => {
-    renderBudget(true)
+    renderBudget()
 
     expect(await screen.findByRole('columnheader', { name: 'Vs target' })).toBeInTheDocument()
     expect(headers().slice(-3)).toEqual(['Total', 'Monthly target', 'Vs target'])
@@ -137,7 +97,7 @@ describe('Budget with the category-budget-targets flag on', () => {
       version: 1,
       groups: { dining: { label: 'Dining', history: [{ from: null, monthly: 500 }] } },
     })
-    renderBudget(true)
+    renderBudget()
 
     const row = await screen.findByRole('row', { name: /^Dining/ })
     expect(await within(row).findByRole('button', { name: 'Dining monthly target $500, edit' })).toBeInTheDocument()
@@ -146,7 +106,7 @@ describe('Budget with the category-budget-targets flag on', () => {
 
   it('sets a target from the keyboard, announces it and persists it', async () => {
     const user = userEvent.setup()
-    renderBudget(true)
+    renderBudget()
 
     await user.click(await screen.findByRole('button', { name: 'Set monthly target for Dining' }))
     await user.keyboard('500{Enter}')
@@ -166,7 +126,7 @@ describe('Budget with the category-budget-targets flag on', () => {
 
   it('reverts and shows the save error when the write fails', async () => {
     const user = userEvent.setup()
-    renderBudget(true)
+    renderBudget()
     await user.click(await screen.findByRole('button', { name: 'Set monthly target for Dining' }))
     vi.spyOn(store, 'writeJSON').mockRejectedValue(new Error('disk gone'))
     await user.keyboard('500{Enter}')
@@ -181,7 +141,7 @@ describe('Budget with the category-budget-targets flag on', () => {
   it('shows the alert and disables editing when the file is unreadable, leaving the file untouched', async () => {
     await store.writeJSON(TARGETS_PATH, { version: 2, groups: {} })
     const writeJSON = vi.spyOn(store, 'writeJSON')
-    renderBudget(true)
+    renderBudget()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Your targets file couldn')
     expect(screen.getByRole('button', { name: 'Set monthly target for Dining' })).toHaveAttribute(
@@ -193,7 +153,7 @@ describe('Budget with the category-budget-targets flag on', () => {
 
   it('leaves the Income tab without target columns', async () => {
     const user = userEvent.setup()
-    renderBudget(true)
+    renderBudget()
     await screen.findByRole('columnheader', { name: 'Vs target' })
 
     await user.click(screen.getByRole('button', { name: 'Income' }))
@@ -204,7 +164,7 @@ describe('Budget with the category-budget-targets flag on', () => {
 
   it('leaves the Detailed view alone', async () => {
     mockUseBudget.spreadsheetMode = 'detailed'
-    renderBudget(true)
+    renderBudget()
 
     expect(await screen.findByTestId('budget-table')).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Vs target' })).not.toBeInTheDocument()

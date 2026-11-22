@@ -134,22 +134,14 @@ interface SeedOptions {
   balances?: Balance[]
   extra?: SeedEntry[]
   includeTransactions?: boolean
-  flag?: boolean
   darkMode?: boolean
   withGoal?: boolean
 }
 
-/** Seeds the file store once per tab (edits survive a reload), pins the clock and turns the flag on. */
+/** Seeds the file store once per tab (edits survive a reload), and pins the clock. */
 export async function seedAnnualReview(
   page: Page,
-  {
-    balances = BALANCES,
-    extra = [],
-    includeTransactions = true,
-    flag = true,
-    darkMode = false,
-    withGoal = true,
-  }: SeedOptions = {},
+  { balances = BALANCES, extra = [], includeTransactions = true, darkMode = false, withGoal = true }: SeedOptions = {},
 ) {
   const entries: SeedEntry[] = [
     { path: 'accounts.json', type: 'json', data: ACCOUNTS },
@@ -160,7 +152,7 @@ export async function seedAnnualReview(
   ]
   await seedFileStore(page, entries, { onceKey: 'review-e2e-seeded' })
   await page.addInitScript(
-    ({ flag, darkMode }) => {
+    ({ darkMode }) => {
       if (sessionStorage.getItem('review-e2e-init') !== '1') {
         localStorage.clear()
         sessionStorage.setItem('review-e2e-init', '1')
@@ -168,9 +160,8 @@ export async function seedAnnualReview(
       localStorage.setItem('_e2eMode', '1')
       localStorage.setItem('encryption-enabled', '0')
       localStorage.setItem('darkMode', darkMode ? '1' : '0')
-      if (flag) localStorage.setItem('flag-overrides', JSON.stringify({ 'annual-review': true }))
     },
-    { flag, darkMode },
+    { darkMode },
   )
   await page.clock.setFixedTime(NOW)
 }
@@ -182,7 +173,6 @@ export async function seedEmptyReview(page: Page) {
     localStorage.clear()
     localStorage.setItem('_e2eMode', '1')
     localStorage.setItem('encryption-enabled', '0')
-    localStorage.setItem('flag-overrides', JSON.stringify({ 'annual-review': true }))
   })
   await page.clock.setFixedTime(NOW)
 }
