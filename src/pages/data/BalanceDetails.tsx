@@ -2,6 +2,10 @@ import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MonthPicker from '../../components/MonthPicker'
 import FilterPanel, { FilterCategory, FilterState } from '../../components/FilterPanel'
 import { Profile } from '../../hooks/useProfile'
+import { FLAGS } from '../../flags/flagDefinitions'
+import { useFlag } from '../../flags/useFlag'
+import { plural } from '../../utils/plural'
+import { getMonthStatus, isMonthKey, type MonthKey } from './monthStatus'
 import {
   Account,
   AccountOwner,
@@ -22,6 +26,9 @@ interface BalanceDetailsProps {
   balanceMap: Map<string, number>
   profile: Profile
   onSaveMonth?: (month: string, values: Record<string, number>) => void
+  /** Month to open in edit mode, requested by the Home check-in strip. Ignored with the check-in flag off. */
+  startCheckInMonth?: MonthKey | null
+  onCheckInStarted?: () => void
 }
 
 type AccountSection = 'asset' | 'liability'
@@ -35,7 +42,13 @@ type EditMode = {
   month: string
   values: Record<string, string>
   copyFrom: boolean
+  /** Month the prefilled values came from, or null when nothing was copied. */
+  copiedFrom: string | null
+  /** Account ids whose value is still the copied one. UI state only, never saved. */
+  copied: Record<string, true>
 }
+
+type LastRecorded = { month: string; balance: number }
 
 type AddMonthForm = {
   month: string
@@ -222,6 +235,26 @@ const formatLongMonth = (month: string) => {
   return `${LONG_MONTH_NAMES[monthIndex]} ${yearPart}`
 }
 
+const DEFAULT_COLUMN_FILTERS: FilterState = {
+  owner: [],
+  goal: [],
+  type: [],
+  nature: [],
+  allocation: [],
+  status: ['active'],
+}
+
+const accountsLabel = (n: number) => `${n} ${plural(n, 'account', 'accounts')}`
+
+const buildSaveAnnouncement = (month: string, expectedCount: number, missingCount: number) => {
+  const saved = `Saved ${formatLongMonth(month)}.`
+  if (missingCount > 0)
+    return `${saved} ${accountsLabel(missingCount)} still ${missingCount === 1 ? 'has' : 'have'} no balance.`
+  return expectedCount === 1
+    ? `${saved} Your account has a balance.`
+    : `${saved} All ${expectedCount} accounts have a balance.`
+}
+
 const parseBalanceInput = (value: string) => {
   const normalized = value.replace(/[\s,$]/g, '')
 
@@ -233,12 +266,15 @@ const parseBalanceInput = (value: string) => {
 
 const BalanceDetails: FC<BalanceDetailsProps> = ({
   accounts,
-  balances: _balances,
+  balances,
   allMonths,
   balanceMap,
   profile,
   onSaveMonth,
+  startCheckInMonth,
+  onCheckInStarted,
 }) => {
+  const checkInEnabled = useFlag(FLAGS.MONTHLY_CHECK_IN)
   const ownerLabels = useMemo(() => getOwnerLabels(profile), [profile])
   const [selectedMonth, setSelectedMonth] = useState(allMonths[0] ?? '')
   const [isAddMonthOpen, setIsAddMonthOpen] = useState(false)
@@ -248,15 +284,9 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
     error: '',
   })
   const [editMode, setEditMode] = useState<EditMode | null>(null)
+  const [saveStatus, setSaveStatus] = useState('')
   const detailsRef = useRef<HTMLDivElement>(null)
-  const [columnFilters, setColumnFilters] = useState<FilterState>({
-    owner: [],
-    goal: [],
-    type: [],
-    nature: [],
-    allocation: [],
-    status: ['active'],
-  })
+  const [columnFilters, setColumnFilters] = useState<FilterState>(DEFAULT_COLUMN_FILTERS)
 
   const filterCategories = useMemo(
     (): FilterCategory[] => [
@@ -563,16 +593,60 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
     }
 
     const values: Record<string, string> = {}
+    const copied: Record<string, true> = {}
 
     activeAccounts.forEach(account => {
       const previousValue =
         addMonthForm.copyFrom && latestMonth ? balanceMap.get(`${account.id}:${latestMonth}`) : undefined
       values[String(account.id)] = previousValue !== undefined ? String(previousValue) : ''
+      if (previousValue !== undefined) copied[String(account.id)] = true
     })
 
-    setEditMode({ month, values, copyFrom: addMonthForm.copyFrom })
+    setSaveStatus('')
+    setEditMode({
+      month,
+      values,
+      copyFrom: addMonthForm.copyFrom,
+      copiedFrom: addMonthForm.copyFrom && latestMonth ? latestMonth : null,
+      copied,
+    })
     setIsAddMonthOpen(false)
   }
+
+  const startCheckIn = useCallback(
+    (month: MonthKey) => {
+      const isExistingMonth = allMonths.includes(month)
+      const sourceMonth = isExistingMonth ? month : latestMonth
+      const values: Record<string, string> = {}
+      const copied: Record<string, true> = {}
+
+      activeAccounts.forEach(account => {
+        const value = sourceMonth ? balanceMap.get(`${account.id}:${sourceMonth}`) : undefined
+        values[String(account.id)] = value !== undefined ? String(value) : ''
+        if (!isExistingMonth && value !== undefined) copied[String(account.id)] = true
+      })
+
+      // Hidden accounts would stay blank without the user seeing them, so check-in shows every active account.
+      setColumnFilters(DEFAULT_COLUMN_FILTERS)
+      setIsAddMonthOpen(false)
+      setSaveStatus('')
+      if (isExistingMonth) setSelectedMonth(month)
+      setEditMode({
+        month,
+        values,
+        copyFrom: !isExistingMonth,
+        copiedFrom: !isExistingMonth && latestMonth ? latestMonth : null,
+        copied,
+      })
+    },
+    [activeAccounts, allMonths, balanceMap, latestMonth],
+  )
+
+  useEffect(() => {
+    if (!checkInEnabled || !startCheckInMonth) return
+    if (!editMode) startCheckIn(startCheckInMonth)
+    onCheckInStarted?.()
+  }, [checkInEnabled, editMode, onCheckInStarted, startCheckIn, startCheckInMonth])
 
   const handleSaveEditMode = () => {
     if (!editMode) return
@@ -589,6 +663,16 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
     }, {})
 
     onSaveMonth?.(editMode.month, nextValues)
+    if (checkInEnabled) {
+      const savedEntries = Object.entries(nextValues).map(([accountId, balance]) => ({
+        id: -1,
+        accountId: Number(accountId),
+        month: editMode.month,
+        balance,
+      }))
+      const status = getMonthStatus(accounts, [...balances, ...savedEntries], editMode.month, editMode.month)
+      setSaveStatus(buildSaveAnnouncement(editMode.month, status.expected.length, status.missing.length))
+    }
     setSelectedMonth(editMode.month)
     setEditMode(null)
   }
@@ -597,10 +681,77 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
     ? Object.values(editMode.values).some(value => value.trim() && parseBalanceInput(value) !== undefined)
     : false
 
+  const blankCount = editMode
+    ? activeAccounts.filter(account => parseBalanceInput(editMode.values[String(account.id)] ?? '') === undefined)
+        .length
+    : 0
+
+  const editMonth = editMode?.month
+  const lastRecordedByAccount = useMemo(() => {
+    const latest = new Map<number, LastRecorded>()
+    if (!checkInEnabled || !editMonth) return latest
+    for (const entry of balances) {
+      if (!isMonthKey(entry.month) || entry.month >= editMonth) continue
+      const known = latest.get(entry.accountId)
+      if (!known || entry.month > known.month)
+        latest.set(entry.accountId, { month: entry.month, balance: entry.balance })
+    }
+    return latest
+  }, [balances, checkInEnabled, editMonth])
+
+  const renderBalanceInput = (account: Account, mode: EditMode, entry: { noteId?: string; blank?: boolean } = {}) => {
+    const accountKey = String(account.id)
+
+    return (
+      <input
+        className={`account-card__value-input${entry.blank ? ' account-card__value-input--blank' : ''}`}
+        type="text"
+        inputMode="decimal"
+        aria-label={`${account.name} balance`}
+        aria-describedby={entry.noteId}
+        value={mode.values[accountKey] ?? ''}
+        onChange={event =>
+          setEditMode(current => {
+            if (!current) return current
+            const copied = { ...current.copied }
+            delete copied[accountKey]
+            return { ...current, values: { ...current.values, [accountKey]: event.target.value }, copied }
+          })
+        }
+      />
+    )
+  }
+
+  const renderCheckInEntry = (account: Account, mode: EditMode) => {
+    const accountKey = String(account.id)
+    const isBlank = parseBalanceInput(mode.values[accountKey] ?? '') === undefined
+    const isCopied = !isBlank && mode.copied[accountKey] === true && mode.copiedFrom !== null
+    const lastRecorded = lastRecordedByAccount.get(account.id)
+    const noteId = `balance-${isBlank ? 'blank' : 'copied'}-${accountKey}`
+
+    return (
+      <div className="account-card__entry">
+        {renderBalanceInput(account, mode, { noteId: isBlank || isCopied ? noteId : undefined, blank: isBlank })}
+        {isBlank ? (
+          <span id={noteId} className="account-card__note account-card__note--blank">
+            <span>No balance yet</span>.{' '}
+            {lastRecorded
+              ? `Last recorded ${formatCurrency(lastRecorded.balance)} in ${formatLongMonth(lastRecorded.month)}.`
+              : 'No earlier balance.'}
+          </span>
+        ) : null}
+        {isCopied && mode.copiedFrom ? (
+          <span id={noteId} className="account-card__note">
+            Copied from {formatLongMonth(mode.copiedFrom)}
+          </span>
+        ) : null}
+      </div>
+    )
+  }
+
   const renderAccountCard = (account: Account, key?: string) => {
     const isEditing = !!editMode
     const isEditableAccount = !!editMode && account.status === 'active'
-    const accountKey = String(account.id)
 
     return (
       <article
@@ -612,26 +763,11 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
           {renderChangeLine(getDisplayBalance(account), getBalanceForMonth(account, previousBalanceLookup))}
         </div>
         {isEditableAccount ? (
-          <input
-            className="account-card__value-input"
-            type="text"
-            inputMode="decimal"
-            aria-label={`${account.name} balance`}
-            value={editMode.values[accountKey] ?? ''}
-            onChange={event =>
-              setEditMode(current =>
-                current
-                  ? {
-                      ...current,
-                      values: {
-                        ...current.values,
-                        [accountKey]: event.target.value,
-                      },
-                    }
-                  : current,
-              )
-            }
-          />
+          checkInEnabled ? (
+            renderCheckInEntry(account, editMode)
+          ) : (
+            renderBalanceInput(account, editMode)
+          )
         ) : (
           <span className="account-card__value">{formatSelectedValue(getDisplayBalance(account))}</span>
         )}
@@ -695,6 +831,22 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
     )
   }
 
+  const footerButtons = (
+    <>
+      <button
+        type="button"
+        className="data-details-entry-footer-save"
+        onClick={handleSaveEditMode}
+        disabled={!hasSavableValues}
+      >
+        Save
+      </button>
+      <button type="button" className="data-details-entry-footer-cancel" onClick={() => setEditMode(null)}>
+        Cancel
+      </button>
+    </>
+  )
+
   return (
     <div ref={detailsRef} className="data-details">
       <div
@@ -707,7 +859,22 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
         </div>
         {editMode ? (
           <div className="data-details-entry-banner" aria-live="polite">
-            Entering balances for {formatLongMonth(editMode.month)}
+            {checkInEnabled ? (
+              <>
+                <span>
+                  {allMonths.includes(editMode.month)
+                    ? `Adding the missing balances for ${formatLongMonth(editMode.month)}`
+                    : `Entering balances for ${formatLongMonth(editMode.month)}`}
+                </span>
+                {editMode.copiedFrom ? (
+                  <span className="data-details-entry-banner__detail">
+                    Amounts are copied from {formatLongMonth(editMode.copiedFrom)}. Update each one, then save.
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              `Entering balances for ${formatLongMonth(editMode.month)}`
+            )}
           </div>
         ) : (
           <div className="data-details-summary-controls">
@@ -776,6 +943,12 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
           </div>
         )}
       </div>
+
+      {checkInEnabled ? (
+        <p role="status" className="data-details-save-status">
+          {saveStatus}
+        </p>
+      ) : null}
 
       <div className="data-details-owner-grid">
         <section className="data-details-owner-card" aria-label={`${ownerLabels.primary} details`}>
@@ -853,17 +1026,18 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
 
       {editMode ? (
         <div className="data-details-entry-footer">
-          <button
-            type="button"
-            className="data-details-entry-footer-save"
-            onClick={handleSaveEditMode}
-            disabled={!hasSavableValues}
-          >
-            Save
-          </button>
-          <button type="button" className="data-details-entry-footer-cancel" onClick={() => setEditMode(null)}>
-            Cancel
-          </button>
+          {checkInEnabled ? (
+            <>
+              <p className="data-details-entry-footer-summary">
+                {blankCount > 0
+                  ? `${accountsLabel(blankCount)} still blank. Blank accounts are not saved.`
+                  : 'Every account has a balance.'}
+              </p>
+              <div className="data-details-entry-footer-actions">{footerButtons}</div>
+            </>
+          ) : (
+            footerButtons
+          )}
         </div>
       ) : null}
     </div>

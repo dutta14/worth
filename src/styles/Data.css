@@ -2632,3 +2632,72 @@ body.dark .data-inline-cancel {
     grid-template-columns: 1fr;
   }
 }
+
+/* Monthly check-in: Details entry mode (behind the monthly-check-in flag) */
+.data-details-entry-banner__detail {
+  display: block;
+  margin-top: 2px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.data-details-save-status {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.data-details-save-status:not(:empty) {
+  margin-bottom: 12px;
+}
+
+.account-card__entry {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.account-card__note {
+  max-width: 220px;
+  font-size: var(--fs-xs, 0.75rem);
+  text-align: right;
+  color: var(--color-text-muted);
+}
+
+.account-card__note--blank {
+  color: var(--color-warning-text);
+}
+
+.account-card__value-input--blank {
+  border-color: var(--color-warning);
+}
+
+.data-details-entry-footer-summary {
+  flex: 1;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.data-details-entry-footer-actions {
+  display: flex;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .data-details-entry-footer {
+    flex-wrap: wrap;
+  }
+
+  .data-details-entry-footer-actions {
+    width: 100%;
+  }
+
+  .data-details-entry-footer-save,
+  .data-details-entry-footer-cancel {
+    min-height: 44px;
+  }
+}

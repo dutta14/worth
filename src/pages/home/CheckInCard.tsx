@@ -1,6 +1,6 @@
 import { FC, ReactNode, useState } from 'react'
 import { plural } from '../../utils/plural'
-import { currentMonthKey, type CheckInState, type MonthKey } from '../data/monthStatus'
+import { monthLabel, type CheckInState, type MonthKey } from '../data/monthStatus'
 import '../../styles/CheckInCard.css'
 
 interface CheckInCardProps {
@@ -18,13 +18,6 @@ const ACCOUNTS_PATH = '/net-worth/dashboard/manage'
 
 const accountsLabel = (n: number): string => `${n} ${plural(n, 'account', 'accounts')}`
 const daysLabel = (n: number): string => `${n} ${plural(n, 'day', 'days')}`
-
-/** Long month name, with the year added when it is not the current year. */
-const monthLabel = (month: MonthKey, today: Date): string => {
-  const [year, m] = month.split('-').map(Number)
-  const name = new Date(year, m - 1, 1).toLocaleDateString('en-US', { month: 'long' })
-  return month.slice(0, 4) === currentMonthKey(today).slice(0, 4) ? name : `${name} ${year}`
-}
 
 interface IconProps {
   kind: CheckInState['kind']
