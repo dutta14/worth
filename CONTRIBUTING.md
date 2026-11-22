@@ -73,6 +73,8 @@ src/
 │   ├── budget/              # CSV-based budget tracking; monthly targets live in
 │   │                        # utils/budgetTargets*.ts, hooks/useBudgetTargets.ts,
 │   │                        # components/BudgetTarget{Cell,Status}.tsx (flag-gated)
+│   ├── review/              # Annual Review tab under Wealth (flag-gated `annual-review`);
+│   │                        # pure selectors in utils/, hooks/useAnnualReview.ts, components/Review*.tsx
 │   ├── allocation/          # Asset allocation & rebalancing
 │   ├── taxes/               # Tax document management
 │   ├── drive/               # Hierarchical file browser
@@ -142,7 +144,7 @@ The chosen folder handle is persisted in IndexedDB via `src/utils/handlePersiste
 | `allocation.json` | Custom allocation ratios |
 | `fi-simulations.json` | Saved FI calculator simulations |
 | `leverage.json` | Leverage tool data |
-| `savings-tracker-overrides.json` | Savings/growth tracker manual overrides |
+| `savings-tracker-overrides.json` | Savings/growth tracker manual overrides (also read, never written, by the Annual Review) |
 | `paydown-loans.json` | Loan paydown tool data |
 
 **UI preferences in `localStorage` (not financial data):**
@@ -202,7 +204,8 @@ The flag system in `src/flags/` controls runtime feature rollout:
 3. **Usage** — `const enabled = useFlag(FLAGS.MODERN_DESIGN)` in any component.
 4. **Adding a flag** — Define in `flagDefinitions.ts`, add rollout config to `feature-flags.json`.
 5. **Local override** — Set `flag-overrides` in localStorage (JSON object of `{ "flag-name": true/false }`) for development/testing.
-6. **ModernDesignToggle** — A special component that adds/removes `body.modern-design` class based on the `modern-design` flag.
+6. **Experimental flags** — `annual-review` (Review tab under Wealth, route `/net-worth/review/:year?`), `category-budget-targets`, `data-safety-net` and `import-wizard` default to off at 0% rollout. Enable one locally with `localStorage.setItem('flag-overrides', JSON.stringify({ 'annual-review': true }))`; e2e specs do the same in an init script (see `e2e/fixtures/annual-review.fixtures.ts`). With the flag off the tab, route, and search entry do not exist.
+7. **ModernDesignToggle** — A special component that adds/removes `body.modern-design` class based on the `modern-design` flag.
 
 ## Modern Design
 
