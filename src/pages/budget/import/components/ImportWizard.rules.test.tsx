@@ -113,7 +113,7 @@ describe('Import wizard rules', () => {
     await user.type(within(dialog).getByLabelText('Description contains'), 'shell oil')
     await user.selectOptions(within(dialog).getByLabelText('Category'), 'Gas')
     await user.click(within(dialog).getByRole('button', { name: 'Add rule' }))
-    await within(dialog).findByText('Rule saved.', { selector: '[role="status"]' })
+    await within(dialog).findByText(/^Rule saved: /, { selector: '[role="status"]' })
 
     const saved = await loadRules(store)
     expect(saved.state === 'ready' && saved.file.rules).toEqual([containsRule('r_01', 'shell oil', 'Gas')])

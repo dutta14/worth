@@ -8,8 +8,6 @@ export const RULES_EMPTY = 'No rules yet. Add one to sort a merchant automatical
 export const RULE_VALUE_LABEL = 'Description contains'
 export const RULE_CATEGORY_LABEL = 'Category'
 export const RULE_CATEGORY_PLACEHOLDER = 'Choose a category'
-export const RULE_SAVED = 'Rule saved.'
-export const RULE_DELETED = 'Rule deleted.'
 export const RULE_UNSUPPORTED = 'This rule needs a newer version of Worth. It is kept as it is and not applied.'
 export const RULE_CATEGORY_MISSING = 'This category no longer exists, so the rule is skipped.'
 
@@ -44,6 +42,10 @@ export const rulesSaveFailure = (reason: Extract<RulesSaveResult, { ok: false }>
   reason === 'unreadable'
     ? 'Your rules file could not be read, so nothing was saved. The file has not been changed.'
     : 'Your rules could not be saved. Check that the worth folder is still available, then try again.'
+
+export const ruleSaved = (value: string): string => `Rule saved: ${value}.`
+
+export const ruleDeleted = (value: string): string => `Rule deleted: ${value}.`
 
 export const ruleMoved = (value: string, position: number, total: number): string =>
   `Moved rule ${value} to position ${position} of ${total}.`

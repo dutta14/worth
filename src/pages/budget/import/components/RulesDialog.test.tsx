@@ -91,10 +91,52 @@ describe('RulesDialog', () => {
     expect(save).toHaveBeenCalledWith([expect.objectContaining({ category: 'Dining', enabled: true })])
     expect(save.mock.calls[0][0][0].match.value).toBe('Star bucks')
     await screen.findByText('Star bucks')
-    expect(screen.getByRole('status')).toHaveTextContent('Rule saved.')
+    expect(screen.getByRole('status')).toHaveTextContent('Rule saved: Star bucks.')
     expect(screen.getByLabelText('Description contains')).toHaveValue('')
     expect(screen.getByLabelText('Category')).toHaveValue('')
     await waitFor(() => expect(screen.getByLabelText('Description contains')).toHaveFocus())
+  })
+
+  it('changes the live-region text on every add and delete so repeated actions are announced', async () => {
+    const { user } = setup()
+    const status = () => screen.getByRole('status').textContent
+    const seen: (string | null)[] = []
+
+    await addRule(user, 'STARBUCKS', 'Dining')
+    await waitFor(() => expect(status()).toBe('Rule saved: STARBUCKS.'))
+    seen.push(status())
+    await addRule(user, 'SHELL', 'Gas')
+    await waitFor(() => expect(status()).toBe('Rule saved: SHELL.'))
+    seen.push(status())
+    await user.click(screen.getByRole('button', { name: 'Delete rule: SHELL' }))
+    await waitFor(() => expect(status()).toBe('Rule deleted: SHELL.'))
+    seen.push(status())
+    await user.click(screen.getByRole('button', { name: 'Delete rule: STARBUCKS' }))
+    await waitFor(() => expect(status()).toBe('Rule deleted: STARBUCKS.'))
+    seen.push(status())
+
+    expect(new Set(seen).size).toBe(seen.length)
+  })
+
+  it('changes the live-region DOM text even when two deletes produce identical announcements', async () => {
+    const future = (id: string): CategoryRule => ({
+      id,
+      match: { field: 'amount', type: 'between', value: [1, 2] },
+      category: 'Gas',
+      enabled: true,
+    })
+    const { user } = setup({ initial: [future('r_08'), future('r_09')] })
+    const status = () => screen.getByRole('status').textContent
+
+    await user.click(screen.getAllByRole('button', { name: 'Delete rule: amount between' })[0])
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1))
+    const first = status()
+    await user.click(screen.getByRole('button', { name: 'Delete rule: amount between' }))
+    await screen.findByText('No rules yet. Add one to sort a merchant automatically.')
+
+    expect(first?.trim()).toBe('Rule deleted: amount between.')
+    expect(status()).not.toBe(first)
+    expect(status()?.trim()).toBe(first?.trim())
   })
 
   it.each([
@@ -129,15 +171,15 @@ describe('RulesDialog', () => {
 
   it('refuses a new rule at the 500 rule limit', async () => {
     const full = Array.from({ length: MAX_RULES }, (_, i) => containsRule(`r_${i}`, `merchant ${i}`, 'Gas'))
-    const { user } = setup({ initial: full })
+    setup({ initial: full })
     // Label queries scan every aria-label in a 500-row list and take tens of seconds, so role queries are used here.
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'one more' } })
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Dining' } })
-    await user.click(screen.getByRole('button', { name: 'Add rule' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }))
     expect(
       screen.getByText('Error: You have reached the limit of 500 rules. Delete one to add another.'),
     ).toBeInTheDocument()
-  })
+  }, 30_000)
 
   it('shows rules in order with accessible names that include the value', () => {
     setup({ initial: three })
@@ -182,7 +224,7 @@ describe('RulesDialog', () => {
     const { user } = setup({ initial: three })
     await user.click(screen.getByRole('button', { name: 'Delete rule: SHELL' }))
     await waitFor(() => expect(values()).toEqual(['STARBUCKS', 'KROGER']))
-    expect(screen.getByRole('status')).toHaveTextContent('Rule deleted.')
+    expect(screen.getByRole('status')).toHaveTextContent('Rule deleted: SHELL.')
     expect(screen.getByRole('button', { name: 'Delete rule: KROGER' })).toHaveFocus()
 
     await user.click(screen.getByRole('button', { name: 'Delete rule: KROGER' }))

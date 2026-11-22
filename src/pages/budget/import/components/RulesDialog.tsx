@@ -6,15 +6,15 @@ import {
   RULE_CATEGORY_LABEL,
   RULE_CATEGORY_MISSING,
   RULE_CATEGORY_PLACEHOLDER,
-  RULE_DELETED,
-  RULE_SAVED,
   RULE_UNSUPPORTED,
   RULE_VALUE_LABEL,
   RULES_EMPTY,
   RULES_INTRO,
   RULES_TITLE,
   ruleErrorMessage,
+  ruleDeleted,
   ruleMoved,
+  ruleSaved,
   rulesSaveFailure,
   ruleToggled,
   rulesWarning,
@@ -193,7 +193,8 @@ const RulesDialog: FC<RulesDialogProps> = ({ rules, categoryGroups, onChange, on
         return false
       }
       setSaveError(null)
-      setStatus(announcement)
+      // A region that receives identical text twice in a row is not re-announced.
+      setStatus(prev => (prev === announcement ? `${announcement}\u00a0` : announcement))
       return true
     },
     [onChange],
@@ -204,7 +205,8 @@ const RulesDialog: FC<RulesDialogProps> = ({ rules, categoryGroups, onChange, on
     const found = validateRule({ value, category }, list)
     setError(found)
     if (found) return
-    if (await commit(addRule(list, { value, category }), RULE_SAVED, { kind: 'form' })) {
+    const next = addRule(list, { value, category })
+    if (await commit(next, ruleSaved(ruleLabel(next[next.length - 1])), { kind: 'form' })) {
       setValue('')
       setCategory('')
     }
@@ -231,7 +233,8 @@ const RulesDialog: FC<RulesDialogProps> = ({ rules, categoryGroups, onChange, on
   )
 
   const remove = useCallback(
-    (index: number) => void commit(removeRule(list, index), RULE_DELETED, { kind: 'delete', index }),
+    (index: number) =>
+      void commit(removeRule(list, index), ruleDeleted(ruleLabel(list[index])), { kind: 'delete', index }),
     [commit, list],
   )
 
