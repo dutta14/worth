@@ -53,6 +53,7 @@ const setup = ({
     nowMonthKey: NOW,
     readOnly: false,
     message: '',
+    messageId: 0,
     onSetTarget,
     ...config,
   }
@@ -125,6 +126,30 @@ describe('BudgetAggregatedView with targets: columns', () => {
     expect(screen.queryByText(intro)).not.toBeInTheDocument()
   })
 
+  it('re-announces an identical consecutive message by replacing the text node', () => {
+    const { rerender } = setup({
+      year: 2025,
+      categorySums: sums,
+      config: { message: "Couldn't save the target.", messageId: 1 },
+    })
+    const first = within(screen.getByRole('status')).getByText("Couldn't save the target.")
+
+    rerender({
+      targetsConfig: { ...baseConfig(targetsFor(always(500))), message: "Couldn't save the target.", messageId: 2 },
+    })
+    const second = within(screen.getByRole('status')).getByText("Couldn't save the target.")
+
+    expect(second).not.toBe(first)
+    expect(first).not.toBeInTheDocument()
+  })
+
+  it('keeps the same node while the announcement id is unchanged', () => {
+    const { rerender } = setup({ year: 2025, categorySums: sums, config: { message: 'Same.', messageId: 3 } })
+    const first = within(screen.getByRole('status')).getByText('Same.')
+    rerender({ targetsConfig: { ...baseConfig(targetsFor(always(500))), message: 'Same.', messageId: 3 } })
+    expect(within(screen.getByRole('status')).getByText('Same.')).toBe(first)
+  })
+
   it('exposes the live message in a polite status region', () => {
     setup({ year: 2025, categorySums: sums, config: { message: 'Dining target set to $500 a month.' } })
     const status = screen.getByRole('status')
@@ -139,6 +164,7 @@ const baseConfig = (targets: BudgetTargetsFile): BudgetTargetsConfig => ({
   nowMonthKey: NOW,
   readOnly: false,
   message: '',
+  messageId: 0,
   onSetTarget: vi.fn(async () => ({ ok: true })),
 })
 
@@ -226,10 +252,34 @@ describe('BudgetAggregatedView with targets: worked examples (spec 4.7)', () => 
     expect(within(vsCell()).getByText('$20 over')).toBeInTheDocument()
   })
 
-  it('8: shows "$540 under" with "1 of 12 months" when a net refund makes spend negative', () => {
+  it('8: nets a refund month against spend, so a net credit reads under the target by more than the target', () => {
+    // Budget semantics: Restaurants is an expense category (it has a negative month), so March's +$140 refund nets against February's $100.
+    setup({
+      year: 2025,
+      categorySums: { Restaurants: { '2025-02': -100, '2025-03': 140 } },
+      targets: targetsFor(always(500)),
+    })
+    expect(within(vsCell()).getByText('$1,040 under')).toBeInTheDocument()
+    expect(within(vsCell()).getByText('2 of 12 months')).toBeInTheDocument()
+  })
+
+  it('8: a category that is a net credit all year is not an expense category, so it adds no spend or credit', () => {
     setup({ year: 2025, categorySums: { Restaurants: { '2025-03': 40 } }, targets: targetsFor(always(500)) })
-    expect(within(vsCell()).getByText('$540 under')).toBeInTheDocument()
+    expect(within(vsCell()).getByText('$500 under')).toBeInTheDocument()
     expect(within(vsCell()).getByText('1 of 12 months')).toBeInTheDocument()
+  })
+
+  it('compares the verdict with the amounts the row shows, ignoring a category that is positive all year', () => {
+    setup({
+      year: 2025,
+      groups: [{ id: 'others', name: 'Others', categories: ['Misc', 'Reimbursement'] }],
+      categorySums: { Misc: { '2025-03': -300 }, Reimbursement: { '2025-03': 1200 } },
+      targets: { version: 1, groups: { others: { label: 'Others', history: [always(500)] } } },
+    })
+    const row = screen.getByRole('row', { name: /^Others/ })
+    const cells = cellsOf(row)
+    expect(within(cells[3]).getByText('$300')).toBeInTheDocument()
+    expect(within(cells.at(-1)!).getByText('$200 under')).toBeInTheDocument()
   })
 
   it('9: shows "$300 over" with "4 of 12 months" for a partial year', () => {

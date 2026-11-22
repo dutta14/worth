@@ -15,6 +15,8 @@ export interface BudgetTargetsConfig {
   readOnly: boolean
   /** Live-region text for the latest change or failure. */
   message: string
+  /** Changes on every announcement; keys the message so identical consecutive texts are re-announced. */
+  messageId: number
   onSetTarget: (groupId: string, label: string, value: number | null) => Promise<{ ok: boolean }>
 }
 
@@ -78,14 +80,12 @@ const BudgetAggregatedView: FC<BudgetAggregatedViewProps> = ({
 
   const hasTarget = (id: string): boolean => targetsOn && Object.hasOwn(targetsConfig.targets.groups, id)
 
-  // `allCategories` keeps the unfiltered membership: a target compares the group's net spend, refunds included.
-  const relevantGroups: { id: string; name: string; categories: string[]; allCategories: string[] }[] = (
+  const relevantGroups: { id: string; name: string; categories: string[] }[] = (
     type === 'income' ? incomeCategoryGroups || [] : categoryGroups
   )
     .map(g => ({
       ...g,
       categories: g.categories.filter(c => isTypeCategory(c)),
-      allCategories: g.categories,
     }))
     .filter(g => g.categories.length > 0 || hasTarget(g.id))
 
@@ -123,13 +123,13 @@ const BudgetAggregatedView: FC<BudgetAggregatedViewProps> = ({
     return `${((Math.abs(getGroupYearTotal(group)) / gt) * 100).toFixed(1)}%`
   }
 
-  const evaluateGroup = (group: { id: string; allCategories: string[] }, monthKeys: string[]) =>
+  const evaluateGroup = (group: { id: string; categories: string[] }, monthKeys: string[]) =>
     targetsOn
       ? evaluatePeriod({
           record: targetsConfig.targets.groups[group.id],
           monthKeys,
           monthsWithData: targetsConfig.monthsWithData,
-          signedNetFor: m => group.allCategories.reduce((sum, cat) => sum + (categorySums[cat]?.[m] || 0), 0),
+          signedNetFor: m => group.categories.reduce((sum, cat) => sum + (categorySums[cat]?.[m] || 0), 0),
           nowMonth: targetsConfig.nowMonthKey,
         })
       : null
@@ -262,7 +262,7 @@ const BudgetAggregatedView: FC<BudgetAggregatedViewProps> = ({
         <>
           <p className="budget-target-note">{TARGETS_NOTE}</p>
           <div className="sr-only" role="status" aria-live="polite">
-            {targetsConfig.message}
+            <span key={targetsConfig.messageId}>{targetsConfig.message}</span>
           </div>
         </>
       )}

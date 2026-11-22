@@ -9,7 +9,7 @@ import {
   pruneTargets,
   setGroupTarget,
 } from '../utils/budgetTargets'
-import type { BudgetTargetsFile } from '../utils/budgetTargets'
+import type { BudgetTargetsFile, GroupTargetRecord } from '../utils/budgetTargets'
 import { TARGETS_PATH, loadBudgetTargets, saveBudgetTargets } from '../utils/budgetTargetsStorage'
 
 export type BudgetTargetsStatus = 'off' | 'loading' | 'ready' | 'unreadable'
@@ -26,6 +26,8 @@ export interface UseBudgetTargetsResult {
   setTarget: (groupId: string, label: string, value: number | null) => Promise<{ ok: boolean }>
   /** Live-region text for the latest change or failure. */
   message: string
+  /** Changes on every announcement, so an identical consecutive message is still re-announced. */
+  messageId: number
 }
 
 export const SAVE_ERROR_MESSAGE = "Couldn't save the target. Check that your data folder is still available."
@@ -43,11 +45,29 @@ interface LoadedState {
   targets: BudgetTargetsFile
 }
 
+interface Announcement {
+  text: string
+  id: number
+}
+
+const sameRecord = (a: GroupTargetRecord | undefined, b: GroupTargetRecord | undefined): boolean =>
+  JSON.stringify(a?.history) === JSON.stringify(b?.history)
+
+/** Labels of the groups whose target differs between two files. */
+function changedLabels(from: BudgetTargetsFile, to: BudgetTargetsFile): string[] {
+  const ids = new Set([...Object.keys(from.groups), ...Object.keys(to.groups)])
+  return [...ids]
+    .filter(id => !sameRecord(from.groups[id], to.groups[id]))
+    .map(id => from.groups[id]?.label ?? to.groups[id]?.label ?? id)
+}
+
 export function useBudgetTargets({ enabled, groups, groupsLoaded }: UseBudgetTargetsOptions): UseBudgetTargetsResult {
   const { fileStore } = useFileStore()
   const [state, setState] = useState<LoadedState>({ status: 'loading', targets: OFF_TARGETS })
-  const [message, setMessage] = useState('')
+  const [announcement, setAnnouncement] = useState<Announcement>({ text: '', id: 0 })
   const stateRef = useRef(state)
+  // Last state known to be on disk. Optimistic edits can stack, so a failed write rolls back to this, not to the call-time state.
+  const confirmedRef = useRef(state)
   const savingRef = useRef(0)
 
   const validIds = useMemo(() => new Set(groups.filter(isTargetable).map(g => g.id)), [groups])
@@ -65,6 +85,16 @@ export function useBudgetTargets({ enabled, groups, groupsLoaded }: UseBudgetTar
     setState(next)
   }, [])
 
+  const commitConfirmed = useCallback(
+    (next: LoadedState) => {
+      confirmedRef.current = next
+      commit(next)
+    },
+    [commit],
+  )
+
+  const announce = useCallback((text: string) => setAnnouncement(prev => ({ text, id: prev.id + 1 })), [])
+
   useEffect(() => {
     if (!enabled) return
     let cancelled = false
@@ -73,7 +103,7 @@ export function useBudgetTargets({ enabled, groups, groupsLoaded }: UseBudgetTar
       if (savingRef.current > 0) return
       void loadBudgetTargets(fileStore).then(result => {
         if (cancelled || savingRef.current > 0) return
-        commit(
+        commitConfirmed(
           result.state === 'ready'
             ? { status: 'ready', targets: result.targets }
             : { status: 'unreadable', targets: emptyTargetsFile() },
@@ -86,7 +116,7 @@ export function useBudgetTargets({ enabled, groups, groupsLoaded }: UseBudgetTar
       cancelled = true
       unsubscribe()
     }
-  }, [enabled, fileStore, commit])
+  }, [enabled, fileStore, commitConfirmed])
 
   const setTarget = useCallback(
     async (groupId: string, label: string, value: number | null): Promise<{ ok: boolean }> => {
@@ -99,7 +129,7 @@ export function useBudgetTargets({ enabled, groups, groupsLoaded }: UseBudgetTar
       const nowMonth = currentMonthKey()
 
       if (monthlyTargetFor(base.groups[groupId], nowMonth) === value) {
-        if (value !== null) setMessage(`${label} target is already ${formatTargetAmount(value)} a month.`)
+        if (value !== null) announce(`${label} target is already ${formatTargetAmount(value)} a month.`)
         return { ok: true }
       }
 
@@ -109,23 +139,30 @@ export function useBudgetTargets({ enabled, groups, groupsLoaded }: UseBudgetTar
       try {
         const saved = await saveBudgetTargets(fileStore, next.targets)
         if (!saved.ok) {
-          commit({ status: 'unreadable', targets: emptyTargetsFile() })
-          setMessage(SAVE_ERROR_MESSAGE)
+          commitConfirmed({ status: 'unreadable', targets: emptyTargetsFile() })
+          announce(SAVE_ERROR_MESSAGE)
           return { ok: false }
         }
-        setMessage(
+        confirmedRef.current = next
+        announce(
           value === null ? `${label} target cleared.` : `${label} target set to ${formatTargetAmount(value)} a month.`,
         )
         return { ok: true }
       } catch {
-        if (stateRef.current === next) commit(previous)
-        setMessage(SAVE_ERROR_MESSAGE)
+        if (stateRef.current === next) {
+          // The newest optimistic state also holds every earlier unsaved edit, so all of them revert together.
+          const reverted = changedLabels(confirmedRef.current.targets, next.targets)
+          commit(confirmedRef.current)
+          announce(reverted.length > 1 ? `${SAVE_ERROR_MESSAGE} Reverted: ${reverted.join(', ')}.` : SAVE_ERROR_MESSAGE)
+        } else if (savingRef.current <= 1 && stateRef.current !== confirmedRef.current) {
+          announce(SAVE_ERROR_MESSAGE)
+        }
         return { ok: false }
       } finally {
         savingRef.current -= 1
       }
     },
-    [fileStore, commit],
+    [fileStore, commit, commitConfirmed, announce],
   )
 
   const targets = useMemo(
@@ -133,6 +170,6 @@ export function useBudgetTargets({ enabled, groups, groupsLoaded }: UseBudgetTar
     [enabled, groupsLoaded, state.targets, validIds],
   )
 
-  if (!enabled) return { status: 'off', targets: OFF_TARGETS, setTarget, message: '' }
-  return { status: state.status, targets, setTarget, message }
+  if (!enabled) return { status: 'off', targets: OFF_TARGETS, setTarget, message: '', messageId: 0 }
+  return { status: state.status, targets, setTarget, message: announcement.text, messageId: announcement.id }
 }

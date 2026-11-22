@@ -393,6 +393,7 @@ const Budget: FC = () => {
                             nowMonthKey: currentMonthKey(),
                             readOnly: budgetTargets.status === 'unreadable',
                             message: budgetTargets.message,
+                            messageId: budgetTargets.messageId,
                             onSetTarget: budgetTargets.setTarget,
                           }
                         : undefined

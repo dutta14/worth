@@ -355,6 +355,113 @@ describe('useBudgetTargets', () => {
     })
   })
 
+  describe('overlapping edits with a failing coalesced write', () => {
+    const rejectTogether = () => {
+      let fail: () => void = () => {}
+      const shared = new Promise<void>((_resolve, reject) => {
+        fail = () => reject(new Error('disk gone'))
+      })
+      shared.catch(() => {})
+      const write = vi.spyOn(store, 'writeJSON').mockImplementation(() => shared)
+      return { fail, write }
+    }
+
+    it('reverts every unsaved edit, not just the last, and names them', async () => {
+      await store.writeJSON(TARGETS_PATH, SAVED)
+      const { result } = setup()
+      await waitFor(() => expect(result.current.status).toBe('ready'))
+      const { fail, write } = rejectTogether()
+
+      let first: Promise<{ ok: boolean }> | undefined
+      let second: Promise<{ ok: boolean }> | undefined
+      act(() => {
+        first = result.current.setTarget('dining', 'Dining', 600)
+      })
+      act(() => {
+        second = result.current.setTarget('others', 'Others', 200)
+      })
+      await waitFor(() => expect(write).toHaveBeenCalledTimes(2))
+      expect(result.current.targets.groups.dining.history).toHaveLength(2)
+      expect(result.current.targets.groups.others).toBeDefined()
+
+      await act(async () => {
+        fail()
+        await Promise.all([first, second])
+      })
+
+      expect(await first).toEqual({ ok: false })
+      expect(await second).toEqual({ ok: false })
+      expect(result.current.targets.groups.dining.history).toEqual([{ from: null, monthly: 500 }])
+      expect(result.current.targets.groups.others).toBeUndefined()
+      expect(result.current.message).toBe(`${SAVE_ERROR_MESSAGE} Reverted: Dining, Others.`)
+    })
+
+    it('does not name reverted targets when only one edit failed', async () => {
+      await store.writeJSON(TARGETS_PATH, SAVED)
+      const { result } = setup()
+      await waitFor(() => expect(result.current.status).toBe('ready'))
+      vi.spyOn(store, 'writeJSON').mockRejectedValue(new Error('disk gone'))
+
+      await act(async () => {
+        await result.current.setTarget('dining', 'Dining', 600)
+      })
+
+      expect(result.current.message).toBe(SAVE_ERROR_MESSAGE)
+    })
+
+    it('rolls back to the last confirmed save, keeping an earlier edit that was written', async () => {
+      const { result } = setup()
+      await waitFor(() => expect(result.current.status).toBe('ready'))
+      await act(async () => {
+        await result.current.setTarget('dining', 'Dining', 500)
+      })
+      vi.spyOn(store, 'writeJSON').mockRejectedValue(new Error('disk gone'))
+
+      await act(async () => {
+        await result.current.setTarget('others', 'Others', 200)
+      })
+
+      expect(Object.keys(result.current.targets.groups)).toEqual(['dining'])
+    })
+  })
+
+  describe('announcements', () => {
+    it('gives every announcement a new id, even when the text repeats', async () => {
+      await store.writeJSON(TARGETS_PATH, SAVED)
+      const { result } = setup()
+      await waitFor(() => expect(result.current.status).toBe('ready'))
+
+      await act(async () => {
+        await result.current.setTarget('dining', 'Dining', 500)
+      })
+      const firstId = result.current.messageId
+      const text = result.current.message
+      await act(async () => {
+        await result.current.setTarget('dining', 'Dining', 500)
+      })
+
+      expect(result.current.message).toBe(text)
+      expect(result.current.messageId).toBeGreaterThan(firstId)
+    })
+
+    it('announces a repeated save failure again', async () => {
+      const { result } = setup()
+      await waitFor(() => expect(result.current.status).toBe('ready'))
+      vi.spyOn(store, 'writeJSON').mockRejectedValue(new Error('disk gone'))
+
+      await act(async () => {
+        await result.current.setTarget('dining', 'Dining', 500)
+      })
+      const firstId = result.current.messageId
+      await act(async () => {
+        await result.current.setTarget('dining', 'Dining', 500)
+      })
+
+      expect(result.current.message).toBe(SAVE_ERROR_MESSAGE)
+      expect(result.current.messageId).toBeGreaterThan(firstId)
+    })
+  })
+
   describe('pruning', () => {
     const WITH_ORPHAN: BudgetTargetsFile = {
       version: 1,
