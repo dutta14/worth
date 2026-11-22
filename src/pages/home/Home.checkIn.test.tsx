@@ -22,9 +22,6 @@ vi.mock('../../contexts/GoalsContext', () => ({
 let mockData: { accounts: Account[]; balances: BalanceEntry[] } = { accounts: [], balances: [] }
 vi.mock('../../contexts/DataContext', () => ({ useData: () => mockData }))
 
-let mockFlag = true
-vi.mock('../../flags/useFlag', () => ({ useFlag: () => mockFlag }))
-
 vi.mock('../budget/utils/budgetStorage', () => ({
   loadBudgetStore: vi.fn(() => Promise.resolve({ csvs: {} })),
 }))
@@ -78,7 +75,6 @@ const stripHeading = () => screen.findByRole('heading', { level: 2, name: /missi
 beforeEach(() => {
   localStorage.clear()
   mockNavigate.mockClear()
-  mockFlag = true
   netWorthRenders = 0
   netWorthProps = {}
   chartsProps = {}
@@ -91,7 +87,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('Home check-in strip, flag on', () => {
+describe('Home check-in strip', () => {
   it('shows the partial strip with the missing accounts', async () => {
     renderHome()
     await stripHeading()
@@ -287,36 +283,6 @@ describe('Home check-in strip, day rollover and re-renders', () => {
   })
 })
 
-describe('Home check-in strip, flag off', () => {
-  beforeEach(() => {
-    mockFlag = false
-  })
-
-  it('renders no strip and no live status region', async () => {
-    renderHome()
-    await waitFor(() => expect(screen.getByTestId('drag-slot-0')).toBeInTheDocument())
-    expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument()
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    expect(screen.queryByText(/missing for October/)).not.toBeInTheDocument()
-  })
-
-  it('does not re-render Home on window focus or visibility change', async () => {
-    renderHome()
-    await waitFor(() => expect(screen.getByTestId('drag-slot-0')).toBeInTheDocument())
-    const before = netWorthRenders
-    act(() => {
-      window.dispatchEvent(new Event('focus'))
-      document.dispatchEvent(new Event('visibilitychange'))
-    })
-    expect(netWorthRenders).toBe(before)
-  })
-
-  it('leaves the page heading as a normal, non-focusable heading', () => {
-    renderHome()
-    expect(screen.getByRole('heading', { level: 1 })).not.toHaveAttribute('tabindex')
-  })
-})
-
 describe('Home partial month', () => {
   it('passes the partial month to the Net Worth card and omits it from the charts', async () => {
     renderHome()
@@ -353,14 +319,5 @@ describe('Home partial month', () => {
     await waitFor(() => expect(screen.getByText('Net Worth Card')).toBeInTheDocument())
 
     expect(netWorthProps.partial).toBeNull()
-  })
-
-  it('passes nothing with the flag off, even when the latest month is partial', async () => {
-    mockFlag = false
-    renderHome()
-    await waitFor(() => expect(screen.getByText('Net Worth Card')).toBeInTheDocument())
-
-    expect(netWorthProps.partial).toBeNull()
-    expect(chartsProps.omitMonth).toBeUndefined()
   })
 })

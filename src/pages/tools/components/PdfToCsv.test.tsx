@@ -54,7 +54,7 @@ vi.mock('pdfjs-dist', () => {
   }
 })
 
-let onUseInWizard: ((csv: string) => void) | undefined
+const onUseInWizard = vi.fn<(csv: string) => void>()
 
 async function loadPdfInComponent(
   pageData: (typeof singlePageItems)[] = [singlePageItems],
@@ -77,7 +77,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   pdfMockBehavior = 'hang'
   pdfMockPages = []
-  onUseInWizard = undefined
 })
 
 afterEach(() => {
@@ -86,24 +85,24 @@ afterEach(() => {
 
 describe('PdfToCsv', () => {
   it('renders the dropzone with upload instruction', () => {
-    render(<PdfToCsv />)
+    render(<PdfToCsv onUseInWizard={onUseInWizard} />)
     expect(screen.getByText('Drop a PDF here or click to browse')).toBeInTheDocument()
   })
 
   it('renders a hidden file input accepting PDFs', () => {
-    render(<PdfToCsv />)
+    render(<PdfToCsv onUseInWizard={onUseInWizard} />)
     const fileInput = document.querySelector('input[type="file"][accept=".pdf"]')
     expect(fileInput).toBeInTheDocument()
   })
 
   it('does not render toolbar or canvas before a PDF is loaded', () => {
-    render(<PdfToCsv />)
+    render(<PdfToCsv onUseInWizard={onUseInWizard} />)
     expect(screen.queryByText('Change file')).not.toBeInTheDocument()
     expect(screen.queryByText(/Page/)).not.toBeInTheDocument()
   })
 
   it('shows error when non-PDF file is dropped', () => {
-    render(<PdfToCsv />)
+    render(<PdfToCsv onUseInWizard={onUseInWizard} />)
     const dropzone = screen.getByText('Drop a PDF here or click to browse').closest('div')!
     const file = new File(['hello'], 'test.txt', { type: 'text/plain' })
     fireEvent.drop(dropzone, {
@@ -115,7 +114,7 @@ describe('PdfToCsv', () => {
   it('shows loading text when loadPdf is triggered', async () => {
     pdfMockBehavior = 'hang'
 
-    render(<PdfToCsv />)
+    render(<PdfToCsv onUseInWizard={onUseInWizard} />)
     const fileInput = document.querySelector('input[type="file"][accept=".pdf"]') as HTMLInputElement
 
     const pdfFile = new File(['%PDF-1.4'], 'test.pdf', { type: 'application/pdf' })
@@ -203,7 +202,7 @@ describe('PdfToCsv', () => {
   it('shows error when PDF parsing fails', async () => {
     pdfMockBehavior = 'error'
 
-    render(<PdfToCsv />)
+    render(<PdfToCsv onUseInWizard={onUseInWizard} />)
     const fileInput = document.querySelector('input[type="file"][accept=".pdf"]') as HTMLInputElement
     const pdfFile = new File(['%PDF-broken'], 'bad.pdf', { type: 'application/pdf' })
     fireEvent.change(fileInput, { target: { files: [pdfFile] } })
@@ -216,7 +215,7 @@ describe('PdfToCsv', () => {
   it('shows generic error when non-Error is thrown during PDF load', async () => {
     pdfMockBehavior = 'error-string'
 
-    render(<PdfToCsv />)
+    render(<PdfToCsv onUseInWizard={onUseInWizard} />)
     const fileInput = document.querySelector('input[type="file"][accept=".pdf"]') as HTMLInputElement
     const pdfFile = new File(['%PDF-broken'], 'bad.pdf', { type: 'application/pdf' })
     fireEvent.change(fileInput, { target: { files: [pdfFile] } })
@@ -230,7 +229,7 @@ describe('PdfToCsv', () => {
     pdfMockBehavior = 'success'
     pdfMockPages = [{ items: singlePageItems }]
 
-    render(<PdfToCsv />)
+    render(<PdfToCsv onUseInWizard={onUseInWizard} />)
     const dropzone = screen.getByText('Drop a PDF here or click to browse').closest('div')!
     const pdfFile = new File(['%PDF-1.4'], 'dragged.pdf', { type: 'application/pdf' })
 
@@ -401,17 +400,11 @@ describe('PdfToCsv', () => {
       })
     })
 
-    it('has no wizard button unless the host provides one', async () => {
-      await getPreviewTable()
-      expect(screen.queryByRole('button', { name: 'Review in import wizard' })).not.toBeInTheDocument()
-    })
-
     it('hands the extracted CSV to the import wizard instead of downloading it', async () => {
-      onUseInWizard = vi.fn()
       await getPreviewTable()
       fireEvent.click(screen.getByRole('button', { name: 'Review in import wizard' }))
       expect(onUseInWizard).toHaveBeenCalledTimes(1)
-      expect(vi.mocked(onUseInWizard).mock.calls[0][0]).toContain('\n')
+      expect(onUseInWizard.mock.calls[0][0]).toContain('\n')
     })
 
     it('downloads CSV when Download button is clicked', async () => {
@@ -503,7 +496,7 @@ describe('PdfToCsv', () => {
   /* ── Additional branch coverage tests ──────────────────────── */
 
   it('handleFileInput does nothing when no file is selected', () => {
-    render(<PdfToCsv />)
+    render(<PdfToCsv onUseInWizard={onUseInWizard} />)
     const fileInput = document.querySelector('input[type="file"][accept=".pdf"]') as HTMLInputElement
     // Change with empty files triggers the `if (file)` false branch (line 122)
     fireEvent.change(fileInput, { target: { files: [] } })
@@ -512,7 +505,7 @@ describe('PdfToCsv', () => {
   })
 
   it('handleMouseDown does nothing when no pages are loaded', () => {
-    render(<PdfToCsv />)
+    render(<PdfToCsv onUseInWizard={onUseInWizard} />)
     // The dropzone is shown, no overlay exists, but we can verify no crash
     const dropzone = screen.getByText('Drop a PDF here or click to browse').closest('div')!
     // mouseDown on the dropzone does nothing because pages.length === 0 (line 148)
@@ -848,7 +841,7 @@ describe('PdfToCsv', () => {
     pdfMockBehavior = 'success'
     pdfMockPages = [{ items: singlePageItems }]
 
-    render(<PdfToCsv />)
+    render(<PdfToCsv onUseInWizard={onUseInWizard} />)
     const fileInput = document.querySelector('input[type="file"][accept=".pdf"]') as HTMLInputElement
 
     const pdfFile = new File(['%PDF-1.4'], 'reset-test.pdf', { type: 'application/pdf' })
@@ -977,7 +970,7 @@ describe('PdfToCsv', () => {
     pdfMockBehavior = 'success'
     pdfMockPages = [{ items: singlePageItems }]
 
-    render(<PdfToCsv />)
+    render(<PdfToCsv onUseInWizard={onUseInWizard} />)
     const fileInput = document.querySelector('input[type="file"][accept=".pdf"]') as HTMLInputElement
     const pdfFile = new File(['%PDF-1.4'], 'width-test.pdf', { type: 'application/pdf' })
     fireEvent.change(fileInput, { target: { files: [pdfFile] } })

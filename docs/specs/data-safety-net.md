@@ -1,6 +1,6 @@
 # Data Safety Net
 
-- **Status:** Proposed
+- **Status:** Built and shipped (flag removed 2026-11-22). Sections that mention the flag record the original rollout design
 - **Owner:** Anindya
 - **Last updated:** 2026-11-08
 - **Priority:** 1 of 5 in the next-features list
@@ -208,10 +208,10 @@ No change to its write handlers. `data-changed` is an existing, currently unused
 | Held payloads when tab closes | `hasUnsavedWork()` is true, so the leave-page prompt appears. |
 | Performance | Reads unchanged. Writes: +2 metadata calls. Focus check: under 40 metadata calls every 5 s at most. Hash: 53-bit non-cryptographic (cyrb53) over bytes, synchronous, runs only on mtime-only mismatch. It detects change; it is not a security control, and it avoids `crypto.subtle`, which jsdom may lack. |
 
-### 3.11 Rollout, flag, migration
+### 3.11 Rollout (history), flag, migration
 
-- NEW flag in `src/flags/flagDefinitions.ts`: `DATA_SAFETY_NET: defineFlag('data-safety-net', { type: 'boolean', default: false, description: 'Protects data files: flush on page hide, visible save errors, corrupt-file quarantine, external-change detection, and _backups snapshots', temporary: true })`. Add `"data-safety-net": { "percentage": 0 }` to `feature-flags.json`.
-- Sequence: author overrides locally (`flag-overrides`) and dogfoods; then 10%, then 100% via the JSON; after at least 2 weeks at 100% with no regressions, a cleanup PR deletes the flag, the legacy 300 ms path and the inert branches.
+- NEW flag in `src/flags/flagDefinitions.ts`: `DATA_SAFETY_NET: defineFlag('data-safety-net', { type: 'boolean', default: false, description: 'Protects data files: flush on page hide, visible save errors, corrupt-file quarantine, external-change detection, and _backups snapshots', temporary: true })`. Add `"data-safety-net": { "percentage": 0 }` to `feature-flags.json`. The flag was rolled out at 100% and removed on 2026-11-22.
+- Sequence: author overrides locally (`flag-overrides`) and dogfoods; then 10%, then 100% via the JSON (done: 100% on 2026-11-22); after at least 2 weeks at 100% with no regressions, a cleanup PR deletes the flag, the legacy 300 ms path and the inert branches (the flag was removed on 2026-11-22).
 - Resolution lag: the flag resolves after `FlagProvider` loads (cache up to 5 min, `FlagContext.tsx` `CACHE_MAX_AGE_MS`). Until then the store behaves as today; this gap is accepted. Kill switch = set percentage 0; takes up to 5 minutes.
 - Existing data folders need no migration. `_backups/` appears on the first overwrite after enabling. Turning the flag off leaves the folder in place and unused.
 - No new network call. The CSP is unchanged.
@@ -229,7 +229,7 @@ No change to its write handlers. `data-changed` is an existing, currently unused
 ### 4.2 Acceptance criteria
 
 Flush and unload
-- **AC-1** With the flag on, a pending write is started (its `createWritable` is called) after a `pagehide` event without advancing timers.
+- **AC-1** A pending write is started (its `createWritable` is called) after a `pagehide` event without advancing timers.
 - **AC-2** Same for `visibilitychange` when `document.visibilityState === 'hidden'`; a `visible` event starts nothing.
 - **AC-3** `beforeunload` is cancelled (`defaultPrevented`) only when `hasUnsavedWork()` is true (pending, in flight, held or failed); with nothing outstanding it is not cancelled. It also calls `flush()`.
 - **AC-3a** `saveBalances` with 3 changed years queues 3 writes before the first resolves.
@@ -269,7 +269,7 @@ Backups
 
 Scope and safety
 - **AC-26** Demo mode and e2e mode register no listeners and write no `_backups/` files.
-- **AC-27** With the flag off, every existing unit and e2e test passes unmodified and the store behaves as before.
+- **AC-27** (Retired with the flag, 2026-11-22.) With the flag off, every existing unit and e2e test passes unmodified and the store behaves as before.
 - **AC-28** Only the highest-priority issue is shown (priority: permission, write failure, corrupt, external change); "N more" text shows the rest.
 - **AC-29** Banner and Backups UI pass keyboard-only and screen-reader checks (section 5.7).
 - **AC-30** No network request is made by any safety-net code.
@@ -487,7 +487,7 @@ Key signatures: `usePageHideFlush(store: (FileStore & SafetyNetStore) | null): v
 2. **PR2, backups:** `backupManager`, snapshot hook, prune, README.txt, Backups section and restore (AC-21 to AC-25).
 3. **PR3, corrupt files:** quarantine, held writes, resolutions (AC-9 to AC-11). Depends on PR2 for "Restore latest backup".
 4. **PR4, external changes:** baselines, guard, focus check, delete guard, Reload and Keep (AC-12 to AC-17a).
-5. **PR5, docs, rollout:** README, Guide, CONTRIBUTING, architecture HTML; set 10% rollout. Later: flag-removal PR.
+5. **PR5, docs, rollout:** README, Guide, CONTRIBUTING, architecture HTML; rollout reached 100% and the flag was removed on 2026-11-22.
 
 Review gates follow `.github/copilot-instructions.md`: branch review by Alex and Casey before opening each PR.
 
@@ -565,5 +565,5 @@ Review gates follow `.github/copilot-instructions.md`: branch review by Alex and
 | Q9 | Add a "Saving... / Saved" indicator | Not now; revisit after dogfooding, since the loud failure path covers the real risk. | No |
 | Q10 | Quarantine copy location | Sibling `*.corrupt-<stamp>` for discoverability, not inside `_backups/`. Approve. | No |
 | Q11 | Startup reconnect: `FolderPicker` shown whenever `requestPermission` is not `granted` (no user gesture) | Separate small spec: add a "Reconnect {folderName}" button using the stored handle. Out of scope here. | No |
-| Q12 | Flag rollout schedule | Author-only override for 1 week, 10% for 1 week, 100%, remove flag after 2 weeks. Approve. | No |
+| Q12 | Flag rollout schedule | Author-only override for 1 week, 10% for 1 week, 100%, remove flag after 2 weeks. Decided: rolled out at 100% and the flag removed on 2026-11-22. | No |
 | Q13 | Backup failure should not block saves | Yes (3.10). Approve. | No |

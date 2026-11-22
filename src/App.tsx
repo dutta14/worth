@@ -48,7 +48,7 @@ import { composeProviders } from './utils/composeProviders'
  *   GoalsProvider (uses useProfile hook, not a context)
  *   DataProvider
  *   FlagProvider
- *   SafetyNetProvider (reads the data-safety-net flag, so it sits inside FlagProvider)
+ *   SafetyNetProvider
  */
 const OuterProviders = composeProviders(SettingsProvider, LayoutProvider)
 

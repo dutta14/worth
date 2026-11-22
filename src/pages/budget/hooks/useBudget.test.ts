@@ -6,13 +6,13 @@ import {
   saveBudgetStore as _saveBudgetStore,
   saveBudgetSummary as _saveBudgetSummary,
   updateGlobalCategoryGroups as _updateGlobalCategoryGroups,
-  loadBudgetStore as _loadBudgetStore,
+  loadBudgetStoreStrict as _loadBudgetStoreStrict,
 } from '../utils/budgetStorage'
 
 const saveBudgetStore = vi.mocked(_saveBudgetStore)
 const saveBudgetSummary = vi.mocked(_saveBudgetSummary)
 const updateGlobalCategoryGroups = vi.mocked(_updateGlobalCategoryGroups)
-const loadBudgetStore = vi.mocked(_loadBudgetStore)
+const loadBudgetStoreStrict = vi.mocked(_loadBudgetStoreStrict)
 
 /* ─── Mocks ─── */
 
@@ -35,7 +35,7 @@ const EMPTY_STORE: BudgetStore = {
 let mockStore: BudgetStore = { ...EMPTY_STORE, categoryGroups: [...DEFAULT_GROUPS] }
 
 vi.mock('../utils/budgetStorage', () => ({
-  loadBudgetStore: vi.fn(() => Promise.resolve(mockStore)),
+  loadBudgetStoreStrict: vi.fn(() => Promise.resolve(mockStore)),
   saveBudgetStore: vi.fn((_fs: unknown, store: BudgetStore) => {
     mockStore = store
     window.dispatchEvent(new Event('budget-changed'))
@@ -70,7 +70,7 @@ beforeEach(() => {
   }
   vi.clearAllMocks()
   // re-apply mock implementation since clearAllMocks resets it
-  vi.mocked(loadBudgetStore).mockImplementation(() => Promise.resolve(mockStore))
+  vi.mocked(loadBudgetStoreStrict).mockImplementation(() => Promise.resolve(mockStore))
   vi.mocked(saveBudgetStore).mockImplementation((_fs, store) => {
     mockStore = store
     window.dispatchEvent(new Event('budget-changed'))
@@ -122,6 +122,23 @@ describe('useBudget — initial state', () => {
     expect(result.current.years).toContain(2023)
     expect(result.current.years).toContain(2024)
     expect(result.current.years).toContain(currentYear)
+  })
+})
+
+describe('useBudget — unreadable budget files', () => {
+  it('blocks imports and does not write anything when the budget files cannot be read', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    loadBudgetStoreStrict.mockRejectedValue(new Error('permission denied'))
+    const { result } = await renderAndLoad()
+
+    expect(result.current.importBlocked).toBe(true)
+    expect(result.current.loaded).toBe(false)
+
+    act(() => {
+      result.current.uploadCSV('2025-05', VALID_CSV)
+    })
+
+    expect(saveBudgetStore).not.toHaveBeenCalled()
   })
 })
 

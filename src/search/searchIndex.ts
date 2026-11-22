@@ -44,7 +44,6 @@ export interface SearchIndexData {
   taxYears?: TaxYearIndex
   taxTemplates?: TaxTemplateIndex[]
   allocationRatios?: AllocationRatioIndex[]
-  annualReviewEnabled?: boolean
 }
 
 /* ─── Category display order & labels ─── */
@@ -479,7 +478,7 @@ const ANNUAL_REVIEW_PAGE: SearchItem = {
 export function buildIndex(data: SearchIndexData = {}): SearchItem[] {
   return [
     ...STATIC_PAGES,
-    ...(data.annualReviewEnabled ? [ANNUAL_REVIEW_PAGE] : []),
+    ANNUAL_REVIEW_PAGE,
     ...STATIC_COMMANDS,
     ...indexGoals(data),
     ...indexAccounts(data),

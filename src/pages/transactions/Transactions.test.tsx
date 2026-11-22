@@ -50,6 +50,7 @@ const transactionFixtures = {
 
 vi.mock('../budget/utils/budgetStorage', () => ({
   loadBudgetStore: vi.fn(() => Promise.resolve(store)),
+  loadBudgetStoreStrict: vi.fn(() => Promise.resolve(store)),
   saveBudgetStore: vi.fn((_fs: unknown, nextStore: typeof store) => {
     store.csvs = nextStore.csvs
     store.configs = nextStore.configs
@@ -337,7 +338,7 @@ describe('Transactions', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'No transactions yet' })).toBeInTheDocument()
     })
-    expect(screen.getByText('Import a monthly CSV on the Budget page to see transactions here.')).toBeInTheDocument()
+    expect(screen.getByText('Import a CSV to see transactions here.')).toBeInTheDocument()
   })
 
   it('shows a filter-empty state and clears filters when requested', async () => {

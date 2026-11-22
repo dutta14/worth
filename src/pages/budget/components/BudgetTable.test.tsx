@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import BudgetTable from './BudgetTable'
@@ -25,35 +25,17 @@ const defaultProps = () => ({
     Dining: { '2025-01': -100, '2025-02': -120 },
   } as Record<string, Record<string, number>>,
   monthsWithData: new Set(['2025-01', '2025-02']),
-  onUploadCSV: vi.fn(() => ({ ok: true })),
   onRemoveCSV: vi.fn(),
+  onImportCSV: vi.fn(),
   timePeriod: 'month' as TimePeriod,
 })
 
-const renderTable = (overrides: Partial<ReturnType<typeof defaultProps>> & { onImportCSV?: () => void } = {}) =>
+const renderTable = (overrides: Partial<ReturnType<typeof defaultProps>> = {}) =>
   render(<BudgetTable {...defaultProps()} {...overrides} />)
-
-function setupMockFileReader(content: string) {
-  class MockFileReader {
-    result: string | ArrayBuffer | null = null
-    onload: ((ev: ProgressEvent<FileReader>) => void) | null = null
-
-    readAsText() {
-      this.result = content
-      this.onload?.({ target: this } as unknown as ProgressEvent<FileReader>)
-    }
-  }
-
-  vi.stubGlobal('FileReader', MockFileReader)
-}
 
 describe('BudgetTable', () => {
   beforeEach(() => {
     mockNavigate.mockReset()
-  })
-
-  afterEach(() => {
-    vi.unstubAllGlobals()
   })
 
   it('renders grouped expense rows and the grand total', () => {
@@ -171,66 +153,20 @@ describe('BudgetTable', () => {
     expect(screen.queryByRole('button', { name: 'View Essentials transactions for Q1' })).not.toBeInTheDocument()
   })
 
-  it('does not upload when the file picker change event has no file', () => {
-    const onUploadCSV = vi.fn(() => ({ ok: true }))
-    renderTable({ onUploadCSV })
-
-    fireEvent.change(screen.getByTestId('csv-file-input'), { target: { files: [] } })
-
-    expect(onUploadCSV).not.toHaveBeenCalled()
-  })
-
-  it('shows and dismisses a CSV upload error returned by the uploader', async () => {
+  it('opens the import wizard from the month menu', async () => {
     const user = userEvent.setup()
-    const onUploadCSV = vi.fn(() => ({ ok: false, error: 'Bad CSV format' }))
-    setupMockFileReader('Date,Category,Amount\n2025-01-01,Food,-10')
-    renderTable({ onUploadCSV })
+    const props = defaultProps()
+    render(<BudgetTable {...props} />)
 
     fireEvent.contextMenu(screen.getAllByText('Jan')[0])
-    await user.click(screen.getByRole('button', { name: 'Upload CSV for Jan' }))
-    fireEvent.change(screen.getByTestId('csv-file-input'), {
-      target: { files: [new File(['ignored'], 'budget.csv', { type: 'text/csv' })] },
-    })
-
-    expect(onUploadCSV).toHaveBeenCalledWith('2025-01', 'Date,Category,Amount\n2025-01-01,Food,-10')
-    expect(screen.getByRole('alert')).toHaveTextContent('Bad CSV format')
-
-    await user.click(screen.getByRole('button', { name: 'Dismiss error' }))
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  })
-
-  it('falls back to a default upload error message when the uploader omits one', async () => {
-    const user = userEvent.setup()
-    setupMockFileReader('Date,Category,Amount\n2025-01-01,Food,-10')
-    renderTable({ onUploadCSV: vi.fn(() => ({ ok: false })) })
-
-    fireEvent.contextMenu(screen.getAllByText('Jan')[0])
-    await user.click(screen.getByRole('button', { name: 'Upload CSV for Jan' }))
-    fireEvent.change(screen.getByTestId('csv-file-input'), {
-      target: { files: [new File(['ignored'], 'budget.csv', { type: 'text/csv' })] },
-    })
-
-    expect(screen.getByRole('alert')).toHaveTextContent('Upload failed')
-  })
-
-  it('opens the import wizard from the month menu and drops the legacy hint and file input (E4)', async () => {
-    const user = userEvent.setup()
-    const onImportCSV = vi.fn()
-    renderTable({ onImportCSV })
-
-    expect(screen.queryByTestId('csv-file-input')).not.toBeInTheDocument()
-    fireEvent.contextMenu(screen.getAllByText('Jan')[0])
-    expect(screen.queryByRole('button', { name: 'Upload CSV for Jan' })).not.toBeInTheDocument()
-    expect(screen.queryByText(/Date,Category,Amount/)).not.toBeInTheDocument()
-
     await user.click(screen.getByRole('button', { name: 'Import into Jan…' }))
 
-    expect(onImportCSV).toHaveBeenCalledOnce()
+    expect(props.onImportCSV).toHaveBeenCalledOnce()
     expect(screen.queryByRole('button', { name: 'Import into Jan…' })).not.toBeInTheDocument()
   })
 
-  it('still offers Remove CSV for a month with data when the wizard is on', () => {
-    renderTable({ onImportCSV: vi.fn() })
+  it('offers Remove CSV for a month with data', () => {
+    renderTable()
     fireEvent.contextMenu(screen.getAllByText('Jan')[0])
     expect(screen.getByRole('button', { name: 'Remove CSV' })).toBeInTheDocument()
   })
@@ -240,11 +176,11 @@ describe('BudgetTable', () => {
     renderTable()
 
     fireEvent.contextMenu(screen.getAllByText('Jan')[0])
-    expect(screen.getByRole('button', { name: 'Upload CSV for Jan' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Import into Jan…' })).toBeInTheDocument()
 
     await user.click(screen.getByTestId('ctx-menu-backdrop'))
 
-    expect(screen.queryByRole('button', { name: 'Upload CSV for Jan' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Import into Jan…' })).not.toBeInTheDocument()
   })
 
   it('marks positive expense values as refunds in month and total cells', async () => {

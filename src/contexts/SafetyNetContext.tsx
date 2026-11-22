@@ -12,8 +12,6 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { isDemoActive, useFileStore } from './FileStoreContext'
-import { FLAGS } from '../flags/flagDefinitions'
-import { useFlag } from '../flags/useFlag'
 import { usePageHideFlush } from '../hooks/usePageHideFlush'
 import { isSafetyNetStore } from '../utils/fileStoreTypes'
 import { EMPTY_SAFETY_SNAPSHOT } from '../utils/safetyNet'
@@ -27,7 +25,7 @@ const NOTICES: Record<ExternalAction, string> = {
 }
 
 export interface SafetyNetContextValue {
-  /** True only for a real folder with the `data-safety-net` flag on. */
+  /** True only for a real folder, never in Demo Mode. */
   enabled: boolean
   snapshot: SafetySnapshot
   /** True after the user declined the reconnect prompt. */
@@ -84,7 +82,6 @@ const subscribeNothing = (): (() => void) => () => {}
 const getEmptySnapshot = (): SafetySnapshot => EMPTY_SAFETY_SNAPSHOT
 
 export const SafetyNetProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const flagOn = useFlag(FLAGS.DATA_SAFETY_NET)
   const { fileStore, pickFolder } = useFileStore()
   const [reconnectDenied, setReconnectDenied] = useState(false)
   const lastCheckRef = useRef(0)
@@ -93,9 +90,8 @@ export const SafetyNetProvider: FC<{ children: ReactNode }> = ({ children }) => 
   const [notice, setNotice] = useState('')
 
   const store = useMemo(
-    () =>
-      flagOn && isSafetyNetStore(fileStore) && fileStore.getHandle() !== null && !isDemoActive() ? fileStore : null,
-    [flagOn, fileStore],
+    () => (isSafetyNetStore(fileStore) && fileStore.getHandle() !== null && !isDemoActive() ? fileStore : null),
+    [fileStore],
   )
 
   useEffect(() => {

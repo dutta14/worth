@@ -11,8 +11,6 @@ import CashflowTabs, {
   shouldFocusCashflowTab,
   type CashflowTab,
 } from '../../components/CashflowTabs'
-import { FLAGS } from '../../flags/flagDefinitions'
-import { useFlag } from '../../flags/useFlag'
 import { createRuleEntryLabel } from '../budget/import/ruleMessages'
 import { isFallbackCategory } from '../budget/import/recategorize'
 import TransactionImportTools, { type RuleSource } from './components/TransactionImportTools'
@@ -315,7 +313,6 @@ const Transactions: FC = () => {
   const paramFrom = searchParams.get('from') ?? ''
   const paramTo = searchParams.get('to') ?? ''
   const { fileStore } = useFileStore()
-  const importWizardOn = useFlag(FLAGS.IMPORT_WIZARD)
   const [ruleSource, setRuleSource] = useState<RuleSource | null>(null)
   const ruleOpenerRef = useRef<HTMLElement | null>(null)
   const budgetStoreRef = useRef<BudgetStore>({ csvs: {}, configs: {}, years: [], categoryGroups: [] })
@@ -501,9 +498,9 @@ const Transactions: FC = () => {
   )
 
   useEffect(() => {
-    // With the wizard, imports and rules add categories while the page is open; show them instead of hiding the rows.
+    // Imports and rules add categories while the page is open; show them instead of hiding the rows.
     const known = knownCategories.current
-    const added = importWizardOn ? categories.filter(c => !known.has(c) && !removedCategories.has(c)) : []
+    const added = categories.filter(c => !known.has(c) && !removedCategories.has(c))
     knownCategories.current = new Set(categories)
     setSelectedCategories(current => {
       const validCategories = new Set(categories)
@@ -511,7 +508,7 @@ const Transactions: FC = () => {
       added.forEach(c => next.add(c))
       return next.size === current.size && added.length === 0 ? current : next
     })
-  }, [categories, importWizardOn, removedCategories])
+  }, [categories, removedCategories])
 
   const allSelected = selectedCategories.size === categories.length
   const noneSelected = selectedCategories.size === 0
@@ -871,13 +868,13 @@ const Transactions: FC = () => {
 
   // The editor opens below its row; near the bottom of the screen that would hide the rule entry at its foot.
   useLayoutEffect(() => {
-    if (!importWizardOn || !editingCategory || !categoryEditorPos) return
+    if (!editingCategory || !categoryEditorPos) return
     const editor = categoryEditorRef.current
     if (!editor) return
     const overflow = editor.getBoundingClientRect().bottom - (window.innerHeight - 8)
     const top = Math.max(8, categoryEditorPos.top - overflow)
     if (overflow > 0 && top !== categoryEditorPos.top) setCategoryEditorPos({ ...categoryEditorPos, top })
-  }, [importWizardOn, editingCategory, categoryEditorPos])
+  }, [editingCategory, categoryEditorPos])
 
   const startRule = (transaction: LoadedTransaction): void => {
     ruleOpenerRef.current = document.querySelector<HTMLElement>('.txn-row-category-button[aria-expanded="true"]')
@@ -1350,14 +1347,12 @@ const Transactions: FC = () => {
               )}
             </div>
 
-            {importWizardOn && (
-              <TransactionImportTools
-                transactions={allTransactions}
-                ruleSource={ruleSource}
-                onRuleSourceClose={closeRuleSource}
-                onInvalidate={resetTransactionCache}
-              />
-            )}
+            <TransactionImportTools
+              transactions={allTransactions}
+              ruleSource={ruleSource}
+              onRuleSourceClose={closeRuleSource}
+              onInvalidate={resetTransactionCache}
+            />
           </div>
         </div>
       </header>
@@ -1367,11 +1362,7 @@ const Transactions: FC = () => {
           {allTransactions.length === 0 ? (
             <div className="txn-empty-state">
               <h2 className="txn-empty-title">No transactions yet</h2>
-              <p className="txn-empty-copy">
-                {importWizardOn
-                  ? 'Import a CSV to see transactions here.'
-                  : 'Import a monthly CSV on the Budget page to see transactions here.'}
-              </p>
+              <p className="txn-empty-copy">Import a CSV to see transactions here.</p>
             </div>
           ) : groupedTransactions.length > 0 ? (
             <>
@@ -1502,17 +1493,15 @@ const Transactions: FC = () => {
                                       <p className="txn-category-editor-empty">No matching categories</p>
                                     )}
                                   </div>
-                                  {importWizardOn && (
-                                    <button
-                                      type="button"
-                                      className="txn-category-editor-rule"
-                                      onClick={() => startRule(transaction)}
-                                    >
-                                      {createRuleEntryLabel(
-                                        isFallbackCategory(transaction.category) ? null : transaction.category,
-                                      )}
-                                    </button>
-                                  )}
+                                  <button
+                                    type="button"
+                                    className="txn-category-editor-rule"
+                                    onClick={() => startRule(transaction)}
+                                  >
+                                    {createRuleEntryLabel(
+                                      isFallbackCategory(transaction.category) ? null : transaction.category,
+                                    )}
+                                  </button>
                                 </div>,
                                 document.body,
                               )}

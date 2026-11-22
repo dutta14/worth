@@ -16,7 +16,7 @@
 | Greeting | Personalizes the dashboard with a time-based welcome. |
 | Setup guide restore link | Reopens the onboarding checklist after dismissal. |
 | Setup guide | Walks first-time users through the four setup tasks that unlock the dashboard. |
-| Check-in strip (flag) | Says whether the latest month is complete or the data is stale, and starts the monthly check-in. Off by default. |
+| Check-in strip | Says whether the latest month is complete or the data is stale, and starts the monthly check-in. |
 | Net Worth card | Shows latest total net worth, month-over-month change, and FI/GW breakdown. |
 | Charts card | Shows compact balance-history charts with quick date filters. |
 | Goals card | Shows up to three goal summaries and FI/GW progress. |
@@ -89,10 +89,10 @@
 - **Edge cases:** On small screens the steps become horizontally scrollable instead of shrinking too tightly.
 - **Related workflows:** First-time setup.
 
-### Check-in strip (flag `monthly-check-in`, off by default)
+### Check-in strip
 - **What it is:** A full-width strip between the setup guide and the card grid. It is not a reorderable card, has no move buttons, and never changes the saved card order.
 - **Why it exists:** Balances are entered by hand, and nothing else says whether the monthly ritual is finished.
-- **Who sees it:** Only with the flag on, after data has loaded, and when there is at least one active account and one valid balance.
+- **Who sees it:** Everyone, after data has loaded, and when there is at least one active account and one valid balance.
 - **Data shown:** One of four messages. **{n} account(s) missing for {Month}** with the missing account names (first six, then **and {n} more**). **{Month} balances are ready to record** when the latest complete month is older than last month. **{Month} is complete** with the active account count. **Your latest balances are dated in the future** when every month is in the future. Stale data (more than 35 days after the end of the latest month) uses the warning tone and **Last balances are from {Month}, {d} days ago.**
 - **Actions available:** **Finish {Month}** or **Start {Month} check-in** opens Net Worth → Details already in edit mode for that month. **Review balances** and **Review months** open Details and Spreadsheet. **Account closed? Mark it inactive** opens Accounts. **Snooze for 7 days** hides the strip for the same reporting month; it is offered only for missing and ready states and moves focus to the page heading.
 - **Rules:** The state comes from `src/pages/data/monthStatus.ts`. Future-dated months never become the reporting month. A snooze lives in `localStorage['checkin-snooze']`, not in the data folder, and does not hide the Net Worth badge.
@@ -109,7 +109,7 @@
 - **Other states:** Empty state with **Add accounts and record your first balance to see your net worth here.** and **Add your data →**; populated state with arrows and breakdowns.
 - **Rules:** FI and GW parent rows always appear. Zero-value child rows are hidden. Previous-month change only appears when a previous month exists.
 - **Edge cases:** If there is only one month of balance history, the card shows the total without a month-over-month delta.
-- **With the check-in flag on:** When the selected month is the latest and some active accounts have no balance for it, the card shows a **Partial month** badge, hides the change amounts and percentages, and says **Change hidden until {Month} is complete.** Mini charts leave that month out and add **{Month} is not plotted until all accounts have a balance.**
+- **Partial month:** When the selected month is the latest and some active accounts have no balance for it, the card shows a **Partial month** badge, hides the change amounts and percentages, and says **Change hidden until {Month} is complete.** Mini charts leave that month out and add **{Month} is not plotted until all accounts have a balance.**
 - **Related workflows:** Review current financial snapshot.
 
 ### Charts card

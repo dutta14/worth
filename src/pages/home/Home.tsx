@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useGoals } from '../../contexts/GoalsContext'
 import { useData } from '../../contexts/DataContext'
 import { useTouchDrag } from '../../hooks/useTouchDrag'
-import { useFlag } from '../../flags/useFlag'
-import { FLAGS } from '../../flags/flagDefinitions'
 import ErrorBoundary from '../../components/ErrorBoundary'
 import NetWorthSummary from './NetWorthSummary'
 import MiniCharts from './MiniCharts'
@@ -63,8 +61,6 @@ const Home: FC = () => {
   const allComplete = accounts.length > 0 && balances.length > 0 && goals.length > 0 && hasBudgetData
   const [setupDismissed, setSetupDismissed] = useState(() => getStorageItem('onboarding-dismissed', '0') === '1')
 
-  const checkInEnabled = useFlag(FLAGS.MONTHLY_CHECK_IN)
-
   const handleCheckInSnoozed = useCallback((message: string) => {
     setAnnouncement(message)
     // The strip unmounts with the focused button, so hand focus to the page heading first.
@@ -76,10 +72,7 @@ const Home: FC = () => {
     [balances],
   )
 
-  const partialMonth = useMemo(
-    () => (checkInEnabled ? getPartialMonth(accounts, balances, allMonths[0]) : null),
-    [checkInEnabled, accounts, balances, allMonths],
-  )
+  const partialMonth = useMemo(() => getPartialMonth(accounts, balances, allMonths[0]), [accounts, balances, allMonths])
 
   const balanceMap = useMemo(() => {
     const map = new Map<string, number>()
@@ -230,7 +223,7 @@ const Home: FC = () => {
   return (
     <div className="home-page">
       <div className="home-greeting">
-        <h1 ref={headingRef} tabIndex={checkInEnabled ? -1 : undefined}>
+        <h1 ref={headingRef} tabIndex={-1}>
           {greeting}
         </h1>
         {setupDismissed && !allComplete && dataLoaded && (
@@ -257,14 +250,7 @@ const Home: FC = () => {
           }}
         />
       )}
-      {checkInEnabled && (
-        <CheckInStrip
-          accounts={accounts}
-          balances={balances}
-          dataLoaded={dataLoaded}
-          onSnoozed={handleCheckInSnoozed}
-        />
-      )}
+      <CheckInStrip accounts={accounts} balances={balances} dataLoaded={dataLoaded} onSnoozed={handleCheckInSnoozed} />
       <div className="home-grid" ref={gridRef}>
         {order.map((cardIdx, pos) => {
           const touchHandlers = touchDrag.getTouchHandlers(pos)

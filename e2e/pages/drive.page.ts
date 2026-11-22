@@ -10,8 +10,7 @@ export class DrivePage {
   readonly dropZone: Locator
   readonly fileInput: Locator
 
-  readonly previewModal: Locator
-  readonly previewModalHeading: Locator
+  readonly importDialog: Locator
 
   readonly viewer: Locator
   readonly viewerTitle: Locator
@@ -30,8 +29,7 @@ export class DrivePage {
     this.dropZone = page.locator('.drive-dropzone')
     this.fileInput = page.locator('.drive-dropzone input[type="file"]')
 
-    this.previewModal = page.getByRole('dialog')
-    this.previewModalHeading = this.previewModal.getByRole('heading', { level: 3 })
+    this.importDialog = page.getByRole('dialog', { name: 'Import transactions' })
 
     this.viewer = page.locator('.drive-viewer')
     this.viewerTitle = page.locator('.drive-viewer-title')

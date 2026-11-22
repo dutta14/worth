@@ -77,7 +77,8 @@ test.describe('SearchModal — Cmd+K lifecycle and focus trap (#142)', () => {
 
     await search.input.fill('net worth')
     await search.results().first().waitFor()
-    await search.result('Net Worth').click()
+    // Annual Review also mentions net worth, so pick the Wealth page by its title.
+    await search.result(/^Wealth/).click()
 
     await expect(search.dialog).toBeHidden()
     await expect(page).toHaveURL(/#\/net-worth$/)

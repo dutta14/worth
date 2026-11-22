@@ -5,8 +5,6 @@ import userEvent from '@testing-library/user-event'
 import type { BudgetStore } from '../budget/types'
 import type { BudgetTargetsFile } from '../budget/utils/budgetTargets'
 import { TARGETS_PATH } from '../budget/utils/budgetTargetsStorage'
-import { FlagContext } from '../../flags/FlagContext'
-import { makeFlagContextValue } from '../../test/flagTestUtils'
 import { MemoryFileStore } from '../../utils/memoryFileStore'
 import SpendingPeek from './SpendingPeek'
 
@@ -74,18 +72,16 @@ let fileStore: MemoryFileStore
 const onNavigate = vi.fn()
 const onOpenTargets = vi.fn()
 
-const renderPeek = (flagOn: boolean, props: Partial<ComponentProps<typeof SpendingPeek>> = {}) =>
+const renderPeek = (props: Partial<ComponentProps<typeof SpendingPeek>> = {}) =>
   render(
-    <FlagContext.Provider value={makeFlagContextValue({ 'category-budget-targets': flagOn })}>
-      <SpendingPeek
-        fileStore={fileStore}
-        hasBudgetData
-        budgetDataLoaded
-        onNavigate={onNavigate}
-        onOpenTargets={onOpenTargets}
-        {...props}
-      />
-    </FlagContext.Provider>,
+    <SpendingPeek
+      fileStore={fileStore}
+      hasBudgetData
+      budgetDataLoaded
+      onNavigate={onNavigate}
+      onOpenTargets={onOpenTargets}
+      {...props}
+    />,
   )
 
 const findSubtitle = () => screen.findByText(/\d (last|this) month$/)
@@ -104,54 +100,20 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('SpendingPeek targets line, flag off', () => {
-  it('never reads budget/targets.json', async () => {
-    await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 500 }))
+describe('SpendingPeek targets line', () => {
+  it('shows nothing when no targets exist', async () => {
     const exists = vi.spyOn(fileStore, 'exists')
-    const readJSON = vi.spyOn(fileStore, 'readJSON')
-    const subscribe = vi.spyOn(fileStore, 'subscribe')
-
-    renderPeek(false)
+    renderPeek()
     await findSubtitle()
-
-    expect(exists).not.toHaveBeenCalled()
-    expect(readJSON).not.toHaveBeenCalled()
-    expect(subscribe).not.toHaveBeenCalled()
+    await waitFor(() => expect(exists).toHaveBeenCalled())
     expect(findTargetsLine()).toBeNull()
     expect(screen.queryByText(/target/i)).not.toBeInTheDocument()
-  })
-
-  it('renders the same DOM whether or not a targets file exists', async () => {
-    const first = renderPeek(false)
-    await findSubtitle()
-    const without = first.container.innerHTML
-    first.unmount()
-
-    await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 500 }))
-    const second = renderPeek(false)
-    await findSubtitle()
-
-    expect(second.container.innerHTML).toBe(without)
-  })
-})
-
-describe('SpendingPeek targets line, flag on', () => {
-  it('shows nothing and leaves the DOM unchanged when no targets exist', async () => {
-    const off = renderPeek(false)
-    await findSubtitle()
-    const baseline = off.container.innerHTML
-    off.unmount()
-
-    const on = renderPeek(true)
-    await findSubtitle()
-    await waitFor(() => expect(on.container.innerHTML).toBe(baseline))
-    expect(findTargetsLine()).toBeNull()
   })
 
   it('shows one line for a single group over target, following Budget semantics for refunds', async () => {
     // Dining is -620 with a +100 refund: net $520, so $20 over a $500 target. The chart total counts refunds as spend.
     await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 500 }))
-    renderPeek(true)
+    renderPeek()
 
     expect(await screen.findByText('October: Dining is over target')).toBeInTheDocument()
     expect(document.querySelectorAll('.spending-peek-targets')).toHaveLength(1)
@@ -159,38 +121,38 @@ describe('SpendingPeek targets line, flag on', () => {
 
   it('shows a within-target line for a single group', async () => {
     await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 520 }))
-    renderPeek(true)
+    renderPeek()
     expect(await screen.findByText('October: Dining is within target')).toBeInTheDocument()
   })
 
   it('says both groups when two groups are within target', async () => {
     await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 600, housing: 2000 }))
-    renderPeek(true)
+    renderPeek()
     expect(await screen.findByText('October: within target in both groups')).toBeInTheDocument()
   })
 
   it('counts over groups when three groups have targets', async () => {
     await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 100, housing: 1000, travel: 300 }))
-    renderPeek(true)
+    renderPeek()
     expect(await screen.findByText('October: over target in 2 of 3 groups')).toBeInTheDocument()
   })
 
   it('says all groups when three groups are within target', async () => {
     await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 900, housing: 2500, travel: 300 }))
-    renderPeek(true)
+    renderPeek()
     expect(await screen.findByText('October: within target in all 3 groups')).toBeInTheDocument()
   })
 
   it('adds "so far" when the newest month is the current calendar month', async () => {
     vi.setSystemTime(new Date(2026, 9, 20))
     await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 900 }))
-    renderPeek(true)
+    renderPeek()
     expect(await screen.findByText('October so far: Dining is within target')).toBeInTheDocument()
   })
 
   it('does not count excluded groups: removed, income and groups without targets', async () => {
     await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 900, removed: 1, 'income-others': 1 }))
-    renderPeek(true)
+    renderPeek()
     expect(await screen.findByText('October: Dining is within target')).toBeInTheDocument()
   })
 
@@ -218,7 +180,7 @@ describe('SpendingPeek targets line, flag on', () => {
     it('ignores a category that is positive all year', async () => {
       mockedLoadBudgetStore.mockResolvedValue(rewardsStore())
       await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 350 }))
-      renderPeek(true)
+      renderPeek()
       expect(await screen.findByText('October: Dining is over target')).toBeInTheDocument()
     })
 
@@ -226,7 +188,7 @@ describe('SpendingPeek targets line, flag on', () => {
       const march = { month: '2026-03', csv: csv([['2026-03-02', 'Dining Rewards', -5]]), uploadedAt: '' }
       mockedLoadBudgetStore.mockResolvedValue(rewardsStore({ '2026-03': march }))
       await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 350 }))
-      renderPeek(true)
+      renderPeek()
       expect(await screen.findByText('October: Dining is within target')).toBeInTheDocument()
     })
 
@@ -234,7 +196,7 @@ describe('SpendingPeek targets line, flag on', () => {
       const last = { month: '2025-03', csv: csv([['2025-03-02', 'Dining Rewards', -5]]), uploadedAt: '' }
       mockedLoadBudgetStore.mockResolvedValue(rewardsStore({ '2025-03': last }))
       await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 350 }))
-      renderPeek(true)
+      renderPeek()
       expect(await screen.findByText('October: Dining is over target')).toBeInTheDocument()
     })
   })
@@ -245,7 +207,7 @@ describe('SpendingPeek targets line, flag on', () => {
       groups: { dining: { history: [{ from: '2026-11', monthly: 500 }] } },
     }
     await fileStore.writeJSON(TARGETS_PATH, targets)
-    renderPeek(true)
+    renderPeek()
     await findSubtitle()
     await waitFor(() => expect(mockedLoadBudgetStore).toHaveBeenCalled())
     expect(findTargetsLine()).toBeNull()
@@ -254,7 +216,7 @@ describe('SpendingPeek targets line, flag on', () => {
   it('calls onOpenTargets from the "See targets" button', async () => {
     const user = userEvent.setup()
     await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 500 }))
-    renderPeek(true)
+    renderPeek()
 
     await user.click(await screen.findByRole('button', { name: /^See targets/ }))
     expect(onOpenTargets).toHaveBeenCalledTimes(1)
@@ -263,7 +225,7 @@ describe('SpendingPeek targets line, flag on', () => {
 
   it('omits the link when no onOpenTargets handler is given', async () => {
     await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 500 }))
-    renderPeek(true, { onOpenTargets: undefined })
+    renderPeek({ onOpenTargets: undefined })
 
     await screen.findByText('October: Dining is over target')
     expect(screen.queryByRole('button', { name: /See targets/ })).not.toBeInTheDocument()
@@ -271,7 +233,7 @@ describe('SpendingPeek targets line, flag on', () => {
 
   it('hides the icon from assistive technology', async () => {
     await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 500 }))
-    renderPeek(true)
+    renderPeek()
     await screen.findByText('October: Dining is over target')
     expect(findTargetsLine()?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
@@ -280,7 +242,7 @@ describe('SpendingPeek targets line, flag on', () => {
     const raw = { version: 2, groups: {} }
     await fileStore.writeJSON(TARGETS_PATH, raw)
     const write = vi.spyOn(fileStore, 'writeJSON')
-    renderPeek(true)
+    renderPeek()
 
     await findSubtitle()
     await waitFor(() => expect(mockedLoadBudgetStore).toHaveBeenCalled())
@@ -290,7 +252,7 @@ describe('SpendingPeek targets line, flag on', () => {
   })
 
   it('does not throw when the file store cannot be read', async () => {
-    renderPeek(true, { fileStore: {} as MemoryFileStore })
+    renderPeek({ fileStore: {} as MemoryFileStore })
     expect(await findSubtitle()).toBeInTheDocument()
     expect(findTargetsLine()).toBeNull()
   })
@@ -298,7 +260,7 @@ describe('SpendingPeek targets line, flag on', () => {
   it('shows no line when the store has no transactions', async () => {
     mockedLoadBudgetStore.mockResolvedValue(makeStore({ csvs: {} }))
     await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 500 }))
-    renderPeek(true)
+    renderPeek()
     await screen.findByRole('button', { name: 'Add budget data →' })
     expect(findTargetsLine()).toBeNull()
   })
@@ -306,7 +268,7 @@ describe('SpendingPeek targets line, flag on', () => {
   it('shows no line without budget data and reads no targets', async () => {
     const exists = vi.spyOn(fileStore, 'exists')
     await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 500 }))
-    renderPeek(true, { hasBudgetData: false })
+    renderPeek({ hasBudgetData: false })
     await screen.findByRole('button', { name: 'Add budget data →' })
     expect(findTargetsLine()).toBeNull()
     expect(exists).toHaveBeenCalled()

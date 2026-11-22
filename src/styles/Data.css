@@ -2633,7 +2633,7 @@ body.dark .data-inline-cancel {
   }
 }
 
-/* Monthly check-in: Details entry mode (behind the monthly-check-in flag) */
+/* Monthly check-in: Details entry mode */
 .data-details-entry-banner__detail {
   display: block;
   margin-top: 2px;
@@ -2688,7 +2688,7 @@ body.dark .data-inline-cancel {
 }
 
 @media (max-width: 640px) {
-  .data-details-entry-footer--check-in {
+  .data-details-entry-footer {
     flex-wrap: wrap;
   }
 

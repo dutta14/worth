@@ -1,6 +1,5 @@
 import { FC, useState } from 'react'
 import { isDemoActive, useFileStore } from '../../../contexts/FileStoreContext'
-import FeaturePreviewsSection from './FeaturePreviewsSection'
 import { getStorageItem, setStorageItem } from '../../../utils/storage'
 
 const LabsPane: FC = () => {
@@ -60,8 +59,6 @@ const LabsPane: FC = () => {
             <span className="settings-toggle-knob" />
           </button>
         </div>
-
-        <FeaturePreviewsSection />
       </div>
     </div>
   )

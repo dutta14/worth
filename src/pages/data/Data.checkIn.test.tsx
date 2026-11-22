@@ -23,16 +23,6 @@ vi.mock('../../contexts/DataContext', () => ({
   }),
 }))
 
-let mockCheckInFlag = true
-let mockCheckInResolved = true
-vi.mock('../../flags/useFlag', async () => {
-  const { FLAGS } = await import('../../flags/flagDefinitions')
-  return {
-    useFlag: (flag: unknown) => (flag === FLAGS.MONTHLY_CHECK_IN ? mockCheckInFlag : false),
-    useFlagResolved: (flag: unknown) => (flag === FLAGS.MONTHLY_CHECK_IN ? mockCheckInResolved : true),
-  }
-})
-
 vi.mock('../allocation/Allocation', () => ({ default: () => <div>Allocation Tab</div> }))
 vi.mock('../tools/components/SavingsGrowthTracker', () => ({ default: () => <div>Growth Tracker Tab</div> }))
 vi.mock('recharts', async () => {
@@ -75,8 +65,6 @@ beforeEach(() => {
   mockSetBalances.mockClear()
   mockAccounts = accounts
   mockBalances = september
-  mockCheckInFlag = true
-  mockCheckInResolved = true
 })
 
 afterEach(() => {
@@ -160,41 +148,6 @@ describe('Data page check-in hand-off', () => {
     expect(routerState()).toBe('{"checkIn":{"month":"2026-10"}}')
     expect(screen.queryByText(/Entering balances for/)).not.toBeInTheDocument()
   })
-
-  it('waits for the flag to resolve before consuming the request', () => {
-    mockCheckInResolved = false
-    renderData(request('2026-10'))
-
-    expect(routerState()).toBe('{"checkIn":{"month":"2026-10"}}')
-    expect(screen.queryByText(/Entering balances for/)).not.toBeInTheDocument()
-  })
-})
-
-describe('Data page with the monthly-check-in flag off', () => {
-  beforeEach(() => {
-    mockCheckInFlag = false
-  })
-
-  it('ignores the request: Details opens normally and the router state is untouched', () => {
-    renderData(request('2026-10'))
-
-    expect(screen.getByRole('button', { name: '+ Add Entry' })).toBeVisible()
-    expect(screen.queryByText(/Entering balances for/)).not.toBeInTheDocument()
-    expect(routerState()).toBe('{"checkIn":{"month":"2026-10"}}')
-  })
-
-  it('keeps the existing Add Entry flow unchanged', async () => {
-    vi.useRealTimers()
-    const user = userEvent.setup()
-    renderData(DETAILS)
-
-    await user.click(screen.getByRole('button', { name: '+ Add Entry' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-
-    expect(screen.getByText(/^Entering balances for/)).toBeVisible()
-    expect(screen.queryByText(/Copied from/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
-  })
 })
 
 describe('Data page Charts tab with a partial month', () => {
@@ -210,14 +163,6 @@ describe('Data page Charts tab with a partial month', () => {
 
   it('shows no caption when the latest month is complete', () => {
     mockBalances = [...partialOctober, makeBalanceEntry({ id: 4, accountId: 2, month: '2026-10', balance: 50100 })]
-    renderData(CHARTS)
-
-    expect(screen.queryByText(caption)).not.toBeInTheDocument()
-  })
-
-  it('shows no caption with the flag off', () => {
-    mockCheckInFlag = false
-    mockBalances = partialOctober
     renderData(CHARTS)
 
     expect(screen.queryByText(caption)).not.toBeInTheDocument()

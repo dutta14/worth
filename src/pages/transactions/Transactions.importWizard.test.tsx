@@ -2,10 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { FlagContext } from '../../flags/FlagContext'
 import { FileStoreTestProvider } from '../../test/fileStoreTestUtils'
 import { containsRule } from '../../test/importHelpers'
-import { makeFlagContextValue } from '../../test/flagTestUtils'
 import { parseCSV } from '../../utils/csvUtils'
 import { MemoryFileStore } from '../../utils/memoryFileStore'
 import { RULES_PATH } from '../budget/import/importStorage'
@@ -32,15 +30,13 @@ const seed = async (withMonth = true) => {
   return fileStore
 }
 
-const renderPage = (fileStore: MemoryFileStore, importWizard: boolean) =>
+const renderPage = (fileStore: MemoryFileStore) =>
   render(
-    <FlagContext.Provider value={makeFlagContextValue({ 'import-wizard': importWizard })}>
-      <FileStoreTestProvider store={fileStore}>
-        <MemoryRouter initialEntries={['/transactions?from=2026-10-01&to=2026-10-31']}>
-          <Transactions />
-        </MemoryRouter>
-      </FileStoreTestProvider>
-    </FlagContext.Provider>,
+    <FileStoreTestProvider store={fileStore}>
+      <MemoryRouter initialEntries={['/transactions?from=2026-10-01&to=2026-10-31']}>
+        <Transactions />
+      </MemoryRouter>
+    </FileStoreTestProvider>,
   )
 
 beforeEach(() => {
@@ -48,42 +44,23 @@ beforeEach(() => {
   localStorage.clear()
 })
 
-describe('Transactions with the import-wizard flag off', () => {
-  it('shows no import tools and no rule entry in the category editor, and keeps the legacy empty copy', async () => {
-    const user = userEvent.setup()
-    renderPage(await seed(), false)
-    const button = await screen.findByRole('button', { name: /Edit category for STARBUCKS/i })
-    expect(screen.queryByRole('button', { name: 'Import' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Rules' })).not.toBeInTheDocument()
-    await user.click(button)
-    expect(screen.queryByRole('button', { name: /Always categorize merchants like this/ })).not.toBeInTheDocument()
-  })
-
-  it('keeps the Budget-page empty copy', async () => {
-    renderPage(await seed(false), false)
-    expect(
-      await screen.findByText('Import a monthly CSV on the Budget page to see transactions here.'),
-    ).toBeInTheDocument()
-  })
-})
-
-describe('Transactions with the import-wizard flag on', () => {
+describe('Transactions import tools', () => {
   it('shows Import, Apply rules and Rules in the toolbar', async () => {
-    renderPage(await seed(), true)
+    renderPage(await seed())
     expect(await screen.findByRole('button', { name: 'Import' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Apply rules to uncategorized' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Rules' })).toBeInTheDocument()
   })
 
-  it('uses the wizard empty copy when there are no transactions', async () => {
-    renderPage(await seed(false), true)
+  it('shows the import empty copy when there are no transactions', async () => {
+    renderPage(await seed(false))
     expect(await screen.findByText('Import a CSV to see transactions here.')).toBeInTheDocument()
   })
 
   it('offers a rule from the category editor, creates it and returns focus to the row', async () => {
     const user = userEvent.setup()
     const fileStore = await seed()
-    renderPage(fileStore, true)
+    renderPage(fileStore)
     const trigger = await screen.findByRole('button', { name: /Edit category for Blue Bottle/i })
     await user.click(trigger)
 
@@ -103,7 +80,7 @@ describe('Transactions with the import-wizard flag on', () => {
 
   it('leaves the category empty in the rule dialog for an uncategorized row', async () => {
     const user = userEvent.setup()
-    renderPage(await seed(), true)
+    renderPage(await seed())
     await user.click(await screen.findByRole('button', { name: /Edit category for STARBUCKS/i }))
     await user.click(screen.getByRole('button', { name: 'Always categorize merchants like this as…' }))
     const dialog = await screen.findByRole('dialog', { name: 'Create a rule' })
@@ -112,7 +89,7 @@ describe('Transactions with the import-wizard flag on', () => {
 
   it('applies the rules to uncategorized rows and shows the new category', async () => {
     const user = userEvent.setup()
-    renderPage(await seed(), true)
+    renderPage(await seed())
     await user.click(await screen.findByRole('button', { name: 'Apply rules to uncategorized' }))
     await user.click(await screen.findByRole('button', { name: 'Apply rules' }))
     await screen.findByRole('heading', { name: 'Rules applied' })
@@ -123,7 +100,7 @@ describe('Transactions with the import-wizard flag on', () => {
   })
   it('selects the categories of the first import into a page that had no transactions', async () => {
     const fileStore = await seed(false)
-    renderPage(fileStore, true)
+    renderPage(fileStore)
     await screen.findByText('Import a CSV to see transactions here.')
 
     await fileStore.writeCSV('transactions/2026/2026-10.csv', parseCSV(OCT))
@@ -144,7 +121,7 @@ describe('Transactions with the import-wizard flag on', () => {
       'transactions/2026/2026-10.csv',
       parseCSV('Date,Category,Amount,Description\n2026-10-01,Uncategorized,-4.50,STARBUCKS #1'),
     )
-    renderPage(fileStore, true)
+    renderPage(fileStore)
     await screen.findByRole('button', { name: /Edit category for STARBUCKS/i })
     await user.click(screen.getByRole('button', { name: 'Apply rules to uncategorized' }))
     await user.click(await screen.findByRole('button', { name: 'Apply rules' }))
@@ -157,7 +134,7 @@ describe('Transactions with the import-wizard flag on', () => {
 
   it('moves the category editor up when it would run past the bottom of the viewport', async () => {
     const user = userEvent.setup()
-    renderPage(await seed(), true)
+    renderPage(await seed())
     const trigger = await screen.findByRole('button', { name: /Edit category for Blue Bottle/i })
     const bottom = window.innerHeight + 120
     const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (

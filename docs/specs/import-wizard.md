@@ -1,6 +1,6 @@
 # Import Wizard
 
-- **Status:** Built behind the `import-wizard` flag (off by default, 0% rollout); experimental. Slices PR1 to PR5 and the PR6 hardening, Playwright and docs have landed. Rollout and removal of the legacy path are still to do and are the owner's decision
+- **Status:** Built and shipped (flag removed 2026-11-22). Slices PR1 to PR5 and the PR6 hardening, Playwright and docs have landed. Sections that mention the flag or the legacy path record the original rollout design
 - **Owner:** Anindya
 - **Last updated:** 2026-11-08
 - **Priority:** 3 of 5 in the next-features list
@@ -291,10 +291,10 @@ Commit order: (1) best-effort `PreImportSnapshot` port (3.10), (2) capture an in
 - Always: an in-memory undo record restores the touched month files and category groups. It lives for the session and sits on the Result step as a persistent "Undo import" button (the 10 s `UndoToast` is too short for a bulk operation). It is disabled with an explanation if any touched month changed after the import.
 - `docs/specs/data-safety-net.md` now exists. Its `FileSystemFileStore` guard snapshots every overwritten file into `_backups/` automatically (`backupManager.snapshot(path, bytes, tag?)`), so once that feature ships, each month CSV this wizard overwrites is backed up with no wizard code. This spec still defines a port, NEW in `src/pages/budget/import/importStorage.ts`: `type PreImportSnapshot = (reason: 'import') => Promise<void>`, default a no-op, so the wizard does not depend on that spec shipping first. Data-safety-net may supply it (for example to tag the snapshots `pre-import`), or the port is deleted if the automatic snapshots are enough. A snapshot failure never blocks the import (a note appears on the Result step). `_backups/` layout and the restore UI are owned by data-safety-net.
 
-### 3.11 Rollout and back-compat
+### 3.11 Rollout (history) and back-compat
 
-- Flag `import-wizard`: `FLAGS.IMPORT_WIZARD = defineFlag('import-wizard', { type: 'boolean', default: false, description: '...', temporary: true })` in `src/flags/flagDefinitions.ts`; `feature-flags.json` entry `{"percentage": 0}` first. Owner enables through `flag-overrides`; then 100%; then the flag and the legacy path are removed.
-- Flag on, behavior that changes (listed so it can be reviewed): the filename no longer decides the month; blank-category rows are kept; importing merges instead of replaces; dates are validated strictly ("2026-02-30" is skipped); comma decimals work; per-month upload (E4) now shows a preview; a backdrop click no longer closes the dialog.
+- Flag `import-wizard`: `FLAGS.IMPORT_WIZARD = defineFlag('import-wizard', { type: 'boolean', default: false, description: '...', temporary: true })` in `src/flags/flagDefinitions.ts`; `feature-flags.json` entry `{"percentage": 0}` first. Rolled out at 100% on 2026-11-22, then the flag and the legacy path were removed.
+- Behavior that changed with the wizard (listed so it can be reviewed): the filename no longer decides the month; blank-category rows are kept; importing merges instead of replaces; dates are validated strictly ("2026-02-30" is skipped); comma decimals work; per-month upload (E4) now shows a preview; a backdrop click no longer closes the dialog.
 - Existing folders: no migration. Missing rules and formats files mean empty lists. Old app versions ignore the new JSON files in `budget/`.
 - Demo mode works because it uses `MemoryFileStore`.
 
@@ -393,7 +393,7 @@ Commit order: (1) best-effort `PreImportSnapshot` port (3.10), (2) capture an in
 - AC-37: Files over 50,000 data rows, 10 MB, or more than 20 files are refused with the messages in section 6. Nothing is parsed best-effort beyond the limit. Exactly 50,000 rows imports.
 - AC-38: "Save this format" writes `budget/import-formats.json`; the next file with the same signature skips the Columns step and shows "Using saved format: {name}" with a "Change" button.
 - AC-39: A corrupt or newer-schema rules or formats file does not stop import, shows a warning, and is never overwritten.
-- AC-40: With the flag off, E1-E5 behave exactly as today (existing tests unchanged). The `allowCsvImport` gate in `Data.tsx` is unchanged.
+- AC-40: (Retired with the flag, 2026-11-22.) With the flag off, E1-E5 behave exactly as today (existing tests unchanged). The `allowCsvImport` gate in `Data.tsx` is unchanged.
 - AC-41: E3 "Import CSV" in an empty year opens the wizard from any Budget view (fixes the silent no-op).
 - AC-42: PdfToCsv "Review in import wizard" passes its CSV text into the wizard without a download.
 
@@ -678,11 +678,11 @@ The PM draft put dedupe in slice 2 and merge later. Merge without dedupe doubles
 | PR | Contents | Flag state |
 | --- | --- | --- |
 | PR1 | Pure parsing core (`readFile` to `normalizeRows`), `plural`, `csvUtils` delimiter, fixtures, unit tests. No UI | n/a |
-| PR2 | Wizard shell, Columns and Review steps, split by month, fallback categories, dedupe plus append-merge, `commitImport`, in-memory undo, `PreImportSnapshot` port; E1-E3 | `import-wizard` default off |
+| PR2 | Wizard shell, Columns and Review steps, split by month, fallback categories, dedupe plus append-merge, `commitImport`, in-memory undo, `PreImportSnapshot` port; E1-E3 | `import-wizard` flag, default off |
 | PR3 | Saved formats (`import-formats.json`), "Using saved format", signature matching | off |
 | PR4 | Rules: storage, apply on import, `RulesDialog`, validation, `retargetRules` | off |
 | PR5 | Transactions integration (create rule, apply rules, Import button E7) plus E4, E5, E6 | off |
-| PR6 | Playwright and a11y hardening, docs (landed, flag still off). Then, as separate owner-driven steps: rollout 0% to owner to 100%, then delete the legacy path and flag | off, then removed |
+| PR6 | Playwright and a11y hardening, docs (landed). Rollout reached 100% and the flag was removed on 2026-11-22 | rolled out at 100%, then removed |
 
 PR6 notes. `e2e/import-wizard.spec.ts` covers the E1-E7 entry points, column mapping, saved formats, month split, merge and duplicates, rules, undo and its limits, the paused state for unreadable files, keyboard and accessibility checks (focus trap and restore, live region, accessible names, dark-mode contrast, 44px touch targets) and a no-foreign-host network check. It found and fixed three defects: the Review summary counted months that only held duplicates; the Transactions category filter hid rows in a category that appeared after an import or a rule (flag on only); and the category editor opened below the viewport, hiding "Always categorize merchants like this" (flag on only). Not done in PR6, by decision of the owner: changing the flag default or rollout, and deleting the legacy path.
 
@@ -792,7 +792,7 @@ None of these block PR1. D1 should be approved before PR2 starts.
 | D11 | Dark-mode primary button style? | Tinted style (`--accent-light` background, `--accent-text-dark` text, 7.48:1) because white on `--accent` is 3.68:1 in dark | No |
 | D12 | Surface legacy-hidden blank-category rows in existing months? | No. It would change existing totals. The wizard only protects new imports | No |
 | D13 | Add axe-core? | No. Keep RTL role queries and Playwright keyboard tests, plus a manual screen-reader pass | No |
-| D14 | Flag rollout? | 0% in `feature-flags.json`, owner enables through `flag-overrides`, then 100%, then delete flag and legacy path in PR6 | No |
+| D14 | Flag rollout? | 0% in `feature-flags.json`, owner enables through `flag-overrides`, then 100%, then delete flag and legacy path in PR6. Decided: rolled out at 100% on 2026-11-22, then the flag was removed | No |
 | D15 | Transfers and card payments? | Out of scope. Document the pattern: a rule to a category in the "Remove from Budget" group | No |
 | D16 | Hard cap of 50,000 rows and 10 MB, or best effort? | Hard cap with a clear message. Predictable beats slow and partial | No |
 | D17 | Delete the legacy path at graduation? | Yes, in PR6, in one pass (`CSVPreviewModal`, `useCSVUpload`, upload logic in `useDriveUpload`, `getCSVFormatHelp`) | No |

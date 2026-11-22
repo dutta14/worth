@@ -23,7 +23,7 @@
 | Summary cards | Show Total Income, Total Expenses, and Save Rate for the selected year. |
 | Category group manager | Create, rename, reorder, and move expense groups and categories, and merge categories. |
 | Detailed and aggregated tables | Review totals by category, group, month, quarter, or half-year. |
-| Monthly targets (flag) | Set a monthly target per expense group and compare it with actual spend in the aggregated table and on Home. Off by default. |
+| Monthly targets | Set a monthly target per expense group and compare it with actual spend in the aggregated table and on Home. |
 | Month drilldown | Inspect transaction-level detail for a month and edit categories inline. |
 | Cashflow charts | Visualize inflows, outflows, net cashflow, and annual source-to-spend flows. |
 | PDF → CSV modal | Open the lab conversion tool when the lab flag is enabled. |
@@ -43,11 +43,11 @@
 - **End state:** All reviewable files are processed and skipped files are summarized.
 - **Notes:** Canceling one preview does not cancel the remaining queue.
 
-### Import with the wizard (flag, off by default)
-- **Start:** With the `import-wizard` flag on, the same entry points (empty-year **Import CSV**, **Upload CSV**, **Bulk Upload**, the month-header menu, Drive drop, **PDF → CSV**, and **Import** on Transactions) open the **Import transactions** dialog instead of the filename-based preview.
+### Import with the wizard
+- **Start:** The same entry points (empty-year **Import CSV**, **Upload CSV**, **Bulk Upload**, the month-header menu, Drive drop, **PDF → CSV**, and **Import** on Transactions) open the **Import transactions** dialog instead of the filename-based preview.
 - **Steps:** 1. Choose one or more CSVs. 2. **Columns**: confirm the date, description and amount columns and whether negative numbers are spending (skipped when the file has the legacy `Date, Category, Amount` headers or a saved format matches). 3. **Review before importing**: see new, duplicate and skipped rows per month. 4. **Import**.
 - **End state:** Rows are appended to each month they belong to, duplicates are skipped, and **Undo import** restores the previous files while the touched months are unchanged. The result can be followed by **View in Transactions**.
-- **Notes:** The month comes from the row dates, not the filename. Saved column formats live in `budget/import-formats.json`; categorization rules in `budget/category-rules.json`. With the flag off the workflows above are unchanged. Full behavior: `docs/specs/import-wizard.md`.
+- **Notes:** The month comes from the row dates, not the filename. Saved column formats live in `budget/import-formats.json`; categorization rules in `budget/category-rules.json`. Full behavior: `docs/specs/import-wizard.md`.
 
 ### Add a one-off transaction manually
 - **Start:** User clicks **Add Transaction**.
@@ -57,7 +57,7 @@
 - **Notes:** The category must be chosen from existing non-removed categories.
 
 ### Set a monthly target for a group
-- **Start:** With the flag on, user opens **Spreadsheet**, **Aggregated**, **Expenses**.
+- **Start:** User opens **Spreadsheet**, **Aggregated**, **Expenses**.
 - **User intent:** Record how much to spend per month on a group and see how each period compares.
 - **Steps:** 1. Click **Set target** on a group row. 2. Type a monthly amount. 3. Press **Enter**.
 - **End state:** The target is saved to `budget/targets.json` and the row shows a verdict per period column.
@@ -198,10 +198,10 @@
 - **Edge cases:** Category labels can shorten within their own group, such as showing **Groceries** instead of a repeated group prefix.
 - **Related workflows:** Review a month in detail; Reorganize expense categories; Set a monthly target for a group.
 
-### Monthly targets (feature flag `category-budget-targets`, off by default)
+### Monthly targets
 - **What it is:** Two extra columns, **Monthly target** and **Vs target**, on the Expenses tab of the Aggregated table, plus one line on Home.
 - **Why it exists:** It lets the user say what they meant to spend per expense group and see over or under without doing the subtraction by eye.
-- **Who sees it:** Only users with the flag on (local override or rollout). With the flag off the page is unchanged and `budget/targets.json` is never read or written.
+- **Who sees it:** Everyone. `budget/targets.json` is only written when the user sets a target.
 - **Data shown:** The target per group and, for each period column, a verdict with an icon and text (**$120 over**, **$40 under**, **$80 left** while the period includes the current month, or **On target**), with a caption such as **8 of 12 months** when only some months have data. Home shows one line such as **October: over target in 2 of 5 groups** with a **See targets** link.
 - **Actions available:** Click a target to edit it, **Enter** to save, **Escape** to cancel. A blank value clears the target and **0** is a valid target.
 - **Default state:** No targets, so no verdicts and no Home line.
@@ -278,8 +278,8 @@
 ## Data and decisions
 - **User inputs captured:** Year selection, main view, time grouping, CSV files, column exclusions in preview, manual transaction date, description, amount, category, group names, group order, drag-and-drop placement, merge targets, drilldown category edits, drilldown filters, and sort choices.
 - **Derived values shown:** Annual income, annual expenses, save rate, group totals, category totals, grand totals, percentage shares, filtered drilldown subtotal, net cashflow by period, Sankey totals and percentages, and row and column counts in CSV preview.
-- **Saved choices / preferences:** Monthly targets per expense group (`budget/targets.json`, flag only), imported months, manually added transactions, category edits, group structure, merged categories, removed categories, and the stored budget year data.
-- **Cross-page impact:** Targets feed the Home spending line when the flag is on. Budget data updates shared savings information used elsewhere for goal progress and FI projection messaging. Imported budget files also appear in Drive and in backup and restore flows.
+- **Saved choices / preferences:** Monthly targets per expense group (`budget/targets.json`), imported months, manually added transactions, category edits, group structure, merged categories, removed categories, and the stored budget year data.
+- **Cross-page impact:** Targets feed the Home spending line. Budget data updates shared savings information used elsewhere for goal progress and FI projection messaging. Imported budget files also appear in Drive and in backup and restore flows.
 
 ## Open questions / known gaps
 - The removal-group language is split between **Remove from Budget** and **Removed (N)**, which may be confusing.

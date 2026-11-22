@@ -104,14 +104,8 @@ export const csvBytes = (name: string, text: string, encoding: BufferEncoding = 
   buffer: Buffer.from(text, encoding),
 })
 
-/** Registered after `seedBudget`, whose init script clears localStorage. */
-export async function enableImportWizard(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('flag-overrides', JSON.stringify({ 'import-wizard': true })))
-}
-
 export async function seedWizardEmpty(page: Page) {
   await seedEmptyBudget(page)
-  await enableImportWizard(page)
 }
 
 export interface WizardSeed {
@@ -120,7 +114,7 @@ export interface WizardSeed {
   files?: SeedEntry[]
 }
 
-/** Seeds month CSVs (keyed "MM", current year) and extra files, then turns the wizard on. */
+/** Seeds month CSVs (keyed "MM", current year) and extra files. */
 export async function seedWizardBudget(page: Page, seed: WizardSeed = {}) {
   const csvs: BudgetStore['csvs'] = {}
   for (const [month, csv] of Object.entries(seed.months ?? {})) {
@@ -131,7 +125,6 @@ export async function seedWizardBudget(page: Page, seed: WizardSeed = {}) {
     store: { csvs, configs: {}, years: [Y], categoryGroups: seed.groups ?? DEFAULT_GROUPS },
   })
   if (seed.files?.length) await seedFileStore(page, seed.files)
-  await enableImportWizard(page)
 }
 
 export const FOOD_GROUPS: CategoryGroup[] = [

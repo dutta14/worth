@@ -16,7 +16,7 @@ const questions = [
     id: 'faq-switch-devices',
     question: 'What if I switch devices?',
     answer:
-      'Copy your data folder to the new device. It contains standard JSON and CSV files that the app reads directly. You can also keep the folder in a synced location like iCloud Drive or Dropbox. Experimental, off by default: with the Data safety net feature flag on, the app notices when a file was changed on the other device, pauses saving to it, and asks whether to reload or keep your version.',
+      'Copy your data folder to the new device. It contains standard JSON and CSV files that the app reads directly. You can also keep the folder in a synced location like iCloud Drive or Dropbox. The Data safety net notices when a file was changed on the other device, pauses saving to it, and asks whether to reload or keep your version.',
   },
   {
     id: 'faq-export',
@@ -57,7 +57,7 @@ const questions = [
     id: 'faq-import-columns',
     question: 'Can I import a CSV from my bank?',
     answer:
-      'Yes. Experimental, off by default: with the Import wizard feature flag on, you choose which column is the date, description and amount, review the result, and import. Worth skips transactions it already has and can undo the import. With the flag off, the CSV needs Date, Category and Amount columns and a month in the filename.',
+      'Yes. You choose which column is the date, description and amount, review the result, and import. Worth skips transactions it already has and can undo the import.',
   },
   {
     id: 'faq-browser',

@@ -15,7 +15,7 @@ import {
 /**
  * Monthly check-in (docs/specs/monthly-check-in.md, sections 7.3 and 7.4).
  * The clock is pinned to 2026-11-08 unless a test says otherwise, so October is last month and
- * the current month is November. The feature flag is switched on through `flag-overrides`.
+ * the current month is November.
  */
 const TODAY = new Date('2026-11-08T12:00:00Z')
 const DETAILS_URL = '/worth/#/net-worth/dashboard/details'
@@ -119,18 +119,6 @@ test.describe('Monthly check-in: Home strip', () => {
     await expect(home.checkInTitle).toHaveText('November balances are ready to record')
     await expect(home.checkInCard).toContainText('Last balances are from October, 36 days ago.')
     await expect(home.checkInCard).toHaveClass(/checkin-card--stale/)
-  })
-
-  test('is hidden with the flag off and leaves the Net Worth card as it was', async ({ page }) => {
-    await seedCheckIn(page, { balances: PARTIAL_OCTOBER, flag: false })
-    await page.clock.setFixedTime(TODAY)
-    const home = new HomePage(page)
-    await home.goto()
-
-    await expect(home.greeting).toBeVisible()
-    await expect(home.checkInCard).toHaveCount(0)
-    await expect(home.partialBadge).toHaveCount(0)
-    await expect(home.greeting).not.toHaveAttribute('tabindex', /.*/)
   })
 
   test('E2E-8: demo mode reads as complete', async ({ page }) => {

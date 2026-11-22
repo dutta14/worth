@@ -2,8 +2,6 @@ import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MonthPicker from '../../components/MonthPicker'
 import FilterPanel, { FilterCategory, FilterState } from '../../components/FilterPanel'
 import { Profile } from '../../hooks/useProfile'
-import { FLAGS } from '../../flags/flagDefinitions'
-import { useFlag } from '../../flags/useFlag'
 import { plural } from '../../utils/plural'
 import { currentMonthKey, getMonthStatus, getPartialMonth, isMonthKey, monthLabel, type MonthKey } from './monthStatus'
 import PartialMonthBadge from './components/PartialMonthBadge'
@@ -27,7 +25,7 @@ interface BalanceDetailsProps {
   balanceMap: Map<string, number>
   profile: Profile
   onSaveMonth?: (month: string, values: Record<string, number>) => void
-  /** Month to open in edit mode, requested by the Home check-in strip. Ignored with the check-in flag off. */
+  /** Month to open in edit mode, requested by the Home check-in strip. */
   startCheckInMonth?: MonthKey | null
   onCheckInStarted?: () => void
 }
@@ -279,7 +277,6 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
   startCheckInMonth,
   onCheckInStarted,
 }) => {
-  const checkInEnabled = useFlag(FLAGS.MONTHLY_CHECK_IN)
   const ownerLabels = useMemo(() => getOwnerLabels(profile), [profile])
   const [selectedMonth, setSelectedMonth] = useState(allMonths[0] ?? '')
   const [isAddMonthOpen, setIsAddMonthOpen] = useState(false)
@@ -426,10 +423,10 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
   useEffect(() => {
     const wasEditing = wasEditingRef.current
     wasEditingRef.current = isEditingMode
-    if (checkInEnabled && wasEditing && !isEditingMode) {
+    if (wasEditing && !isEditingMode) {
       detailsRef.current?.querySelector<HTMLButtonElement>('.data-add-entry-btn')?.focus()
     }
-  }, [checkInEnabled, isEditingMode])
+  }, [isEditingMode])
 
   const selectedMonthIndex = selectedMonth ? allMonths.indexOf(selectedMonth) : -1
   const previousMonth = selectedMonthIndex >= 0 ? allMonths[selectedMonthIndex + 1] : undefined
@@ -556,18 +553,18 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
 
   const partialMonth = useMemo(
     () =>
-      checkInEnabled && !editMode && selectedMonth !== '' && selectedMonth === latestMonth
+      !editMode && selectedMonth !== '' && selectedMonth === latestMonth
         ? getPartialMonth(accounts, balances, latestMonth)
         : null,
-    [accounts, balances, checkInEnabled, editMode, latestMonth, selectedMonth],
+    [accounts, balances, editMode, latestMonth, selectedMonth],
   )
 
   const selectedSortLookup = editMode && latestMonth ? { month: latestMonth, balanceMap } : selectedBalanceLookup
 
   const getChangeDisplay = (currentBalance: number | undefined, previousBalance: number | undefined) => {
     if (editMode || !previousMonth || previousBalance === undefined) return null
-    // With check-in on, no balance this month means nothing to compare, not a drop to zero.
-    if (checkInEnabled && currentBalance === undefined) return null
+    // No balance this month means nothing to compare, not a drop to zero.
+    if (currentBalance === undefined) return null
 
     const change = (currentBalance ?? 0) - previousBalance
 
@@ -619,8 +616,8 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
 
     const values: Record<string, string> = {}
     const copied: Record<string, true> = {}
-    // With check-in on, never copy from a future-dated month the user has not confirmed.
-    const sourceMonth = checkInEnabled ? allMonths.find(m => isEarlierRecordedMonth(m, month, new Date())) : latestMonth
+    // Never copy from a future-dated month the user has not confirmed.
+    const sourceMonth = allMonths.find(m => isEarlierRecordedMonth(m, month, new Date()))
 
     activeAccounts.forEach(account => {
       const previousValue =
@@ -671,10 +668,10 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
   )
 
   useEffect(() => {
-    if (!checkInEnabled || !startCheckInMonth) return
+    if (!startCheckInMonth) return
     if (!editMode) startCheckIn(startCheckInMonth)
     onCheckInStarted?.()
-  }, [checkInEnabled, editMode, onCheckInStarted, startCheckIn, startCheckInMonth])
+  }, [editMode, onCheckInStarted, startCheckIn, startCheckInMonth])
 
   const handleSaveEditMode = () => {
     if (!editMode) return
@@ -691,16 +688,14 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
     }, {})
 
     onSaveMonth?.(editMode.month, nextValues)
-    if (checkInEnabled) {
-      const savedEntries = Object.entries(nextValues).map(([accountId, balance]) => ({
-        id: -1,
-        accountId: Number(accountId),
-        month: editMode.month,
-        balance,
-      }))
-      const status = getMonthStatus(accounts, [...balances, ...savedEntries], editMode.month, editMode.month)
-      setSaveStatus(buildSaveAnnouncement(editMode.month, status.expected.length, status.missing.length))
-    }
+    const savedEntries = Object.entries(nextValues).map(([accountId, balance]) => ({
+      id: -1,
+      accountId: Number(accountId),
+      month: editMode.month,
+      balance,
+    }))
+    const status = getMonthStatus(accounts, [...balances, ...savedEntries], editMode.month, editMode.month)
+    setSaveStatus(buildSaveAnnouncement(editMode.month, status.expected.length, status.missing.length))
     setSelectedMonth(editMode.month)
     setEditMode(null)
   }
@@ -717,7 +712,7 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
   const editMonth = editMode?.month
   const lastRecordedByAccount = useMemo(() => {
     const latest = new Map<number, LastRecorded>()
-    if (!checkInEnabled || !editMonth) return latest
+    if (!editMonth) return latest
     for (const entry of balances) {
       if (!isEarlierRecordedMonth(entry.month, editMonth, new Date())) continue
       const known = latest.get(entry.accountId)
@@ -725,7 +720,7 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
         latest.set(entry.accountId, { month: entry.month, balance: entry.balance })
     }
     return latest
-  }, [balances, checkInEnabled, editMonth])
+  }, [balances, editMonth])
 
   const renderBalanceInput = (account: Account, mode: EditMode, entry: { noteId?: string; blank?: boolean } = {}) => {
     const accountKey = String(account.id)
@@ -791,11 +786,7 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
           {renderChangeLine(getDisplayBalance(account), getBalanceForMonth(account, previousBalanceLookup))}
         </div>
         {isEditableAccount ? (
-          checkInEnabled ? (
-            renderCheckInEntry(account, editMode)
-          ) : (
-            renderBalanceInput(account, editMode)
-          )
+          renderCheckInEntry(account, editMode)
         ) : (
           <span className="account-card__value">{formatSelectedValue(getDisplayBalance(account))}</span>
         )}
@@ -893,22 +884,16 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
         </div>
         {editMode ? (
           <div className="data-details-entry-banner" aria-live="polite">
-            {checkInEnabled ? (
-              <>
-                <span>
-                  {allMonths.includes(editMode.month)
-                    ? `Adding the missing balances for ${formatLongMonth(editMode.month)}`
-                    : `Entering balances for ${formatLongMonth(editMode.month)}`}
-                </span>
-                {editMode.copiedFrom ? (
-                  <span className="data-details-entry-banner__detail">
-                    Amounts are copied from {formatLongMonth(editMode.copiedFrom)}. Update each one, then save.
-                  </span>
-                ) : null}
-              </>
-            ) : (
-              `Entering balances for ${formatLongMonth(editMode.month)}`
-            )}
+            <span>
+              {allMonths.includes(editMode.month)
+                ? `Adding the missing balances for ${formatLongMonth(editMode.month)}`
+                : `Entering balances for ${formatLongMonth(editMode.month)}`}
+            </span>
+            {editMode.copiedFrom ? (
+              <span className="data-details-entry-banner__detail">
+                Amounts are copied from {formatLongMonth(editMode.copiedFrom)}. Update each one, then save.
+              </span>
+            ) : null}
           </div>
         ) : (
           <div className="data-details-summary-controls">
@@ -978,11 +963,9 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
         )}
       </div>
 
-      {checkInEnabled ? (
-        <p role="status" className="data-details-save-status">
-          {saveStatus}
-        </p>
-      ) : null}
+      <p role="status" className="data-details-save-status">
+        {saveStatus}
+      </p>
 
       <div className="data-details-owner-grid">
         <section className="data-details-owner-card" aria-label={`${ownerLabels.primary} details`}>
@@ -1059,19 +1042,13 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
       </div>
 
       {editMode ? (
-        <div className={`data-details-entry-footer${checkInEnabled ? ' data-details-entry-footer--check-in' : ''}`}>
-          {checkInEnabled ? (
-            <>
-              <p className="data-details-entry-footer-summary">
-                {blankCount > 0
-                  ? `${accountsLabel(blankCount)} still blank. Blank accounts are not saved.`
-                  : 'Every account has a balance.'}
-              </p>
-              <div className="data-details-entry-footer-actions">{footerButtons}</div>
-            </>
-          ) : (
-            footerButtons
-          )}
+        <div className="data-details-entry-footer">
+          <p className="data-details-entry-footer-summary">
+            {blankCount > 0
+              ? `${accountsLabel(blankCount)} still blank. Blank accounts are not saved.`
+              : 'Every account has a balance.'}
+          </p>
+          <div className="data-details-entry-footer-actions">{footerButtons}</div>
         </div>
       ) : null}
     </div>

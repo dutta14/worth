@@ -45,8 +45,7 @@ type Panel = 'rules' | 'apply' | null
 
 /**
  * The import-wizard additions to the Transactions toolbar: Import, Apply rules to uncategorized and Rules, plus
- * the dialogs they open. Rendered only when the `import-wizard` flag is on, so the flag-off page never mounts it.
- * It keeps its own snapshot of the budget (refreshed on every change) because the page's cache is not shared.
+ * the dialogs they open. It keeps its own snapshot of the budget (refreshed on every change) because the page's cache is not shared.
  */
 const TransactionImportTools: FC<TransactionImportToolsProps> = ({
   transactions,

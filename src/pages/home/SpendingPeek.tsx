@@ -5,8 +5,6 @@ import { formatMonth } from '../data/types'
 import { parseCSV } from '../budget/utils/csvParser'
 import { getIncomeGroups, loadBudgetStore, type BudgetStore } from '../budget/utils/budgetStorage'
 import type { FileStore } from '../../utils/fileStoreTypes'
-import { useFlag } from '../../flags/useFlag'
-import { FLAGS } from '../../flags/flagDefinitions'
 import SpendingPeekTargets from './SpendingPeekTargets'
 import { useSpendingTargetsLine } from './useSpendingTargetsLine'
 
@@ -358,8 +356,7 @@ const SpendingPeek: FC<SpendingPeekProps> = ({
   const [storeLoaded, setStoreLoaded] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
-  const targetsOn = useFlag(FLAGS.CATEGORY_BUDGET_TARGETS)
-  const targetsLine = useSpendingTargetsLine(fileStore, targetsOn, budgetStore)
+  const targetsLine = useSpendingTargetsLine(fileStore, budgetStore)
 
   const handleSelectMode = useCallback((next: SpendingMode) => {
     setMode(next)

@@ -4,8 +4,6 @@ import { useEffect } from 'react'
 import type { FC, ReactNode } from 'react'
 import { SafetyNetProvider, useSafetyNet } from './SafetyNetContext'
 import { FileStoreContext } from './FileStoreContext'
-import { FlagContext } from '../flags/FlagContext'
-import type { FlagContextValue } from '../flags/FlagContext'
 import { MemoryFileStore } from '../utils/memoryFileStore'
 import { EMPTY_SAFETY_SNAPSHOT } from '../utils/safetyNet'
 import type { BackupEntry, CorruptAction, SafetySnapshot } from '../utils/safetyNet'
@@ -43,15 +41,11 @@ const makeFakeStore = (hasHandle = true) => {
   return { store, setSnapshot, subscribers }
 }
 
-const flagValue = (on: boolean): FlagContextValue => ({ resolveFlag: () => on }) as unknown as FlagContextValue
-
-const makeWrapper = (store: FileStore, flagOn: boolean, pickFolder = vi.fn(async () => {})) => {
+const makeWrapper = (store: FileStore, pickFolder = vi.fn(async () => {})) => {
   const Wrapper: FC<{ children: ReactNode }> = ({ children }) => (
-    <FlagContext.Provider value={flagValue(flagOn)}>
-      <FileStoreContext.Provider value={{ ...makeFileStoreValue(store), pickFolder }}>
-        <SafetyNetProvider>{children}</SafetyNetProvider>
-      </FileStoreContext.Provider>
-    </FlagContext.Provider>
+    <FileStoreContext.Provider value={{ ...makeFileStoreValue(store), pickFolder }}>
+      <SafetyNetProvider>{children}</SafetyNetProvider>
+    </FileStoreContext.Provider>
   )
   return { Wrapper, pickFolder }
 }
@@ -76,20 +70,9 @@ describe('SafetyNetProvider', () => {
   })
 
   describe('stays inert', () => {
-    it('when the flag is off', () => {
-      const { store } = makeFakeStore()
-      const addSpy = vi.spyOn(window, 'addEventListener')
-      const { Wrapper } = makeWrapper(store, false)
-      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
-      expect(result.current.enabled).toBe(false)
-      expect(store.configureSafety).not.toHaveBeenCalled()
-      expect(addSpy).not.toHaveBeenCalledWith('pagehide', expect.anything())
-      expect(addSpy).not.toHaveBeenCalledWith('focus', expect.anything())
-    })
-
     it('for a memory store (demo and e2e modes)', () => {
       const addSpy = vi.spyOn(window, 'addEventListener')
-      const { Wrapper } = makeWrapper(new MemoryFileStore(), true)
+      const { Wrapper } = makeWrapper(new MemoryFileStore())
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       expect(result.current.enabled).toBe(false)
       expect(addSpy).not.toHaveBeenCalledWith('pagehide', expect.anything())
@@ -98,7 +81,7 @@ describe('SafetyNetProvider', () => {
 
     it('before a folder is connected', () => {
       const { store } = makeFakeStore(false)
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       expect(result.current.enabled).toBe(false)
       expect(store.configureSafety).not.toHaveBeenCalled()
@@ -107,7 +90,7 @@ describe('SafetyNetProvider', () => {
     it('while demo mode is active', () => {
       localStorage.setItem('_demoMode', '1')
       const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       expect(result.current.enabled).toBe(false)
       expect(store.configureSafety).not.toHaveBeenCalled()
@@ -117,7 +100,7 @@ describe('SafetyNetProvider', () => {
   describe('when enabled', () => {
     it('turns the safety net on and off with the provider lifecycle', () => {
       const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result, unmount } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       expect(result.current.enabled).toBe(true)
       expect(store.configureSafety).toHaveBeenCalledTimes(1)
@@ -128,7 +111,7 @@ describe('SafetyNetProvider', () => {
 
     it('flushes pending writes on pagehide', () => {
       const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       window.dispatchEvent(new Event('pagehide'))
       expect(store.flush).toHaveBeenCalledTimes(1)
@@ -136,7 +119,7 @@ describe('SafetyNetProvider', () => {
 
     it('re-renders consumers when the store snapshot changes', () => {
       const { store, setSnapshot } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       expect(result.current.snapshot).toBe(EMPTY_SAFETY_SNAPSHOT)
       const failed: SafetySnapshot = {
@@ -152,7 +135,7 @@ describe('SafetyNetProvider', () => {
 
     it('unsubscribes from the store on unmount', () => {
       const { store, subscribers } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { unmount } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       expect(subscribers.size).toBe(1)
       unmount()
@@ -161,14 +144,14 @@ describe('SafetyNetProvider', () => {
 
     it('renders its children', () => {
       const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       render(<div>child content</div>, { wrapper: Wrapper })
       expect(screen.getByText('child content')).toBeInTheDocument()
     })
 
     it('delegates retryFailed to the store', async () => {
       const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await act(() => result.current.retryFailed())
       expect(store.retryFailed).toHaveBeenCalledTimes(1)
@@ -176,7 +159,7 @@ describe('SafetyNetProvider', () => {
 
     it('reports whether anything still fails after the retry', async () => {
       const { store, setSnapshot } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await expect(result.current.retryFailed()).resolves.toBe(false)
       act(() =>
@@ -204,14 +187,14 @@ describe('SafetyNetProvider', () => {
     it('lists the copies the store reports', async () => {
       const { store } = makeFakeStore()
       store.listBackups.mockResolvedValue([entry])
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await expect(result.current.listBackups()).resolves.toEqual([entry])
     })
 
     it('restores through the store, then tells the app to refresh its data', async () => {
       const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       const changed = vi.fn()
       window.addEventListener('data-changed', changed)
@@ -226,7 +209,7 @@ describe('SafetyNetProvider', () => {
     it('does not refresh the app when the restore fails', async () => {
       const { store } = makeFakeStore()
       store.restoreBackup.mockRejectedValue(new Error('disk gone'))
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       const changed = vi.fn()
       window.addEventListener('data-changed', changed)
@@ -238,8 +221,8 @@ describe('SafetyNetProvider', () => {
     })
 
     it('is inert when the net is off', async () => {
-      const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, false)
+      const { store } = makeFakeStore(false)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       const changed = vi.fn()
       window.addEventListener('data-changed', changed)
@@ -273,7 +256,7 @@ describe('SafetyNetProvider', () => {
     it('restoring a backup tells the app to refresh its data', async () => {
       const { store } = makeFakeStore()
       store.resolveCorrupt.mockResolvedValue(entry)
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       const changed = vi.fn()
       window.addEventListener('data-changed', changed)
@@ -287,7 +270,7 @@ describe('SafetyNetProvider', () => {
 
     it('starting fresh does not need a refresh', async () => {
       const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       const changed = vi.fn()
       window.addEventListener('data-changed', changed)
@@ -301,7 +284,7 @@ describe('SafetyNetProvider', () => {
     it('passes a failure on to the caller without refreshing', async () => {
       const { store } = makeFakeStore()
       store.resolveCorrupt.mockRejectedValue(new Error('disk gone'))
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       const changed = vi.fn()
       window.addEventListener('data-changed', changed)
@@ -313,8 +296,8 @@ describe('SafetyNetProvider', () => {
     })
 
     it('is inert when the net is off', async () => {
-      const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, false)
+      const { store } = makeFakeStore(false)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
 
       await expect(result.current.resolveCorrupt('accounts.json', 'restore-latest')).resolves.toBeNull()
@@ -331,7 +314,7 @@ describe('SafetyNetProvider', () => {
 
     const setup = () => {
       const fake = makeFakeStore()
-      const { Wrapper } = makeWrapper(fake.store, true)
+      const { Wrapper } = makeWrapper(fake.store)
       const view = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       return { ...fake, ...view }
     }
@@ -408,7 +391,7 @@ describe('SafetyNetProvider', () => {
 
     it('requests permission and stays not-denied when granted', async () => {
       const { store, setSnapshot } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       act(() => setSnapshot(permissionLost))
       await act(() => result.current.reconnect())
@@ -419,7 +402,7 @@ describe('SafetyNetProvider', () => {
     it('marks reconnect as denied when the user declines, and resets once access returns', async () => {
       const { store, setSnapshot } = makeFakeStore()
       store.requestReconnect.mockResolvedValue('denied')
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       act(() => setSnapshot(permissionLost))
       await act(() => result.current.reconnect())
@@ -432,7 +415,7 @@ describe('SafetyNetProvider', () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       const { store } = makeFakeStore()
       store.requestReconnect.mockRejectedValue(new Error('no gesture'))
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await act(() => result.current.reconnect())
       expect(result.current.reconnectDenied).toBe(true)
@@ -440,7 +423,7 @@ describe('SafetyNetProvider', () => {
     })
 
     it('does nothing when inert', async () => {
-      const { Wrapper } = makeWrapper(new MemoryFileStore(), true)
+      const { Wrapper } = makeWrapper(new MemoryFileStore())
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await act(() => result.current.reconnect())
       expect(result.current.reconnectDenied).toBe(false)
@@ -450,7 +433,7 @@ describe('SafetyNetProvider', () => {
   describe('chooseFolderAgain', () => {
     it('opens the folder picker', async () => {
       const { store } = makeFakeStore()
-      const { Wrapper, pickFolder } = makeWrapper(store, true)
+      const { Wrapper, pickFolder } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await act(() => result.current.chooseFolderAgain())
       expect(pickFolder).toHaveBeenCalledTimes(1)
@@ -459,7 +442,7 @@ describe('SafetyNetProvider', () => {
     it('stays quiet when the picker is dismissed', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true, vi.fn().mockRejectedValue(new DOMException('x', 'AbortError')))
+      const { Wrapper } = makeWrapper(store, vi.fn().mockRejectedValue(new DOMException('x', 'AbortError')))
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await act(() => result.current.chooseFolderAgain())
       expect(errorSpy).not.toHaveBeenCalled()
@@ -468,7 +451,7 @@ describe('SafetyNetProvider', () => {
     it('logs unexpected picker errors', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true, vi.fn().mockRejectedValue(new Error('unsupported-browser')))
+      const { Wrapper } = makeWrapper(store, vi.fn().mockRejectedValue(new Error('unsupported-browser')))
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await act(() => result.current.chooseFolderAgain())
       expect(errorSpy).toHaveBeenCalledWith('Choose folder failed:', expect.any(Error))
@@ -483,7 +466,7 @@ describe('SafetyNetProvider', () => {
 
     it('keeps this version without remounting and posts a status notice', async () => {
       const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await act(() => result.current.resolveExternal('keep'))
       expect(store.keepLocal).toHaveBeenCalledTimes(1)
@@ -494,7 +477,7 @@ describe('SafetyNetProvider', () => {
     it('rejects and posts no notice when keeping fails', async () => {
       const { store } = makeFakeStore()
       store.keepLocal.mockRejectedValue(new Error('disk gone'))
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await expect(act(() => result.current.resolveExternal('keep'))).rejects.toThrow('disk gone')
       expect(result.current.notice).toBe('')
@@ -502,7 +485,7 @@ describe('SafetyNetProvider', () => {
 
     it('reloads from disk, refreshes balances, remounts the children and moves focus to the page', async () => {
       const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       let mounts = 0
       const Counter: FC = () => {
         const { resolveExternal } = useSafetyNet()
@@ -542,7 +525,7 @@ describe('SafetyNetProvider', () => {
     it('refreshes balances but does not remount when the reload fails', async () => {
       const { store } = makeFakeStore()
       store.reloadFromDisk.mockRejectedValue(new Error('no backup'))
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       const changed = vi.fn()
       window.addEventListener('data-changed', changed)
@@ -555,7 +538,7 @@ describe('SafetyNetProvider', () => {
     it('clears the notice after a second', async () => {
       vi.useFakeTimers()
       const { store } = makeFakeStore()
-      const { Wrapper } = makeWrapper(store, true)
+      const { Wrapper } = makeWrapper(store)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await act(() => result.current.resolveExternal('keep'))
       expect(result.current.notice).not.toBe('')
@@ -566,7 +549,7 @@ describe('SafetyNetProvider', () => {
     })
 
     it('does nothing when inert', async () => {
-      const { Wrapper } = makeWrapper(new MemoryFileStore(), true)
+      const { Wrapper } = makeWrapper(new MemoryFileStore())
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await act(() => result.current.resolveExternal('reload'))
       expect(result.current.notice).toBe('')

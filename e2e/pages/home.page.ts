@@ -18,7 +18,7 @@ export class HomePage {
   readonly setupStepsCurrent: Locator
   readonly setupStepCta: Locator
 
-  // Monthly check-in strip (flag: monthly-check-in)
+  // Monthly check-in strip
   readonly checkInCard: Locator
   readonly checkInTitle: Locator
   readonly checkInStatus: Locator

@@ -106,7 +106,7 @@ test.describe('Drive — File Manager E2E', () => {
   })
 
   test.describe('Upload flow', () => {
-    test('5. Drag-and-drop upload triggers CSVPreviewModal with parsed content', async ({ page }) => {
+    test('5. Drag-and-drop upload opens the import wizard on the review step with parsed content', async ({ page }) => {
       await seedDriveData(page)
       const drive = new DrivePage(page)
       // Drop zone is only rendered when !isRoot, so navigate into a folder.
@@ -115,34 +115,27 @@ test.describe('Drive — File Manager E2E', () => {
 
       await drive.dropCsvFile(APR_2024_FILENAME, APR_2024_CSV)
 
-      await expect(drive.previewModal).toBeVisible()
-      // Month label is derived from the filename's YYYY-MM (Apr 2024).
-      await expect(drive.previewModalHeading).toHaveText('Preview — Apr 2024')
-      // Modal meta line reports 2 rows × 4 columns from APR_2024_CSV.
-      await expect(drive.previewModal.locator('.csv-preview-meta')).toHaveText('2 rows · 4 columns')
-      // Header columns and a row value from the dropped file are rendered.
-      const headerTexts = await drive.previewModal.locator('.csv-preview-table thead th .csv-col-name').allInnerTexts()
-      expect(headerTexts).toEqual(['Date', 'Category', 'Amount', 'Description'])
-      await expect(drive.previewModal.locator('.csv-preview-table tbody')).toContainText('Trader Joes')
-      await expect(drive.previewModal.locator('.csv-preview-table tbody')).toContainText('8100')
+      await expect(drive.importDialog).toBeVisible()
+      await expect(drive.importDialog.getByRole('heading', { name: 'Review before importing' })).toBeVisible()
+      // The wizard reads the month from the rows (APR_2024_CSV has two April 2024 rows).
+      await expect(drive.importDialog).toContainText('2 new transactions across 1 month')
+      await expect(drive.importDialog).toContainText('Apr 2024')
+      await expect(drive.importDialog.locator('tbody')).toContainText('Trader Joes')
     })
 
-    test('6. File upload via hidden input also triggers the import preview flow', async ({ page }) => {
+    test('6. File upload via hidden input also opens the import wizard', async ({ page }) => {
       await seedDriveData(page)
       const drive = new DrivePage(page)
       // Different entry point than test 5 (setInputFiles, not synthesized
-      // DataTransfer drop) — but the rendered preview content must match.
+      // DataTransfer drop) — but the review content must match.
       await drive.goto('budget/2024')
       await expect(drive.fileInput).toHaveCount(1)
 
       await drive.uploadCsvViaInput(APR_2024_FILENAME, APR_2024_CSV)
 
-      await expect(drive.previewModal).toBeVisible()
-      await expect(drive.previewModalHeading).toHaveText('Preview — Apr 2024')
-      await expect(drive.previewModal.locator('.csv-preview-meta')).toHaveText('2 rows · 4 columns')
-      const headerTexts = await drive.previewModal.locator('.csv-preview-table thead th .csv-col-name').allInnerTexts()
-      expect(headerTexts).toEqual(['Date', 'Category', 'Amount', 'Description'])
-      await expect(drive.previewModal.locator('.csv-preview-table tbody')).toContainText('Trader Joes')
+      await expect(drive.importDialog).toBeVisible()
+      await expect(drive.importDialog).toContainText('2 new transactions across 1 month')
+      await expect(drive.importDialog.locator('tbody')).toContainText('Trader Joes')
     })
   })
 

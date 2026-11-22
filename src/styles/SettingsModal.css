@@ -1401,24 +1401,6 @@ body.dark .ghsync-mini-btn {
   margin-top: 0.75rem;
 }
 
-.settings-feature-previews {
-  margin-top: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.settings-subheading {
-  margin: 0;
-  font-size: var(--fs-md);
-  font-weight: var(--fw-semibold, 600);
-  color: var(--color-text);
-}
-
-.settings-feature-previews-reset {
-  margin-top: 0.25rem;
-}
-
 .settings-data-actions {
   display: flex;
   gap: 0.5rem;

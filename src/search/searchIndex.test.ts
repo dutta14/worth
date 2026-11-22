@@ -26,6 +26,7 @@ describe('buildIndex', () => {
     // Verify known static pages — exhaustive list (no Tools page)
     expect(pages.map(p => p.label).sort()).toEqual([
       'Allocation',
+      'Annual Review',
       'Cashflow',
       'Drive',
       'Growth',
@@ -426,16 +427,15 @@ describe('PDF → CSV search index entry', () => {
   })
 })
 
-/* ─── Annual Review entry (annual-review flag) ─── */
+/* ─── Annual Review entry ─── */
 
 describe('Annual Review search entry', () => {
-  it('is absent unless the flag is on', () => {
-    expect(buildIndex().some(i => i.id === 'page-annual-review')).toBe(false)
-    expect(buildIndex({ annualReviewEnabled: false }).some(i => i.id === 'page-annual-review')).toBe(false)
+  it('is always part of the index', () => {
+    expect(buildIndex().some(i => i.id === 'page-annual-review')).toBe(true)
   })
 
-  it('is a page that opens the review route when the flag is on', () => {
-    const entry = buildIndex({ annualReviewEnabled: true }).find(i => i.id === 'page-annual-review')
+  it('is a page that opens the review route', () => {
+    const entry = buildIndex().find(i => i.id === 'page-annual-review')
 
     expect(entry).toMatchObject({
       category: 'page',
@@ -448,7 +448,7 @@ describe('Annual Review search entry', () => {
   it.each(['year in review', 'year end', 'yearly', 'savings rate', 'top spending', 'print', 'csv'])(
     'is found by the keyword "%s"',
     keyword => {
-      const groups = search(buildIndex({ annualReviewEnabled: true }), keyword)
+      const groups = search(buildIndex(), keyword)
 
       expect(groups.flatMap(g => g.items).map(i => i.id)).toContain('page-annual-review')
     },

@@ -170,7 +170,7 @@ describe('AnnualReview header', () => {
     renderPage('/net-worth/review/2025')
 
     const print = await screen.findByRole('button', { name: 'Print or save as PDF' })
-    expect(print).toBeEnabled()
+    await waitFor(() => expect(print).toBeEnabled())
     expect(screen.getByRole('button', { name: 'Download CSV' })).toBeEnabled()
   })
 })

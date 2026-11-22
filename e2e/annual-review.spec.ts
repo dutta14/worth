@@ -4,8 +4,7 @@ import { NavigationPage } from './pages/navigation.page'
 import { BALANCES, seedAnnualReview, seedEmptyReview } from './fixtures/annual-review.fixtures'
 
 /**
- * Annual Review (docs/specs/annual-review.md, section 7.4). The flag stays off by default; every test here turns
- * it on with the `flag-overrides` local override, except the flag-off check. See the fixtures file for the data.
+ * Annual Review (docs/specs/annual-review.md, section 7.4). See the fixtures file for the data.
  */
 
 const FLAG_FETCH = 'https://api.github.com/repos/dutta14/worth/contents/feature-flags.json'
@@ -17,18 +16,6 @@ const readStat = async (review: AnnualReviewPage, section: string, label: string
   review.stat(section, label).locator('dd').first()
 
 test.describe('Annual Review', () => {
-  test('flag off: no Review tab and the route falls back to the Wealth dashboard', async ({ page }) => {
-    await seedAnnualReview(page, { flag: false })
-    const review = new AnnualReviewPage(page)
-
-    await review.goto('/2025')
-
-    await expect(page).toHaveURL(/#\/net-worth\/dashboard/)
-    await expect(review.tabBar.getByRole('link', { name: 'Dashboard' })).toBeVisible()
-    await expect(review.reviewTab).toHaveCount(0)
-    await expect(review.title).toHaveCount(0)
-  })
-
   test('opens from the fourth Wealth tab on the default year and keeps Wealth active in the sidebar', async ({
     page,
   }) => {

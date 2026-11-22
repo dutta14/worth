@@ -7,9 +7,6 @@ import { makeAccount, makeBalanceEntry } from '../../test/factories'
 import type { Profile } from '../../hooks/useProfile'
 import type { Account, BalanceEntry } from './types'
 
-let mockFlag = true
-vi.mock('../../flags/useFlag', () => ({ useFlag: () => mockFlag }))
-
 const profile: Profile = { name: 'Alex', avatarDataUrl: '', birthday: '' }
 
 const accounts: Account[] = [
@@ -86,10 +83,6 @@ const RequestHarness = ({ balances }: { balances: BalanceEntry[] }) => {
     </>
   )
 }
-
-beforeEach(() => {
-  mockFlag = true
-})
 
 describe('BalanceDetails check-in: partial month', () => {
   it('opens edit mode for the requested month and announces the partial banner', async () => {
@@ -416,55 +409,6 @@ describe('BalanceDetails check-in: guards', () => {
   })
 })
 
-describe('BalanceDetails with the monthly-check-in flag off', () => {
-  beforeEach(() => {
-    mockFlag = false
-  })
-
-  it('ignores a check-in request and leaves the request unconsumed', () => {
-    const onCheckInStarted = vi.fn()
-    render(<Harness balances={septemberToOctober} startCheckInMonth="2026-10" onCheckInStarted={onCheckInStarted} />)
-
-    expect(screen.getByRole('button', { name: '+ Add Entry' })).toBeVisible()
-    expect(screen.queryByRole('textbox', { name: 'Checking balance' })).not.toBeInTheDocument()
-    expect(onCheckInStarted).not.toHaveBeenCalled()
-  })
-
-  it('keeps the plain edit mode: one-line banner, no captions, no status region, no footer summary', async () => {
-    const user = userEvent.setup()
-    const onSaveMonth = vi.fn()
-    render(<Harness balances={completeSeptember} onSaveMonth={onSaveMonth} />)
-
-    await user.click(screen.getByRole('button', { name: '+ Add Entry' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-
-    expect(screen.getByText('Entering balances for October 2026')).toBeVisible()
-    expect(screen.queryByText(/copied from/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/still blank|Every account has a balance/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Checking balance' })).not.toHaveAttribute('aria-describedby')
-
-    await user.clear(screen.getByRole('textbox', { name: 'Roth IRA balance' }))
-    expect(screen.queryByText('No balance yet')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Save' }))
-
-    expect(onSaveMonth).toHaveBeenCalledWith('2026-10', { '1': 1000, '2': 2000 })
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
-  })
-
-  it('renders the footer buttons directly inside the footer', async () => {
-    const user = userEvent.setup()
-    render(<Harness balances={completeSeptember} />)
-
-    await user.click(screen.getByRole('button', { name: '+ Add Entry' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-
-    const save = screen.getByRole('button', { name: 'Save' })
-    expect(save.parentElement).toHaveClass('data-details-entry-footer')
-    expect(within(save.parentElement as HTMLElement).getAllByRole('button')).toHaveLength(2)
-  })
-})
-
 describe('BalanceDetails check-in: future-dated months', () => {
   const projection = [
     makeBalanceEntry({ id: 20, accountId: 1, month: '2027-01', balance: 9001 }),
@@ -552,35 +496,6 @@ describe('BalanceDetails check-in: future-dated months', () => {
     expect(await screen.findByRole('textbox', { name: 'Checking balance' })).toHaveValue('1000')
     expect(screen.getAllByText('Copied from September 2026')).toHaveLength(3)
   })
-
-  it('keeps the existing copy source (latest month) with the flag off', async () => {
-    mockFlag = false
-    const user = userEvent.setup()
-    render(<Harness balances={[...completeSeptember, ...projection]} />)
-
-    await user.click(screen.getByRole('button', { name: '+ Add Entry' }))
-    fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2026-10' } })
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-
-    expect(await screen.findByRole('textbox', { name: 'Checking balance' })).toHaveValue('9001')
-  })
-})
-
-describe('BalanceDetails footer layout hook', () => {
-  it.each([
-    [true, true],
-    [false, false],
-  ])('with the flag %s the footer check-in modifier is %s', async (flag, hasModifier) => {
-    mockFlag = flag
-    const user = userEvent.setup()
-    render(<Harness balances={completeSeptember} />)
-
-    await user.click(screen.getByRole('button', { name: '+ Add Entry' }))
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-
-    const footer = screen.getByRole('button', { name: 'Save' }).closest('.data-details-entry-footer')
-    expect(footer?.classList.contains('data-details-entry-footer--check-in')).toBe(hasModifier)
-  })
 })
 
 describe('BalanceDetails partial month', () => {
@@ -663,25 +578,6 @@ describe('BalanceDetails partial month', () => {
   })
 })
 
-describe('BalanceDetails partial month with the flag off', () => {
-  beforeEach(() => {
-    mockFlag = false
-  })
-
-  it('shows no badge', () => {
-    render(<Harness balances={septemberToOctober} />)
-
-    expect(screen.queryByText('Partial month')).not.toBeInTheDocument()
-  })
-
-  it('keeps the existing change line, which treats a missing balance as zero', () => {
-    render(<Harness balances={septemberToOctober} />)
-
-    const line = screen.getByText('Roth IRA').closest('article')?.querySelector('.account-card__change')
-    expect(line).toHaveTextContent('↓ $12,400 (100.0%)')
-  })
-})
-
 describe('BalanceDetails check-in: focus after leaving edit mode', () => {
   const addEntryButton = () => screen.getByRole('button', { name: '+ Add Entry' })
 
@@ -707,19 +603,6 @@ describe('BalanceDetails check-in: focus after leaving edit mode', () => {
 
   it('does not take focus on first render', () => {
     render(<Harness balances={septemberToOctober} />)
-
-    expect(addEntryButton()).not.toHaveFocus()
-  })
-
-  it('leaves focus alone after saving with the flag off', async () => {
-    mockFlag = false
-    const user = userEvent.setup()
-    render(<Harness balances={septemberToOctober} />)
-
-    await user.click(addEntryButton())
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await firstInputFocused()
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(addEntryButton()).not.toHaveFocus()
   })

@@ -20,8 +20,8 @@ const dayKeyToDate = (dayKey: string): Date => {
 }
 
 /**
- * Owns the clock, state and snooze for the check-in strip. It is mounted only while the flag is on,
- * so focus and visibility re-renders never reach the rest of Home.
+ * Owns the clock, state and snooze for the check-in strip, so focus and visibility re-renders never reach
+ * the rest of Home.
  */
 const CheckInStrip: FC<CheckInStripProps> = ({ accounts, balances, dataLoaded, onSnoozed }) => {
   const navigate = useNavigate()

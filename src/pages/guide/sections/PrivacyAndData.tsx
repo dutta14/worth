@@ -55,10 +55,10 @@ const PrivacyAndData: FC = () => (
         computer.
       </p>
       <p>
-        <strong>Experimental, off by default:</strong> the Data safety net feature flag adds safety copies. Before the
-        app changes or deletes a JSON or CSV file, it copies the old version into a <code>_backups</code> folder inside
-        your data folder and keeps the newest 10 copies of each file. Tax documents are not copied. Your own backups are
-        still the real safety net, and with the flag off there are no copies at all.
+        <strong>Safety copies:</strong> the Data safety net keeps its own copies. Before the app changes or deletes a
+        JSON or CSV file, it copies the old version into a <code>_backups</code> folder inside your data folder and
+        keeps the newest 10 copies of each file. Tax documents are not copied. Your own backups are still the real
+        safety net, so keep backing up the folder yourself.
       </p>
     </section>
   </section>

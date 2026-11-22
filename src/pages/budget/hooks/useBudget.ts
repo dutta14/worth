@@ -1,7 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { BudgetStore, Transaction, CategoryGroup, BudgetViewMode, BudgetConfigData, SpreadsheetMode } from '../types'
 import {
-  loadBudgetStore,
   loadBudgetStoreStrict,
   saveBudgetStore,
   createYear,
@@ -24,8 +23,6 @@ import { executeImport, executeUndo, type CommitResult, type UndoRecord, type Un
 import { retargetStoredRules, type PreImportSnapshot } from '../import/importStorage'
 import type { ImportPlan } from '../import/types'
 import { useFileStore } from '../../../contexts/FileStoreContext'
-import { FLAGS } from '../../../flags/flagDefinitions'
-import { useFlag } from '../../../flags/useFlag'
 
 const updateMergedGroups = (groups: CategoryGroup[], sourceSet: Set<string>, targetName: string): CategoryGroup[] => {
   const targetGroupId = groups.find(g => g.categories.includes(targetName))?.id
@@ -48,10 +45,9 @@ const EMPTY_STORE: BudgetStore = { csvs: {}, configs: {}, years: [], categoryGro
 
 export function useBudget() {
   const { fileStore } = useFileStore()
-  const importWizardOn = useFlag(FLAGS.IMPORT_WIZARD)
   const [store, setStore] = useState<BudgetStore>(EMPTY_STORE)
   const [loaded, setLoaded] = useState(false)
-  // Only tracked with the import wizard on: it must not write over month files that could not be read.
+  // The import wizard must not write over month files that could not be read.
   const [readFailed, setReadFailed] = useState(false)
   const readFailedRef = useRef(false)
   const [reloadTick, setReloadTick] = useState(0)
@@ -63,8 +59,7 @@ export function useBudget() {
   useEffect(() => {
     let cancelled = false
     const refresh = () => {
-      const load = importWizardOn ? loadBudgetStoreStrict : loadBudgetStore
-      load(fileStore)
+      loadBudgetStoreStrict(fileStore)
         .then(next => {
           if (!cancelled) {
             readFailedRef.current = false
@@ -87,12 +82,14 @@ export function useBudget() {
       cancelled = true
       unsubscribe()
     }
-  }, [fileStore, importWizardOn, reloadTick])
+  }, [fileStore, reloadTick])
 
   const reload = useCallback(() => setReloadTick(tick => tick + 1), [])
 
   const persist = useCallback(
     (next: BudgetStore) => {
+      // After a failed read the in-memory store is empty or stale, so saving it would overwrite files that exist.
+      if (readFailedRef.current) return
       storeRef.current = next
       setStore(next)
       saveBudgetStore(fileStore, next).catch(console.error)
@@ -361,13 +358,11 @@ export function useBudget() {
       })
 
       // Rules that pointed at a merged-away category follow it; without this they would be skipped as dangling.
-      if (importWizardOn) {
-        void retargetStoredRules(fileStore, [...sourceSet], targetName).then(outcome => {
-          if (!outcome.ok) console.error(`Could not update import rules after the merge (${outcome.reason})`)
-        })
-      }
+      void retargetStoredRules(fileStore, [...sourceSet], targetName).then(outcome => {
+        if (!outcome.ok) console.error(`Could not update import rules after the merge (${outcome.reason})`)
+      })
     },
-    [persist, importWizardOn, fileStore],
+    [persist, fileStore],
   )
 
   /** Check if a category has any transactions across all years' CSVs */

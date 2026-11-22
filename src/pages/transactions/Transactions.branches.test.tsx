@@ -56,6 +56,7 @@ const transactionFixtures: Record<
 
 vi.mock('../budget/utils/budgetStorage', () => ({
   loadBudgetStore: vi.fn(() => Promise.resolve(store)),
+  loadBudgetStoreStrict: vi.fn(() => Promise.resolve(store)),
   saveBudgetStore: (...args: unknown[]) => saveBudgetStoreSpy(...args),
   saveCSVForMonth: (...args: unknown[]) => saveCSVForMonthSpy(...args),
 }))
