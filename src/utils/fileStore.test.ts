@@ -2727,6 +2727,114 @@ describe('FileSystemFileStore safety net', () => {
       })
     })
 
+    describe('a read that overlaps another file being written', () => {
+      /** Starts reading `name`, lets another file's write finish while that read is waiting, then completes the read. */
+      const readWhileOtherFileIsWritten = async (
+        store: FileSystemFileStore,
+        root: FakeDirectoryHandle,
+        name: string,
+      ) => {
+        root.contents.set(name, '{"name":"Alex"}')
+        let release: () => void = () => {}
+        const gate = new Promise<void>(resolve => {
+          release = resolve
+        })
+        const original = FakeFileHandle.prototype.getFile
+        const spy = vi.spyOn(FakeFileHandle.prototype, 'getFile').mockImplementation(async function (
+          this: FakeFileHandle,
+        ) {
+          if (this.name === name) await gate
+          return original.call(this)
+        })
+        const reading = store.readJSON(name, null)
+        await expect(edit(store, 'accounts.json', [1])).resolves.toBe('saved')
+        release()
+        await reading
+        spy.mockRestore()
+      }
+
+      it('still baselines the file, so a later external edit is found on focus', async () => {
+        const { root, store } = await setup()
+        await readWhileOtherFileIsWritten(store, root, 'profile.json')
+
+        changeOnDisk(root, 'profile.json', '{"name":"Alexandra"}')
+        await check(store)
+
+        expect(staleOf(store)).toEqual([{ path: 'profile.json', deleted: false }])
+      })
+
+      it('still holds a write over a later external edit instead of replacing it', async () => {
+        const { root, store } = await setup()
+        await readWhileOtherFileIsWritten(store, root, 'profile.json')
+
+        changeOnDisk(root, 'profile.json', '{"name":"Alexandra"}')
+        const outcome = await edit(store, 'profile.json', { name: 'Sam' })
+
+        expect(outcome).toMatchObject({ code: 'stale-blocked' })
+        expect(root.contents.get('profile.json')).toBe('{"name":"Alexandra"}')
+      })
+
+      it('still allows a deliberate delete of that file', async () => {
+        const { root, store } = await setup()
+        await readWhileOtherFileIsWritten(store, root, 'profile.json')
+
+        await store.delete('profile.json')
+
+        expect(root.contents.has('profile.json')).toBe(false)
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+      })
+
+      it('drops a baseline that a write to the same file made out of date, then records the new one', async () => {
+        const { root, store } = await setup()
+        await load(store, root, 'profile.json', '{"name":"Alex"}')
+        await expect(edit(store, 'profile.json', { name: 'Sam' })).resolves.toBe('saved')
+
+        await check(store)
+
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+      })
+    })
+
+    describe('a loaded file without a baseline', () => {
+      it('is watched from the next focus check', async () => {
+        const { root, store } = await setup()
+        await load(store, root, 'profile.json', '{"name":"Alex"}')
+        // Reset what the load recorded, as if it had been lost.
+        const internals = store as unknown as { baselines: Map<string, unknown> }
+        internals.baselines.delete('profile.json')
+
+        await check(store)
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+        changeOnDisk(root, 'profile.json', '{"name":"Alexandra"}')
+        await check(store)
+
+        expect(staleOf(store)).toEqual([{ path: 'profile.json', deleted: false }])
+      })
+
+      it('allows a deliberate delete, because the tab did load the file', async () => {
+        const { root, store } = await setup()
+        await load(store, root, 'profile.json', '{"name":"Alex"}')
+        const internals = store as unknown as { baselines: Map<string, unknown> }
+        internals.baselines.delete('profile.json')
+
+        await store.delete('profile.json')
+
+        expect(root.contents.has('profile.json')).toBe(false)
+      })
+
+      it('skips a file that has vanished or cannot be baselined', async () => {
+        const { root, store } = await setup()
+        await load(store, root, 'profile.json', '{"name":"Alex"}')
+        const internals = store as unknown as { baselines: Map<string, unknown> }
+        internals.baselines.delete('profile.json')
+        root.contents.delete('profile.json')
+
+        await check(store)
+
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+      })
+    })
+
     describe('deleting', () => {
       const balances = async (root: FakeDirectoryHandle, years: Record<string, string>) => {
         const dir = await root.getDirectoryHandle('balances', { create: true })

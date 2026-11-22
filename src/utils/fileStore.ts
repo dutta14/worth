@@ -122,8 +122,8 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
   private baselines = new Map<string, Fingerprint>()
   /** Files that changed on disk since this tab loaded them. */
   private stale = new Map<string, StaleEntry>()
-  /** Bumped by every write so a read that overlapped one does not record an out-of-date baseline. */
-  private writeSeq = 0
+  /** Bumped by every write to a path so a read of that path that overlapped one does not record an out-of-date baseline. */
+  private writeSeq = new Map<string, number>()
 
   async init(handle: FileSystemDirectoryHandle): Promise<void> {
     this.root = handle
@@ -469,7 +469,10 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
    */
   async checkExternalChanges(): Promise<void> {
     if (!this.safetyEnabled || !this.root) return
-    const queue = [...this.baselines.keys()].filter(path => this.cache.has(path) && !this.stale.has(path))
+    const watched = new Set([...this.baselines.keys(), ...this.cache.keys()])
+    const queue = [...watched].filter(
+      path => this.cache.has(path) && !this.stale.has(path) && (this.baselines.has(path) || isBackupEligible(path)),
+    )
     const worker = async (): Promise<void> => {
       for (let path = queue.shift(); path !== undefined; path = queue.shift()) await this.checkPath(path)
     }
@@ -480,8 +483,12 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
   private async checkPath(path: string): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined
     const work = withLock(`filestore:${path}`, async () => {
+      if (!this.safetyEnabled || !this.cache.has(path) || this.stale.has(path)) return
       const baseline = this.baselines.get(path)
-      if (!this.safetyEnabled || !baseline || !this.cache.has(path) || this.stale.has(path)) return
+      if (!baseline) {
+        await this.baselineLoadedFile(path)
+        return
+      }
       const status = await this.diskStatus(path, baseline)
       if (this.safetyEnabled && status !== 'same') this.markStale(path, status === 'deleted')
     }).catch(error => {
@@ -620,11 +627,23 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     return 'same'
   }
 
+  /**
+   * A loaded file whose baseline could not be recorded (a failed read-back after a write) starts being watched
+   * from what is on disk now. Any earlier change cannot be told apart, but the pre-write snapshot still covers it.
+   */
+  private async baselineLoadedFile(path: string): Promise<void> {
+    if (!isBackupEligible(path)) return
+    const file = await this.readFile(path)
+    if (file === null || !this.safetyEnabled || this.baselines.has(path)) return
+    this.baselines.set(path, fingerprintBytes(new Uint8Array(await file.arrayBuffer()), file.lastModified))
+  }
+
   /** Holds a write back when the file changed on disk after this tab last saw it. */
   private async assertNotStale(path: string, payload: Payload): Promise<void> {
     if (!this.safetyEnabled || payload.kind !== 'text' || !isBackupEligible(path)) return
     if (!this.stale.has(path)) {
-      // Never read by this tab: nothing to compare with, and the snapshot policy covers what is on disk.
+      // No baseline: either never read by this tab, or loaded but not yet baselined. Nothing to compare with, and
+      // the snapshot taken before the write covers whatever is on disk.
       const baseline = this.baselines.get(path)
       if (!baseline) return
       const status = await this.diskStatus(path, baseline)
@@ -646,6 +665,8 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
         }
         return
       }
+      // Loaded by this tab but not baselined (a failed read-back): the tab did see it, so a deliberate delete stands.
+      if (this.cache.has(path)) return
       // An empty file (a sync placeholder, or a create whose write failed) holds nothing to lose.
       const file = await this.readFile(path)
       if (file === null || file.size === 0) return
@@ -659,7 +680,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
    * is unknown the file is read back. A failure only drops the baseline, which makes the next write snapshot first.
    */
   private async rebaselineAfterWrite(path: string, bytes: Uint8Array | null): Promise<void> {
-    this.writeSeq += 1
+    this.writeSeq.set(path, (this.writeSeq.get(path) ?? 0) + 1)
     if (!this.safetyEnabled || !isBackupEligible(path)) return
     try {
       const file = await this.readFile(path)
@@ -677,6 +698,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
 
   private resetExternalState(): void {
     this.baselines.clear()
+    this.writeSeq.clear()
     this.stale.clear()
   }
 
@@ -931,7 +953,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
 
   /** Reads the raw bytes once so a file that fails to parse can be copied exactly as it was. */
   private async readTextAndBytes(path: string): Promise<{ text: string | null; bytes: Uint8Array | null }> {
-    const seq = this.writeSeq
+    const seq = this.writeSeq.get(path)
     const file = await this.readFile(path)
     if (file === null) {
       this.baselines.delete(path)
@@ -939,7 +961,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     }
     const bytes = new Uint8Array(await file.arrayBuffer())
     // A write that finished meanwhile recorded the newer baseline; this read may have seen the older bytes.
-    if (this.safetyEnabled && isBackupEligible(path) && seq === this.writeSeq) {
+    if (this.safetyEnabled && isBackupEligible(path) && seq === this.writeSeq.get(path)) {
       this.baselines.set(path, fingerprintBytes(bytes, file.lastModified))
     }
     return { text: new TextDecoder().decode(bytes), bytes }
