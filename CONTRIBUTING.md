@@ -85,6 +85,8 @@ src/
 │   ├── fileStoreTypes.ts    # FileStore interface (the contract every store must satisfy)
 │   ├── fileStore.ts         # FileSystemFileStore — File System Access API implementation
 │   ├── memoryFileStore.ts   # MemoryFileStore — in-memory implementation for tests and demo mode
+│   ├── safetyNet.ts         # Data safety net: pure types and helpers (fingerprints, backup paths, issue list)
+│   ├── backupManager.ts     # Data safety net: snapshot, list, prune and restore over a small RawIO interface
 │   ├── csvUtils.ts          # CSV serialization / deserialization helpers
 │   ├── balanceStorage.ts    # Balance read/write against the FileStore
 │   ├── handlePersistence.ts # Saves and loads the FileSystemDirectoryHandle in IndexedDB
@@ -102,6 +104,17 @@ All financial data is stored as plain files in a folder the user chooses on thei
 
 - `FileSystemFileStore` (`src/utils/fileStore.ts`) — the production implementation. Backed by a `FileSystemDirectoryHandle`. Writes are debounced 300ms and guarded with `navigator.locks` so concurrent tabs never interleave. Cross-tab cache invalidation uses a `BroadcastChannel`.
 - `MemoryFileStore` (`src/utils/memoryFileStore.ts`) — an in-memory implementation used for tests and Demo Mode.
+
+#### Data safety net (flag `data-safety-net`, off by default)
+
+Spec: `docs/specs/data-safety-net.md`. All protection lives in `FileSystemFileStore`, so the roughly 30 `.catch(console.error)` call sites need no change.
+
+- **Inert until enabled.** The store behaves exactly as before (300ms debounce, no checks, no copies) until `configureSafety({ enabled: true })` is called. `SafetyNetProvider` (`src/contexts/SafetyNetContext.tsx`) does that; it sits inside `FlagProvider` and only enables a store for a real folder, never in Demo Mode. `FileStoreProvider` cannot read flags, which is why the store is configured from a child.
+- **Optional interface.** `SafetyNetStore` and `isSafetyNetStore()` live in `src/utils/fileStoreTypes.ts`. The `FileStore` contract is unchanged and `MemoryFileStore` never implements the safety API, so Demo Mode and e2e tests cannot touch a real folder.
+- **What it does when enabled.** The debounce drops to 120ms. `usePageHideFlush` starts `flush()` on `pagehide` and `visibilitychange` (hidden) and asks the browser to confirm leaving only while `hasUnsavedWork()`; this is best effort, a hard close can still lose a write. A failed write keeps the edit in memory and raises a banner with a retry. Permission loss is detected on focus and offers a reconnect. A JSON file that does not parse is never overwritten: the bytes are copied to `<path>.corrupt-<stamp>` and writes to it are held until the user chooses Restore latest backup or Start fresh. On focus (throttled to every 5s) the store compares each loaded file's `lastModified` and size, then a content hash only on an mtime-only mismatch, with what this tab last read or wrote; a changed file is `stale` and writes to it are held until the user chooses Reload or Keep my version. CSV corruption is not detected, and new files appearing in a directory are only caught by the delete guard.
+- **Backups.** `backupManager.ts` copies a JSON or CSV file to `_backups/` before it is overwritten or deleted: once per file per session, then at most every 6 hours, skipping bytes identical to the newest copy, always before a delete, restore or Keep my version. The newest 10 copies per file are kept (`BACKUPS_PER_FILE`). A failed copy sets `backupsHealthy` and never blocks the user's write.
+- **UI.** `DataSafetyBanner` is a single sticky `role="alert"` region; the Backups list and restore live in `BackupsSection`, rendered in Settings → Data Folder only when the flag is on. Styles use the `dsn-` prefix in `src/styles/DataSafetyNet.css`. After Reload the provider remounts the app shell through `key={epoch}` and dispatches `data-changed`.
+- **Writing code that uses the store.** Keep `.catch(console.error)`; held writes reject with `FileStoreError` (`stale-blocked`, `corrupt-blocked`, `unseen-file`). Queue every write before awaiting any I/O (see `saveBalances`) so a page-hide `flush()` sees all of them.
 
 `FileStoreContext` (`src/contexts/FileStoreContext.tsx`) owns the active store instance and exposes `pickFolder`, `disconnect`, `enterDemo`, and `exitDemo`. Components get the store via `useFileStore()`.
 
@@ -121,6 +134,8 @@ The chosen folder handle is persisted in IndexedDB via `src/utils/handlePersiste
 | `budget/summary-cache.json` | Derived savings-rate summary |
 | `budget/targets.json` | Monthly targets per expense group, keyed by group id (only read and written when the `category-budget-targets` flag is on) |
 | `goals.json` | `{ financialGoals, gwGoals }` |
+| `_backups/` | Safety copies, `_backups/{path without extension}/{yyyymmddThhmmssmmmZ}[-unsaved].{json,csv}`, plus a `README.txt`. Created only when the `data-safety-net` flag is on; the newest 10 per file are kept. No loader reads it |
+| `{path}.corrupt-{stamp}` | Byte-for-byte copy of a JSON file that failed to parse, saved next to the original (flag `data-safety-net` only). No loader reads it |
 | `taxes/{year}.json` | Tax checklist for that year |
 | `taxes/templates.json` | Reusable tax checklists |
 | `taxes/{year}/files/{filename}` | Uploaded tax documents |

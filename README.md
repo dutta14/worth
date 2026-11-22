@@ -38,6 +38,10 @@ A handful of UI preferences stay in `localStorage`: dark mode, accent theme, the
 
 The data folder is ordinary files. Use whatever backup tool you already use: Time Machine, Dropbox, iCloud Drive, git, rsync. If you want to use this on two machines, point both at the same synced folder, or copy the folder from one machine to the other. The app has no built-in sync mechanism because it does not need one.
 
+**Experimental, off by default (feature flag `data-safety-net`):** when it is on, the app also keeps its own safety copies. Before it changes or deletes a JSON or CSV file, it copies the old version into a `_backups` folder inside your data folder, at most once per file per session and then no more often than every six hours, skipping copies identical to the newest one; a delete or a restore always copies first. The newest 10 copies of each file are kept. Tax documents and the derived `budget/summary-cache.json` are not copied. A plain-text `_backups/README.txt` explains the folder, and you can delete it at any time. Your backup and sync tools will see this folder too, so add `_backups/` (and `*.corrupt-*`) to `.gitignore` if the data folder is a git repository. Restore a copy from Settings → Data Folder → Backups, or copy the file back yourself. With the flag off there are no copies and no recycle bin.
+
+The same flag also adds: a best-effort save when you switch tabs or close the page, a visible banner with "Try again" when a save fails or folder access is lost, and protection for a JSON file that cannot be read (the app leaves it untouched, saves a copy next to it as `<name>.json.corrupt-<timestamp>`, and pauses saving to it until you choose Restore latest backup or Start fresh). It cannot promise that a write survives the browser being killed mid-save.
+
 ### What this app does not do
 
 No analytics. No third-party scripts. No accounts. No backend. No telemetry, no error reporting, no fingerprinting. No data ever leaves your device. You can verify this by opening the Network tab in devtools and watching the app do nothing.
@@ -221,6 +225,7 @@ Profile, data folder, appearance, and the slightly more dangerous switches all l
 - Toggle dark mode and accent preferences in Appearance
 - Toggle the "Allow CSV imports & resets" switch in Advanced when you want bulk data entry tools
 - Explore experimental features in Labs and Feature Flags when you are curious
+- Experimental, off by default: with the `data-safety-net` flag on, Data Folder lists the safety copies in `_backups` and restores one after you confirm (the current file is copied first)
 
 **One tip:** If you move or rename the folder on disk, use Settings → Data Folder → Change Folder to reconnect it. Disconnecting only forgets the handle; your files stay exactly where they are.
 
@@ -239,6 +244,8 @@ A folder on your own machine. On first run you pick a folder; the app stores eve
 ### How do I use this on two devices?
 
 Point both at the same folder. If the folder is inside a synced directory (iCloud Drive, Dropbox, or similar) both devices see the same files automatically. If it is not synced, copy the folder manually from one machine to the other. The app has no built-in sync mechanism because plain files already have a thousand backup tools designed for them.
+
+Experimental, off by default (feature flag `data-safety-net`): when you return to the tab, the app checks whether a file it has loaded was changed outside it, for example from the other machine or by a sync tool. If so it pauses saving to that file and asks you to Reload (take what is on disk) or Keep my version (save yours; the version on disk is copied to `_backups` first). Reload keeps your unsaved edits in `_backups` too. It does not notice new files that appear in a folder, such as a new `balances/{year}.csv`, until you reload.
 
 ### What if I move or rename the folder?
 
