@@ -1515,6 +1515,92 @@ describe('FileSystemFileStore safety net', () => {
       })
     })
 
+    describe('review follow-ups', () => {
+      it('moves a path from failed to corrupt when a retry finds the file unreadable', async () => {
+        const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        root.contents.set('goals.json', '{"financialGoals":[')
+        const original = root.getFileHandle.bind(root)
+        let failChecks = 1
+        root.getFileHandle = async (name, options) => {
+          if (!options?.create && name === 'goals.json' && failChecks > 0) {
+            failChecks -= 1
+            throw new DOMException('no', 'NotAllowedError')
+          }
+          return original(name, options)
+        }
+
+        await edit(store, 'goals.json', { financialGoals: [1] })
+        expect(store.getSafetySnapshot().failed).toEqual([{ path: 'goals.json', kind: 'permission' }])
+
+        const retrying = store.retryFailed()
+        await settleIO()
+        await retrying
+
+        const snapshot = store.getSafetySnapshot()
+        expect(snapshot.failed).toEqual([])
+        expect(snapshot.corrupt).toEqual([expect.objectContaining({ path: 'goals.json' })])
+        expect(root.contents.get('goals.json')).toBe('{"financialGoals":[')
+        expect(store.hasUnsavedWork()).toBe(true)
+        errorSpy.mockRestore()
+      })
+
+      it('leaves derived caches alone: a bad read falls back and the next write replaces the file', async () => {
+        const { root, store } = await setup()
+        const budget = await root.getDirectoryHandle('budget', { create: true })
+        budget.contents.set('summary-cache.json', '{broken')
+
+        await expect(store.readJSON('budget/summary-cache.json', 'fallback')).resolves.toBe('fallback')
+        await settleIO()
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+        expect([...budget.contents.keys()].filter(key => key.includes('.corrupt-'))).toEqual([])
+
+        await expect(edit(store, 'budget/summary-cache.json', { a: 1 })).resolves.toBe('saved')
+        expect(JSON.parse(String(budget.contents.get('summary-cache.json')))).toEqual({ a: 1 })
+        expect(store.hasUnsavedWork()).toBe(false)
+      })
+
+      it('refuses to replace the file when the copy fails and the backup fallback wrote nothing', async () => {
+        const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        root.contents.set('accounts.json', '{broken')
+        root.faults.createWritable = name => {
+          if (name.includes('.corrupt-')) throw new DOMException('full', 'QuotaExceededError')
+        }
+        await detect(store)
+        await edit(store, 'accounts.json', [1])
+        ;(store as unknown as { getBackups: () => unknown }).getBackups = () => ({
+          snapshot: async () => null,
+          hasCopy: async () => false,
+          latestValid: async () => null,
+        })
+
+        await expect(store.resolveCorrupt('accounts.json', 'start-fresh')).rejects.toThrow('left untouched')
+
+        expect(root.contents.get('accounts.json')).toBe('{broken')
+        expect(store.getSafetySnapshot().corrupt).toHaveLength(1)
+        errorSpy.mockRestore()
+      })
+
+      it('accepts a backup that already holds the exact bytes when the copy fails', async () => {
+        const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        root.contents.set('accounts.json', '{broken')
+        seedBackup(root, 'accounts.json', '20261101T000000000Z', '{broken')
+        root.faults.createWritable = name => {
+          if (name.includes('.corrupt-')) throw new DOMException('full', 'QuotaExceededError')
+        }
+        await detect(store)
+        await edit(store, 'accounts.json', [1])
+
+        await store.resolveCorrupt('accounts.json', 'start-fresh')
+
+        expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([1])
+        expect(backupCopies(root)).toEqual(['20261101T000000000Z.json'])
+        errorSpy.mockRestore()
+      })
+    })
+
     describe('start fresh', () => {
       it('writes the held edit, keeps the unreadable copy, and unblocks later saves', async () => {
         const { root, store } = await setup()

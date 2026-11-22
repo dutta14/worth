@@ -395,6 +395,28 @@ describe('createBackupManager', () => {
     })
   })
 
+  describe('hasCopy', () => {
+    it('is true only when a copy holds exactly these bytes', async () => {
+      const { io, files } = makeIO()
+      files.set('_backups/accounts/20261101T000000000Z.json', enc('{aaa'))
+      files.set('_backups/accounts/20261102T000000000Z.json', enc('[1]'))
+      const manager = createBackupManager(io, clock)
+
+      await expect(manager.hasCopy('accounts.json', enc('{aaa'))).resolves.toBe(true)
+      await expect(manager.hasCopy('accounts.json', enc('{bbb'))).resolves.toBe(false)
+      await expect(manager.hasCopy('accounts.json', enc('{aa'))).resolves.toBe(false)
+      await expect(manager.hasCopy('profile.json', enc('{aaa'))).resolves.toBe(false)
+    })
+
+    it('is false for paths that are never backed up', async () => {
+      const { io, files } = makeIO()
+      files.set('_backups/budget/summary-cache/20261101T000000000Z.json', enc('{aaa'))
+      await expect(createBackupManager(io, clock).hasCopy('budget/summary-cache.json', enc('{aaa'))).resolves.toBe(
+        false,
+      )
+    })
+  })
+
   describe('restore', () => {
     it('does not copy the current file aside when the caller already holds a copy', async () => {
       const { io, files } = makeIO()

@@ -41,6 +41,12 @@ const isNotFound = (error: unknown): boolean =>
 
 const isJsonPath = (path: string): boolean => path.toLowerCase().endsWith('.json')
 
+/**
+ * JSON files whose loss matters. Derived caches (`budget/summary-cache.json`) and anything else that is not
+ * backup-eligible behave as before: a bad read falls back and the next write replaces it.
+ */
+const isGuardedPath = (path: string): boolean => isJsonPath(path) && isBackupEligible(path)
+
 const bytesEqual = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((v, i) => v === b[i])
 
 const splitPath = (path: string): { dirs: string[]; name: string } => {
@@ -128,7 +134,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
       return parsed
     } catch {
       // Zero-byte and whitespace-only files count as missing: a sync client may have left a placeholder.
-      if (guarded && read.bytes && read.text.trim() !== '' && !this.acknowledged.has(path)) {
+      if (guarded && read.bytes && read.text.trim() !== '' && isGuardedPath(path) && !this.acknowledged.has(path)) {
         this.markCorrupt(path, read.bytes)
       }
       return fallback
@@ -422,6 +428,10 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     const backups = this.getBackups()
     if (!backups) throw new Error(`Could not save a copy of ${path}, so it was left untouched.`)
     await backups.snapshot(path, current, { force: true })
+    // `snapshot` also resolves null when it wrote nothing; that is only fine if a copy already holds these bytes.
+    if (!(await backups.hasCopy(path, current))) {
+      throw new Error(`Could not save a copy of ${path}, so it was left untouched.`)
+    }
     entry.bytes = current
   }
 
@@ -682,8 +692,11 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
       await this.persist(path, entry.payload)
     } catch (error) {
       this.releaseInFlight(path)
-      if (error instanceof FileStoreError) this.held.set(path, entry.payload)
-      else this.recordFailure(path, entry.payload, error)
+      if (error instanceof FileStoreError) {
+        this.held.set(path, entry.payload)
+        // A path is held or failed, never both: otherwise the write-failed banner would outrank the corrupt one.
+        if (this.failed.delete(path)) this.refreshSafetySnapshot()
+      } else this.recordFailure(path, entry.payload, error)
       entry.waiters.forEach(w => w.reject(error))
       return
     }
@@ -729,7 +742,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     path: string,
     payload: Payload,
   ): Promise<void> {
-    if (!this.safetyEnabled || payload.kind !== 'text' || !isJsonPath(path)) return
+    if (!this.safetyEnabled || payload.kind !== 'text' || !isGuardedPath(path)) return
     if (!this.corrupt.has(path)) {
       if (this.verified.has(path) || this.acknowledged.has(path)) return
       let bytes: Uint8Array

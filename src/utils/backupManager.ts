@@ -48,6 +48,8 @@ export interface BackupManager {
    * only the user's discarded edits, so they are used only when nothing else exists.
    */
   latestValid(path: string): Promise<BackupEntry | null>
+  /** True when some copy of `path` in `_backups/` holds exactly these bytes. */
+  hasCopy(path: string, bytes: Uint8Array): Promise<boolean>
 }
 
 export interface RestoreOptions {
@@ -210,7 +212,17 @@ export function createBackupManager(io: RawIO, now: () => number = Date.now): Ba
     return null
   }
 
-  return { isDue, snapshot, list, prune, restore, latestValid }
+  const hasCopy = async (path: string, bytes: Uint8Array): Promise<boolean> => {
+    if (!isBackupEligible(path)) return false
+    for (const copy of await copiesOf(path)) {
+      if (copy.size !== bytes.length) continue
+      const stored = await io.read(copy.backupPath)
+      if (stored && bytesEqual(stored, bytes)) return true
+    }
+    return false
+  }
+
+  return { isDue, snapshot, list, prune, restore, latestValid, hasCopy }
 }
 
 const isNotFound = (error: unknown): boolean => (error as { name?: string } | null)?.name === 'NotFoundError'
