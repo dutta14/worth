@@ -16,7 +16,7 @@ import { useFlag } from '../flags/useFlag'
 import { usePageHideFlush } from '../hooks/usePageHideFlush'
 import { isSafetyNetStore } from '../utils/fileStoreTypes'
 import { EMPTY_SAFETY_SNAPSHOT } from '../utils/safetyNet'
-import type { BackupEntry, SafetySnapshot } from '../utils/safetyNet'
+import type { BackupEntry, CorruptAction, SafetySnapshot } from '../utils/safetyNet'
 
 const FOCUS_CHECK_MIN_INTERVAL_MS = 5000
 
@@ -35,11 +35,17 @@ export interface SafetyNetContextValue {
   listBackups: () => Promise<BackupEntry[]>
   /** Replaces the file with the copy, then refreshes the visible data. Rejects with the file untouched. */
   restoreBackup: (entry: BackupEntry) => Promise<void>
+  /**
+   * Ends the hold on a corrupt JSON file, keeping its unreadable bytes. Resolves with the backup that was
+   * restored (`null` for `start-fresh`). Rejects with the file untouched.
+   */
+  resolveCorrupt: (path: string, action: CorruptAction) => Promise<BackupEntry | null>
 }
 
 const noop = async (): Promise<void> => {}
 const noRetry = async (): Promise<boolean> => false
 const noBackups = async (): Promise<BackupEntry[]> => []
+const noResolution = async (): Promise<BackupEntry | null> => null
 
 const defaultValue: SafetyNetContextValue = {
   enabled: false,
@@ -50,6 +56,7 @@ const defaultValue: SafetyNetContextValue = {
   chooseFolderAgain: noop,
   listBackups: noBackups,
   restoreBackup: noop,
+  resolveCorrupt: noResolution,
 }
 
 export const SafetyNetContext = createContext<SafetyNetContextValue>(defaultValue)
@@ -142,6 +149,16 @@ export const SafetyNetProvider: FC<{ children: ReactNode }> = ({ children }) => 
     [store],
   )
 
+  const resolveCorrupt = useCallback(
+    async (path: string, action: CorruptAction) => {
+      if (!store) return null
+      const restored = await store.resolveCorrupt(path, action)
+      if (restored) window.dispatchEvent(new Event('data-changed'))
+      return restored
+    },
+    [store],
+  )
+
   const value = useMemo<SafetyNetContextValue>(
     () => ({
       enabled: store !== null,
@@ -152,8 +169,19 @@ export const SafetyNetProvider: FC<{ children: ReactNode }> = ({ children }) => 
       chooseFolderAgain,
       listBackups,
       restoreBackup,
+      resolveCorrupt,
     }),
-    [store, snapshot, reconnectDenied, retryFailed, reconnect, chooseFolderAgain, listBackups, restoreBackup],
+    [
+      store,
+      snapshot,
+      reconnectDenied,
+      retryFailed,
+      reconnect,
+      chooseFolderAgain,
+      listBackups,
+      restoreBackup,
+      resolveCorrupt,
+    ],
   )
 
   return <SafetyNetContext.Provider value={value}>{children}</SafetyNetContext.Provider>

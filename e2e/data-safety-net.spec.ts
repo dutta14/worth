@@ -314,3 +314,159 @@ test.describe('Data safety net: backups', () => {
     expect(await backupPaths(page, '_backups')).toHaveLength(0)
   })
 })
+
+test.describe('Data safety net: corrupt files', () => {
+  const CORRUPT = '[{"id":1,"name":"Half a fil'
+  const BACKUP_PATH = '_backups/accounts/20261101T120000000Z.json'
+  const BACKUP = JSON.stringify([
+    {
+      id: 1,
+      name: 'Backup Savings',
+      type: 'liquid',
+      owner: 'primary',
+      status: 'active',
+      goalType: 'gw',
+      nature: 'asset',
+      allocation: 'cash',
+    },
+  ])
+
+  const keys = (page: Page, prefix: string) =>
+    page.evaluate(
+      p =>
+        [...((window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa?.files.keys() ?? [])]
+          .filter(path => path.startsWith(p))
+          .sort(),
+      prefix,
+    )
+
+  const commitsTo = (page: Page, path: string) =>
+    page.evaluate(
+      p =>
+        ((window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa?.commits ?? []).filter(c => c.path === p)
+          .length,
+      path,
+    )
+
+  const banner = (page: Page) => page.getByRole('region', { name: 'Data safety' })
+
+  test('keeps the broken file untouched, holds edits, and restores the latest backup', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': CORRUPT, [BACKUP_PATH]: BACKUP } })
+
+    const alert = banner(page).getByRole('alert')
+    await expect(alert).toContainText("Couldn't read accounts.json.")
+    await expect(alert).toContainText("Changes to it won't be saved until you choose how to continue.")
+    const [copy] = await keys(page, 'accounts.json.corrupt-')
+    expect(copy).toMatch(/^accounts\.json\.corrupt-\d{8}T\d{9}Z$/)
+    await expect(alert).toContainText(`saved a copy as ${copy}.`)
+    expect(await disk(page, copy)).toBe(CORRUPT)
+    expect(await disk(page, 'accounts.json')).toBe(CORRUPT)
+    await expect(page.getByText('No accounts yet')).toBeVisible()
+
+    await addAccount(page, 'Rainy Day Fund')
+    await page.waitForTimeout(600)
+
+    expect(await commitsTo(page, 'accounts.json')).toBe(0)
+    expect(await disk(page, 'accounts.json')).toBe(CORRUPT)
+    await expect(alert).toBeVisible()
+
+    await page.getByRole('button', { name: 'Restore latest backup' }).click()
+
+    await expect(alert).toBeHidden()
+    await expect(
+      page.getByRole('status').filter({ hasText: /^accounts\.json restored from the backup of / }),
+    ).toBeAttached()
+    await expect(page.locator('#main-content')).toBeFocused()
+    expect(await disk(page, 'accounts.json')).toBe(BACKUP)
+    expect(await disk(page, copy)).toBe(CORRUPT)
+    // The edit that was held is kept, not discarded.
+    const unsaved = (await keys(page, '_backups/accounts/')).filter(path => path.endsWith('-unsaved.json'))
+    expect(unsaved).toHaveLength(1)
+    expect(await disk(page, unsaved[0])).toContain('Rainy Day Fund')
+
+    const nw = new NetWorthPage(page)
+    await nw.openAccountsModal()
+    await expect(nw.modal).toContainText('Backup Savings')
+  })
+
+  test('starts fresh by saving the held edit and leaves the unreadable copy in the folder', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': CORRUPT, [BACKUP_PATH]: BACKUP } })
+    await expect(banner(page).getByRole('alert')).toContainText("Couldn't read accounts.json.")
+    await addAccount(page, 'Rainy Day Fund')
+    expect(await commitsTo(page, 'accounts.json')).toBe(0)
+
+    await page.getByRole('button', { name: 'Start fresh' }).click()
+
+    await expect(page.getByRole('alert')).toBeHidden()
+    await expect(
+      page
+        .getByRole('status')
+        .filter({ hasText: 'accounts.json replaced. The unreadable copy is still in your folder.' }),
+    ).toBeAttached()
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
+    const [copy] = await keys(page, 'accounts.json.corrupt-')
+    expect(await disk(page, copy)).toBe(CORRUPT)
+
+    const nw = new NetWorthPage(page)
+    await nw.openAccountsModal()
+    await nw.addAccount('Emergency Fund', 'Chase')
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Emergency Fund')
+  })
+
+  test('hides Restore when there is no valid backup, and Start fresh still works', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': CORRUPT } })
+
+    const alert = banner(page).getByRole('alert')
+    await expect(alert).toContainText("Couldn't read accounts.json.")
+    await expect(page.getByRole('button', { name: 'Restore latest backup' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Start fresh' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Start fresh' }).click()
+    await expect(alert).toBeHidden()
+    expect(await disk(page, 'accounts.json')).toBe(CORRUPT)
+    await addAccount(page, 'Rainy Day Fund')
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
+  })
+
+  test('resolves with the keyboard alone', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': CORRUPT, [BACKUP_PATH]: BACKUP } })
+    const restore = page.getByRole('button', { name: 'Restore latest backup' })
+    await expect(restore).toBeVisible()
+
+    for (let i = 0; i < 60; i++) {
+      if (await restore.evaluate(el => el === document.activeElement)) break
+      await page.keyboard.press('Tab')
+    }
+    await expect(restore).toBeFocused()
+    await page.keyboard.press('Enter')
+
+    await expect(page.getByRole('alert')).toBeHidden()
+    expect(await disk(page, 'accounts.json')).toBe(BACKUP)
+  })
+
+  test('treats a zero-byte accounts.json as missing: no banner, no copy', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': '' } })
+
+    await expect(page.getByText('No accounts yet')).toBeVisible()
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    expect(await keys(page, 'accounts.json.corrupt-')).toEqual([])
+
+    await addAccount(page, 'Rainy Day Fund')
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
+  })
+
+  test('behaves as before when the flag is off: no banner, no copy, the next save replaces the file', async ({
+    page,
+  }) => {
+    await openApp(page, { flagOn: false, seed: { 'accounts.json': CORRUPT } })
+
+    await expect(page.getByText('No accounts yet')).toBeVisible()
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    expect(await keys(page, 'accounts.json.corrupt-')).toEqual([])
+
+    await addAccount(page, 'Rainy Day Fund')
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
+    expect(await keys(page, 'accounts.json.corrupt-')).toEqual([])
+    expect(await keys(page, '_backups/')).toEqual([])
+  })
+})

@@ -5,10 +5,11 @@ import DataSafetyBanner from './DataSafetyBanner'
 import { SafetyNetContext } from '../contexts/SafetyNetContext'
 import type { SafetyNetContextValue } from '../contexts/SafetyNetContext'
 import { EMPTY_SAFETY_SNAPSHOT } from '../utils/safetyNet'
-import type { SafetySnapshot } from '../utils/safetyNet'
+import type { BackupEntry, SafetySnapshot } from '../utils/safetyNet'
 
 const failedSnapshot = (...paths: string[]): SafetySnapshot => ({
   failed: paths.map(path => ({ path, kind: 'other' as const })),
+  corrupt: [],
   permissionLost: false,
   backupsHealthy: true,
 })
@@ -22,6 +23,7 @@ const makeValue = (overrides: Partial<SafetyNetContextValue> = {}): SafetyNetCon
   chooseFolderAgain: vi.fn(async () => {}),
   listBackups: vi.fn(async () => []),
   restoreBackup: vi.fn(async () => {}),
+  resolveCorrupt: vi.fn(async () => null),
   ...overrides,
 })
 
@@ -85,7 +87,12 @@ describe('DataSafetyBanner', () => {
     it('explains a full disk', () => {
       renderBanner(
         makeValue({
-          snapshot: { failed: [{ path: 'a.json', kind: 'disk-full' }], permissionLost: false, backupsHealthy: true },
+          snapshot: {
+            failed: [{ path: 'a.json', kind: 'disk-full' }],
+            corrupt: [],
+            permissionLost: false,
+            backupsHealthy: true,
+          },
         }),
       )
       expect(screen.getByRole('alert')).toHaveTextContent('The disk looks full. Free some space, then try again.')
@@ -124,6 +131,7 @@ describe('DataSafetyBanner', () => {
       const user = userEvent.setup()
       const diskFull: SafetySnapshot = {
         failed: [{ path: 'b.json', kind: 'disk-full' }],
+        corrupt: [],
         permissionLost: false,
         backupsHealthy: true,
       }
@@ -143,7 +151,7 @@ describe('DataSafetyBanner', () => {
   })
 
   describe('permission loss', () => {
-    const lost: SafetySnapshot = { failed: [], permissionLost: true, backupsHealthy: true }
+    const lost: SafetySnapshot = { failed: [], corrupt: [], permissionLost: true, backupsHealthy: true }
 
     it('offers to reconnect the folder from a click handler', async () => {
       const user = userEvent.setup()
@@ -171,7 +179,12 @@ describe('DataSafetyBanner', () => {
     it('shows the permission issue for a permission-caused write failure instead of a save error', () => {
       renderBanner(
         makeValue({
-          snapshot: { failed: [{ path: 'a.json', kind: 'permission' }], permissionLost: true, backupsHealthy: true },
+          snapshot: {
+            failed: [{ path: 'a.json', kind: 'permission' }],
+            corrupt: [],
+            permissionLost: true,
+            backupsHealthy: true,
+          },
         }),
       )
       expect(screen.getByRole('alert')).toHaveTextContent('Access to your data folder was lost.')
@@ -188,6 +201,7 @@ describe('DataSafetyBanner', () => {
               { path: 'a.json', kind: 'permission' },
               { path: 'b.json', kind: 'disk-full' },
             ],
+            corrupt: [],
             permissionLost: true,
             backupsHealthy: true,
           },
@@ -203,6 +217,7 @@ describe('DataSafetyBanner', () => {
     it('reveals the next issue once the top one is resolved', () => {
       const both: SafetySnapshot = {
         failed: [{ path: 'b.json', kind: 'other' }],
+        corrupt: [],
         permissionLost: true,
         backupsHealthy: true,
       }
@@ -272,6 +287,212 @@ describe('DataSafetyBanner', () => {
       update(makeValue({ snapshot: failedSnapshot('b.json') }))
       expect(screen.getByRole('status')).toBeEmptyDOMElement()
       expect(screen.getByRole('alert')).toHaveTextContent('b.json')
+    })
+  })
+
+  describe('corrupt file', () => {
+    const corruptSnapshot = (
+      ...files: { path: string; copyPath: string | null; hasBackup: boolean }[]
+    ): SafetySnapshot => ({ ...EMPTY_SAFETY_SNAPSHOT, corrupt: files })
+
+    const withCopy = { path: 'accounts.json', copyPath: 'accounts.json.corrupt-20261108T183437123Z', hasBackup: true }
+
+    const backup: BackupEntry = {
+      path: 'accounts.json',
+      backupPath: '_backups/accounts/20261101T120000000Z.json',
+      stamp: '20261101T120000000Z',
+      unsaved: false,
+      size: 10,
+    }
+
+    it('names the file and the saved copy, and explains that saving is paused', () => {
+      renderBanner(makeValue({ snapshot: corruptSnapshot(withCopy) }))
+      const alert = within(screen.getByRole('region', { name: 'Data safety' })).getByRole('alert')
+      expect(alert).toHaveTextContent("Couldn't read accounts.json.")
+      expect(alert).toHaveTextContent(
+        "The file isn't valid JSON, so the app left it untouched and saved a copy as accounts.json.corrupt-20261108T183437123Z. Changes to it won't be saved until you choose how to continue.",
+      )
+    })
+
+    it('shows only the copy name for a file in a folder', () => {
+      renderBanner(
+        makeValue({
+          snapshot: corruptSnapshot({
+            path: 'budget/categories.json',
+            copyPath: 'budget/categories.json.corrupt-20261108T183437123Z',
+            hasBackup: false,
+          }),
+        }),
+      )
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent("Couldn't read budget/categories.json.")
+      expect(alert).toHaveTextContent('saved a copy as categories.json.corrupt-20261108T183437123Z.')
+    })
+
+    it('says no copy could be saved when there is none', () => {
+      renderBanner(makeValue({ snapshot: corruptSnapshot({ ...withCopy, copyPath: null }) }))
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        "The file isn't valid JSON and a copy couldn't be saved, so the app left it untouched. Changes to it won't be saved until you choose how to continue.",
+      )
+    })
+
+    it('offers both choices, Restore first, when a valid backup exists', () => {
+      renderBanner(makeValue({ snapshot: corruptSnapshot(withCopy) }))
+      const buttons = within(screen.getByRole('alert')).getAllByRole('button')
+      expect(buttons.map(button => button.textContent)).toEqual(['Restore latest backup', 'Start fresh'])
+    })
+
+    it('hides Restore when no valid backup exists', () => {
+      renderBanner(makeValue({ snapshot: corruptSnapshot({ ...withCopy, hasBackup: false }) }))
+      expect(screen.queryByRole('button', { name: 'Restore latest backup' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Start fresh' })).toBeInTheDocument()
+    })
+
+    it('restores the latest backup for that file and announces the date', async () => {
+      const user = userEvent.setup()
+      const resolveCorrupt = vi.fn(async () => backup)
+      renderBanner(makeValue({ snapshot: corruptSnapshot(withCopy), resolveCorrupt }))
+
+      await user.click(screen.getByRole('button', { name: 'Restore latest backup' }))
+
+      expect(resolveCorrupt).toHaveBeenCalledWith('accounts.json', 'restore-latest')
+      expect(screen.getByRole('status')).toHaveTextContent('accounts.json restored from the backup of Nov 1, 2026')
+    })
+
+    it('starts fresh for that file and says the unreadable copy is still there', async () => {
+      const user = userEvent.setup()
+      const resolveCorrupt = vi.fn(async () => null)
+      renderBanner(makeValue({ snapshot: corruptSnapshot(withCopy), resolveCorrupt }))
+
+      await user.click(screen.getByRole('button', { name: 'Start fresh' }))
+
+      expect(resolveCorrupt).toHaveBeenCalledWith('accounts.json', 'start-fresh')
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'accounts.json replaced. The unreadable copy is still in your folder.',
+      )
+    })
+
+    it('shows the specific message, not "All changes saved.", once the store clears the issue', async () => {
+      const user = userEvent.setup()
+      let finish: (entry: BackupEntry | null) => void = () => {}
+      const resolveCorrupt = vi.fn(() => new Promise<BackupEntry | null>(resolve => (finish = resolve)))
+      const value = makeValue({ snapshot: corruptSnapshot(withCopy), resolveCorrupt })
+      const { update } = renderBanner(value)
+
+      await user.click(screen.getByRole('button', { name: 'Start fresh' }))
+      // The store clears the issue first, then the promise settles.
+      update({ ...value, snapshot: EMPTY_SAFETY_SNAPSHOT })
+      await act(async () => finish(null))
+
+      expect(screen.getByRole('status')).toHaveTextContent('accounts.json replaced.')
+      expect(screen.getByRole('status')).not.toHaveTextContent('All changes saved.')
+    })
+
+    it('moves focus to the main content when the buttons disappear', async () => {
+      const user = userEvent.setup()
+      const value = makeValue({ snapshot: corruptSnapshot(withCopy) })
+      const { update } = renderBanner(value)
+      await user.tab()
+      await user.tab()
+      expect(screen.getByRole('button', { name: 'Restore latest backup' })).toHaveFocus()
+      update({ ...value, snapshot: EMPTY_SAFETY_SNAPSHOT })
+      expect(document.getElementById('main-content')).toHaveFocus()
+    })
+
+    it('disables both buttons while resolving and ignores a second click', async () => {
+      const user = userEvent.setup()
+      let finish: (entry: BackupEntry | null) => void = () => {}
+      const resolveCorrupt = vi.fn(() => new Promise<BackupEntry | null>(resolve => (finish = resolve)))
+      renderBanner(makeValue({ snapshot: corruptSnapshot(withCopy), resolveCorrupt }))
+
+      await user.click(screen.getByRole('button', { name: 'Start fresh' }))
+      await user.click(screen.getByRole('button', { name: 'Start fresh' }))
+      await user.click(screen.getByRole('button', { name: 'Restore latest backup' }))
+
+      expect(resolveCorrupt).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('alert')).toHaveAttribute('aria-busy', 'true')
+      expect(screen.getByRole('button', { name: 'Start fresh' })).toHaveAttribute('aria-disabled', 'true')
+      await act(async () => finish(null))
+      expect(screen.getByRole('alert')).not.toHaveAttribute('aria-busy')
+    })
+
+    it('says the file was not changed when the resolution fails, and allows another try', async () => {
+      const user = userEvent.setup()
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const resolveCorrupt = vi
+        .fn<(path: string, action: string) => Promise<BackupEntry | null>>()
+        .mockRejectedValueOnce(new Error('disk gone'))
+        .mockResolvedValueOnce(null)
+      renderBanner(makeValue({ snapshot: corruptSnapshot(withCopy), resolveCorrupt }))
+
+      await user.click(screen.getByRole('button', { name: 'Start fresh' }))
+
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent(
+        "Couldn't finish that. The file was not changed. Check that your data folder is connected, then try again.",
+      )
+      expect(within(alert).getAllByRole('button')).toHaveLength(2)
+
+      await user.click(screen.getByRole('button', { name: 'Start fresh' }))
+      expect(resolveCorrupt).toHaveBeenCalledTimes(2)
+      expect(screen.getByRole('alert')).not.toHaveTextContent("Couldn't finish that.")
+    })
+
+    it('clears the failure message when a different file becomes the top issue', async () => {
+      const user = userEvent.setup()
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const resolveCorrupt = vi.fn(async () => {
+        throw new Error('disk gone')
+      })
+      const value = makeValue({ snapshot: corruptSnapshot(withCopy), resolveCorrupt })
+      const { update } = renderBanner(value)
+      await user.click(screen.getByRole('button', { name: 'Start fresh' }))
+      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't finish that.")
+
+      update({
+        ...value,
+        snapshot: corruptSnapshot({ path: 'profile.json', copyPath: 'profile.json.corrupt-x', hasBackup: false }),
+      })
+
+      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read profile.json.")
+      expect(screen.getByRole('alert')).not.toHaveTextContent("Couldn't finish that.")
+    })
+
+    it('ranks below permission and save failures, and counts the rest', () => {
+      renderBanner(
+        makeValue({
+          snapshot: {
+            failed: [{ path: 'a.json', kind: 'other' }],
+            corrupt: [withCopy, { path: 'profile.json', copyPath: null, hasBackup: false }],
+            permissionLost: false,
+            backupsHealthy: true,
+          },
+        }),
+      )
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent("Couldn't save changes to a.json.")
+      expect(alert).toHaveTextContent('2 more issues need attention.')
+    })
+
+    it('shows one corrupt file at a time and reveals the next after resolving', async () => {
+      const user = userEvent.setup()
+      const other = { path: 'profile.json', copyPath: 'profile.json.corrupt-x', hasBackup: false }
+      const resolveCorrupt = vi.fn(async () => null)
+      const value = makeValue({ snapshot: corruptSnapshot(withCopy, other), resolveCorrupt })
+      const { update } = renderBanner(value)
+      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read accounts.json.")
+      expect(screen.getByRole('alert')).toHaveTextContent('1 more issue needs attention.')
+
+      await user.click(screen.getByRole('button', { name: 'Start fresh' }))
+      update({ ...value, snapshot: corruptSnapshot(other) })
+
+      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read profile.json.")
+      expect(screen.getByRole('status')).toHaveTextContent('accounts.json replaced.')
+    })
+
+    it('shows nothing for a corrupt file when the safety net is off', () => {
+      renderBanner(makeValue({ enabled: false, snapshot: corruptSnapshot(withCopy) }))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     })
   })
 })

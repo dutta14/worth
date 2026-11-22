@@ -1,11 +1,19 @@
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSafetyNet } from '../contexts/SafetyNetContext'
-import { deriveIssues, moreIssuesText } from '../utils/safetyNet'
-import type { SafetyIssue } from '../utils/safetyNet'
+import { deriveIssues, moreIssuesText, stampToDate } from '../utils/safetyNet'
+import type { CorruptAction, SafetyIssue } from '../utils/safetyNet'
 import '../styles/DataSafetyNet.css'
 
 const SAVED_STATUS = 'All changes saved.'
 const SAVED_STATUS_MS = 1000
+const RESOLVE_FAILED =
+  "Couldn't finish that. The file was not changed. Check that your data folder is connected, then try again."
+const DATE_FORMAT = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+
+type CorruptIssue = Extract<SafetyIssue, { type: 'corrupt' }>
+type WriteFailedIssue = Extract<SafetyIssue, { type: 'write-failed' }>
+
+const baseName = (path: string): string => path.split('/').pop() ?? path
 
 const WarningIcon: FC = () => (
   <svg
@@ -31,7 +39,7 @@ interface BannerCopy {
   body: string
 }
 
-const writeFailedCopy = (issue: Extract<SafetyIssue, { type: 'write-failed' }>, retried: boolean): BannerCopy => {
+const writeFailedCopy = (issue: WriteFailedIssue, retried: boolean): BannerCopy => {
   const count = issue.paths.length
   const subject = count === 1 ? issue.paths[0] : `${count} files`
   const body = retried
@@ -49,18 +57,37 @@ const permissionCopy = (denied: boolean): BannerCopy => ({
     : 'Your changes are still on screen but not saved. Reconnect to keep them.',
 })
 
+const corruptCopy = (issue: CorruptIssue, failed: boolean): BannerCopy => ({
+  title: `Couldn't read ${issue.path}.`,
+  body: failed
+    ? RESOLVE_FAILED
+    : issue.copyPath
+      ? `The file isn't valid JSON, so the app left it untouched and saved a copy as ${baseName(issue.copyPath)}. Changes to it won't be saved until you choose how to continue.`
+      : "The file isn't valid JSON and a copy couldn't be saved, so the app left it untouched. Changes to it won't be saved until you choose how to continue.",
+})
+
+const resolvedText = (path: string, action: CorruptAction, restoredStamp: string | null): string =>
+  action === 'restore-latest' && restoredStamp
+    ? `${path} restored from the backup of ${DATE_FORMAT.format(stampToDate(restoredStamp))}.`
+    : `${path} replaced. The unreadable copy is still in your folder.`
+
 /**
  * Sticky, non-dismissible strip that reports the highest-priority data-safety
  * issue. It never steals focus; it is announced by its live regions.
  */
 const DataSafetyBanner: FC = () => {
-  const { enabled, snapshot, reconnectDenied, retryFailed, reconnect, chooseFolderAgain } = useSafetyNet()
+  const { enabled, snapshot, reconnectDenied, retryFailed, reconnect, chooseFolderAgain, resolveCorrupt } =
+    useSafetyNet()
   const issues = useMemo(() => deriveIssues(snapshot), [snapshot])
   const [retrying, setRetrying] = useState(false)
   const [retried, setRetried] = useState(false)
+  const [resolving, setResolving] = useState(false)
+  const [resolveFailed, setResolveFailed] = useState(false)
   const [savedMessage, setSavedMessage] = useState('')
   const regionRef = useRef<HTMLDivElement>(null)
   const hadIssues = useRef(false)
+  // Guards against a second click while a corrupt-file resolution is running.
+  const resolvingRef = useRef(false)
   const hasWriteFailure = issues.some(issue => issue.type === 'write-failed')
   const hasIssues = issues.length > 0
 
@@ -76,15 +103,20 @@ const DataSafetyBanner: FC = () => {
     }
     if (!hadIssues.current) return
     hadIssues.current = false
-    setSavedMessage(SAVED_STATUS)
     // The control the user just pressed is gone; hand focus to the page instead of dropping it on <body>.
     const active = document.activeElement
     if (!active || active === document.body || regionRef.current?.contains(active)) {
       document.getElementById('main-content')?.focus()
     }
+    // A resolution may already have set its own message; keep it.
+    setSavedMessage(current => current || SAVED_STATUS)
+  }, [hasIssues])
+
+  useEffect(() => {
+    if (!savedMessage) return
     const timer = setTimeout(() => setSavedMessage(''), SAVED_STATUS_MS)
     return () => clearTimeout(timer)
-  }, [hasIssues])
+  }, [savedMessage])
 
   const handleRetry = useCallback(async () => {
     if (retrying) return
@@ -97,14 +129,42 @@ const DataSafetyBanner: FC = () => {
     }
   }, [retrying, retryFailed])
 
+  const top = issues[0]
+  const topCorruptPath = top?.type === 'corrupt' ? top.path : null
+
+  useEffect(() => {
+    setResolveFailed(false)
+  }, [topCorruptPath])
+
+  const handleResolve = useCallback(
+    async (issue: CorruptIssue, action: CorruptAction) => {
+      if (resolvingRef.current) return
+      resolvingRef.current = true
+      setResolving(true)
+      setResolveFailed(false)
+      try {
+        const restored = await resolveCorrupt(issue.path, action)
+        setSavedMessage(resolvedText(issue.path, action, restored?.stamp ?? null))
+      } catch (error) {
+        console.error('Resolving the unreadable file failed:', error)
+        setResolveFailed(true)
+      } finally {
+        resolvingRef.current = false
+        setResolving(false)
+      }
+    },
+    [resolveCorrupt],
+  )
+
   if (!enabled) return null
 
-  const top = issues[0]
-  const copy = top
-    ? top.type === 'permission'
+  const copy = !top
+    ? null
+    : top.type === 'permission'
       ? permissionCopy(reconnectDenied)
-      : writeFailedCopy(top, retried)
-    : null
+      : top.type === 'corrupt'
+        ? corruptCopy(top, resolveFailed)
+        : writeFailedCopy(top, retried)
 
   const visible = hasIssues || savedMessage !== ''
 
@@ -116,7 +176,7 @@ const DataSafetyBanner: FC = () => {
       ref={regionRef}
     >
       {top && copy && (
-        <section className="dsn-banner dsn-banner--error" role="alert" aria-busy={retrying || undefined}>
+        <section className="dsn-banner dsn-banner--error" role="alert" aria-busy={retrying || resolving || undefined}>
           <WarningIcon />
           <div className="dsn-banner__text">
             <p className="dsn-banner__title">{copy.title}</p>
@@ -128,6 +188,27 @@ const DataSafetyBanner: FC = () => {
               <button type="button" className="dsn-btn dsn-btn--primary" aria-disabled={retrying} onClick={handleRetry}>
                 {retrying ? 'Trying again...' : 'Try again'}
               </button>
+            ) : top.type === 'corrupt' ? (
+              <>
+                {top.hasBackup && (
+                  <button
+                    type="button"
+                    className="dsn-btn dsn-btn--primary"
+                    aria-disabled={resolving}
+                    onClick={() => void handleResolve(top, 'restore-latest')}
+                  >
+                    Restore latest backup
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={top.hasBackup ? 'dsn-btn' : 'dsn-btn dsn-btn--primary'}
+                  aria-disabled={resolving}
+                  onClick={() => void handleResolve(top, 'start-fresh')}
+                >
+                  Start fresh
+                </button>
+              </>
             ) : (
               <button
                 type="button"
