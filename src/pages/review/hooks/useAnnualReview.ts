@@ -4,7 +4,7 @@ import { useFileStore } from '../../../contexts/FileStoreContext'
 import { useGoals } from '../../../contexts/GoalsContext'
 import { useGrowthSettings } from '../../../hooks/useGrowthSettings'
 import type { CategoryGroup, MonthCSV } from '../../budget/types'
-import { loadBudgetStore } from '../../budget/utils/budgetStorage'
+import { loadBudgetStoreStrict } from '../../budget/utils/budgetStorage'
 import { loadSavingsOverrides } from '../../tools/utils/savingsOverrides'
 import type { AnnualReview, ManualYearLog } from '../types'
 import { getAvailableYears } from '../utils/availableYears'
@@ -37,7 +37,7 @@ const RELOAD_EVENTS = ['budget-changed', 'tools-changed', 'data-changed'] as con
  * year list (used before the route names a year).
  */
 export function useAnnualReview(year: number | null): UseAnnualReviewResult {
-  const { accounts, balances, isLoaded } = useData()
+  const { accounts, balances, isLoaded, loadFailed = false } = useData()
   const { goals, profile } = useGoals()
   const { settings: growth } = useGrowthSettings()
   const { fileStore } = useFileStore()
@@ -51,7 +51,7 @@ export function useAnnualReview(year: number | null): UseAnnualReviewResult {
     let cancelled = false
     const load = () => {
       const id = ++latestLoad.current
-      Promise.all([loadBudgetStore(fileStore), loadSavingsOverrides(fileStore)])
+      Promise.all([loadBudgetStoreStrict(fileStore), loadSavingsOverrides(fileStore)])
         .then(([store, manual]) => {
           if (cancelled || id !== latestLoad.current) return
           setSource({ csvs: store.csvs, categoryGroups: store.categoryGroups ?? [], manual })
@@ -77,9 +77,11 @@ export function useAnnualReview(year: number | null): UseAnnualReviewResult {
   const retry = useCallback(() => {
     setFailed(false)
     setAttempt(n => n + 1)
-  }, [])
+    // DataContext reloads accounts and balances on this event; the review's own reload is covered by the attempt.
+    if (loadFailed) window.dispatchEvent(new Event('data-changed'))
+  }, [loadFailed])
 
-  const status: ReviewStatus = failed ? 'error' : source && isLoaded ? 'ready' : 'loading'
+  const status: ReviewStatus = failed || loadFailed ? 'error' : source && isLoaded ? 'ready' : 'loading'
 
   const { years, defaultYear } = useMemo(
     () =>

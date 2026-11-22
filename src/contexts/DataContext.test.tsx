@@ -30,6 +30,7 @@ function Consumer({ onData }: { onData?: (d: ReturnType<typeof useData>) => void
       <span data-testid="balances">{JSON.stringify(data.balances)}</span>
       <span data-testid="allMonths">{JSON.stringify(data.allMonths)}</span>
       <span data-testid="isLoaded">{String(data.isLoaded)}</span>
+      <span data-testid="loadFailed">{String(data.loadFailed)}</span>
     </div>
   )
 }
@@ -228,6 +229,33 @@ describe('DataContext', () => {
     await waitFor(() => expect(screen.getByTestId('isLoaded')).toHaveTextContent('true'))
     expect(errorSpy).toHaveBeenCalled()
     errorSpy.mockRestore()
+  })
+
+  it('reports loadFailed after a failed read, and clears it once a later read succeeds', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const readJSON = store.readJSON.bind(store)
+    let failing = true
+    vi.spyOn(store, 'readJSON').mockImplementation(async (path, fallback) => {
+      if (failing) throw new Error('disk gone')
+      return readJSON(path, fallback)
+    })
+
+    renderWithStore(<Consumer />, store)
+    await waitFor(() => expect(screen.getByTestId('loadFailed')).toHaveTextContent('true'))
+    expect(screen.getByTestId('isLoaded')).toHaveTextContent('true')
+
+    failing = false
+    act(() => {
+      window.dispatchEvent(new Event('data-changed'))
+    })
+    await waitFor(() => expect(screen.getByTestId('loadFailed')).toHaveTextContent('false'))
+  })
+
+  it('reports loadFailed false when every read succeeds', async () => {
+    renderWithStore(<Consumer />, store)
+
+    await waitFor(() => expect(screen.getByTestId('isLoaded')).toHaveTextContent('true'))
+    expect(screen.getByTestId('loadFailed')).toHaveTextContent('false')
   })
 
   it('treats a consumer without a provider as loaded', () => {

@@ -3,6 +3,7 @@ import { MemoryFileStore } from '../../../utils/memoryFileStore'
 import { parseCSV as parseCSVRows, serializeCSV } from '../../../utils/csvUtils'
 import {
   loadBudgetStore,
+  loadBudgetStoreStrict,
   saveBudgetStore,
   loadBudgetConfig,
   saveBudgetConfig,
@@ -48,6 +49,26 @@ async function seedCSV(store: MemoryFileStore, monthKey: string, csvText: string
   const year = parseInt(monthKey.split('-')[0], 10)
   await store.writeCSV(`transactions/${year}/${monthKey}.csv`, parseCSVRows(csvText))
 }
+
+describe('loadBudgetStoreStrict', () => {
+  it('returns the same store as loadBudgetStore when every read succeeds', async () => {
+    await seedCategories(ms, { years: [2025], categoryGroups: DEFAULT_GROUPS })
+    await seedCSV(ms, '2025-01', CSV_TEXT)
+
+    expect(await loadBudgetStoreStrict(ms)).toEqual(await loadBudgetStore(ms))
+  })
+
+  it.each(['listFiles', 'readCSV', 'readJSON'] as const)('propagates a failing %s', async method => {
+    await seedCategories(ms, { years: [2025], categoryGroups: DEFAULT_GROUPS })
+    await seedCSV(ms, '2025-01', CSV_TEXT)
+    vi.spyOn(ms, method).mockRejectedValue(new Error('disk gone'))
+
+    await expect(loadBudgetStoreStrict(ms)).rejects.toThrow('disk gone')
+    // the lenient loader keeps its existing behavior of returning an empty store
+    const lenient = await loadBudgetStore(ms)
+    expect(lenient.csvs).toEqual({})
+  })
+})
 
 describe('loadBudgetStore', () => {
   it('returns empty store with default groups when nothing is stored', async () => {

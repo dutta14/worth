@@ -5,7 +5,7 @@ import { useSettings } from '../../contexts/SettingsContext'
 import { useData } from '../../contexts/DataContext'
 import ErrorBoundary from '../../components/ErrorBoundary'
 import { FLAGS } from '../../flags/flagDefinitions'
-import { useFlag } from '../../flags/useFlag'
+import { useFlag, useFlagResolved } from '../../flags/useFlag'
 import { Account, BalanceEntry } from './types'
 import { parseCsvImport } from './csvImport'
 import { exportCsv } from './csvExport'
@@ -31,6 +31,7 @@ const Data: FC = () => {
   const { allowCsvImport } = useSettings()
   const { accounts, balances, setAccounts: ctxSetAccounts, setBalances: ctxSetBalances } = useData()
   const annualReviewEnabled = useFlag(FLAGS.ANNUAL_REVIEW)
+  const annualReviewResolved = useFlagResolved(FLAGS.ANNUAL_REVIEW)
 
   const [showAccountsModal, setShowAccountsModal] = useState(false)
   const [inlineEntry, setInlineEntry] = useState<{
@@ -620,9 +621,9 @@ const Data: FC = () => {
                     <AnnualReview />
                   </Suspense>
                 </ErrorBoundary>
-              ) : (
+              ) : annualReviewResolved ? (
                 <Navigate to="/net-worth/dashboard" replace />
-              )
+              ) : null
             }
           />
         </Routes>

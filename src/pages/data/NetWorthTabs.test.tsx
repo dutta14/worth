@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import Data from './Data'
 import { makeFlagContextValue } from '../../test/flagTestUtils'
-import { FlagContext } from '../../flags/FlagContext'
+import { FlagContext, FlagProvider } from '../../flags/FlagContext'
 
 vi.mock('../../contexts/GoalsContext', () => ({
   useGoals: () => ({
@@ -213,5 +213,117 @@ describe('Net Worth Review tab with the annual-review flag off', () => {
   it('renders nothing for other unknown wealth routes, as before', () => {
     renderWithFlag(false, '/net-worth/nope')
     expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/nope')
+  })
+})
+
+describe('Net Worth Review route while the flag config is resolving', () => {
+  const renderUnresolved = (route: string, flags: Record<string, boolean> = {}, overrides = {}) => {
+    const value = makeFlagContextValue(flags, { isResolved: false, overrides })
+    const view = render(
+      <FlagContext.Provider value={value}>
+        <MemoryRouter initialEntries={[route]}>
+          <LocationProbe />
+          <Routes>
+            <Route path="/net-worth/*" element={<Data />} />
+          </Routes>
+        </MemoryRouter>
+      </FlagContext.Provider>,
+    )
+    return { view, value }
+  }
+
+  it('does not redirect a review URL before the flag is known, and renders nothing for it', () => {
+    renderUnresolved('/net-worth/review/2025')
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/review/2025')
+    expect(screen.queryByText('Review page')).not.toBeInTheDocument()
+  })
+
+  it('redirects to the dashboard once the flag is resolved and still off', () => {
+    const { view } = renderUnresolved('/net-worth/review/2025')
+
+    view.rerender(
+      <FlagContext.Provider value={makeFlagContextValue({ 'annual-review': false }, { isResolved: true })}>
+        <MemoryRouter initialEntries={['/net-worth/review/2025']}>
+          <LocationProbe />
+          <Routes>
+            <Route path="/net-worth/*" element={<Data />} />
+          </Routes>
+        </MemoryRouter>
+      </FlagContext.Provider>,
+    )
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/dashboard')
+  })
+
+  it('keeps a local override that turns the flag off synchronous', () => {
+    renderUnresolved('/net-worth/review/2025', {}, { 'annual-review': false })
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/dashboard')
+  })
+
+  it('leaves other unknown wealth routes alone while resolving', () => {
+    renderUnresolved('/net-worth/nope')
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/nope')
+  })
+})
+
+describe('Net Worth Review route with the real FlagProvider on a cold load', () => {
+  const rollout = { version: 1, updatedAt: '2025-01-01', flags: { 'annual-review': { percentage: 100 } } }
+
+  beforeEach(() => {
+    localStorage.clear()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ content: btoa(JSON.stringify(rollout)), sha: 'abc' }),
+      }),
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    localStorage.clear()
+  })
+
+  const renderCold = (route: string) =>
+    render(
+      <FlagProvider adminToken={null}>
+        <MemoryRouter initialEntries={[route]}>
+          <LocationProbe />
+          <Routes>
+            <Route path="/net-worth/*" element={<Data />} />
+          </Routes>
+        </MemoryRouter>
+      </FlagProvider>,
+    )
+
+  it('keeps the review URL when the cache is missing and the flag is enabled by percentage rollout', async () => {
+    renderCold('/net-worth/review/2025')
+
+    expect(await screen.findByText('Review page')).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/review/2025')
+  })
+
+  it('keeps the review URL when the cache is stale and the flag is enabled by percentage rollout', async () => {
+    localStorage.setItem(
+      'flag-rollout-cache',
+      JSON.stringify({ config: { ...rollout, flags: {} }, fetchedAt: Date.now() - 60 * 60 * 1000 }),
+    )
+    renderCold('/net-worth/review/2025')
+
+    expect(await screen.findByText('Review page')).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/review/2025')
+  })
+
+  it('redirects to the dashboard after the config resolves when the flag is not rolled out', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }))
+    renderCold('/net-worth/review/2025')
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/dashboard'))
+    expect(screen.queryByText('Review page')).not.toBeInTheDocument()
   })
 })

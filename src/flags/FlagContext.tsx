@@ -40,6 +40,11 @@ export interface FlagContextValue {
   error: string | null
   environment: 'production' | 'staging'
   clientId: string
+  /**
+   * False until the rollout config is known (fresh cache or first fetch settled). Absent means resolved.
+   * Local overrides never wait for it.
+   */
+  isResolved?: boolean
 }
 
 const CACHE_MAX_AGE_MS = 5 * 60 * 1000 // 5 minutes
@@ -54,6 +59,14 @@ interface CachedConfig {
 
 function getCachedConfig(): CachedConfig | null {
   return getStorageItem('flag-rollout-cache', null) as CachedConfig | null
+}
+
+/** The cached rollout config when it is fresh and well-formed; the same freshness rule fetchConfig uses. */
+function getFreshCachedConfig(): RolloutConfig | null {
+  const cached = getCachedConfig()
+  if (!cached || Date.now() - cached.fetchedAt >= CACHE_MAX_AGE_MS) return null
+  const { flags } = cached.config ?? {}
+  return flags && typeof flags === 'object' && !Array.isArray(flags) ? cached.config : null
 }
 
 function setCachedConfig(config: RolloutConfig): void {
@@ -120,7 +133,9 @@ export const FlagProvider: FC<FlagProviderProps> = ({ children, adminToken = nul
 
   const clientIdRef = useRef(getOrCreateClientId())
   const [overrides, setOverrides] = useState<Record<string, unknown>>(loadOverrides)
-  const [rolloutConfig, setRolloutConfig] = useState<RolloutConfig>(EMPTY_CONFIG)
+  const [initialCache] = useState(getFreshCachedConfig)
+  const [rolloutConfig, setRolloutConfig] = useState<RolloutConfig>(initialCache ?? EMPTY_CONFIG)
+  const [isResolved, setIsResolved] = useState(initialCache !== null)
   const [configSha, setConfigSha] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -295,7 +310,7 @@ export const FlagProvider: FC<FlagProviderProps> = ({ children, adminToken = nul
   }
 
   useEffect(() => {
-    fetchConfig()
+    fetchConfig().finally(() => setIsResolved(true))
   }, [fetchConfig])
 
   /* ── Resolution function ───────────────────────────────────────── */
@@ -410,6 +425,7 @@ export const FlagProvider: FC<FlagProviderProps> = ({ children, adminToken = nul
       error,
       environment,
       clientId: clientIdRef.current,
+      isResolved,
     }),
     [
       resolveFlag,
@@ -423,6 +439,7 @@ export const FlagProvider: FC<FlagProviderProps> = ({ children, adminToken = nul
       isLoading,
       error,
       environment,
+      isResolved,
     ],
   )
 

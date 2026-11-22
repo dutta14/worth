@@ -339,6 +339,23 @@ describe('AnnualReview error state', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('shows the error state, not "Nothing to review yet", when DataContext failed to read the data', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    mockUseData.mockReturnValue({ accounts: [], balances: [], allMonths: [], isLoaded: true, loadFailed: true })
+    const reload = vi.fn()
+    window.addEventListener('data-changed', reload)
+    renderPage('/net-worth/review/2025')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('The review could not be built. Your files were not changed.')
+    expect(screen.queryByText('Nothing to review yet')).not.toBeInTheDocument()
+
+    await user.click(within(alert).getByRole('button', { name: 'Try again' }))
+    window.removeEventListener('data-changed', reload)
+    expect(reload).toHaveBeenCalled()
+  })
+
   it('keeps the year select disabled in the error state when the route has no year', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(store, 'readJSON').mockRejectedValue(new Error('boom'))

@@ -11,6 +11,8 @@ interface DataContextValue {
   allMonths: string[]
   /** True once the first read of accounts and balances has settled, so an empty list is real data. */
   isLoaded: boolean
+  /** True while the latest read of accounts or balances failed; the lists then hold the last good data, or nothing. */
+  loadFailed?: boolean
   setAccounts: (accounts: Account[]) => void
   setBalances: (balances: BalanceEntry[]) => void
 }
@@ -31,6 +33,8 @@ export const DataProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [accounts, setAccountsState] = useState<Account[]>([])
   const [balances, setBalancesState] = useState<BalanceEntry[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
+  const [accountsFailed, setAccountsFailed] = useState(false)
+  const [balancesFailed, setBalancesFailed] = useState(false)
 
   const allMonths = useMemo(() => [...new Set(balances.map(b => b.month))].sort(), [balances])
 
@@ -57,16 +61,26 @@ export const DataProvider: FC<{ children: ReactNode }> = ({ children }) => {
       fileStore
         .readJSON<Account[]>(ACCOUNTS_PATH, [])
         .then(next => {
-          if (!cancelled) setAccountsState(next)
+          if (cancelled) return
+          setAccountsState(next)
+          setAccountsFailed(false)
         })
-        .catch(console.error)
+        .catch(error => {
+          console.error(error)
+          if (!cancelled) setAccountsFailed(true)
+        })
 
     const refreshBalances = () =>
       loadBalances(fileStore)
         .then(next => {
-          if (!cancelled) setBalancesState(next)
+          if (cancelled) return
+          setBalancesState(next)
+          setBalancesFailed(false)
         })
-        .catch(console.error)
+        .catch(error => {
+          console.error(error)
+          if (!cancelled) setBalancesFailed(true)
+        })
 
     Promise.all([refreshAccounts(), refreshBalances()]).then(() => {
       if (!cancelled) setIsLoaded(true)
@@ -86,9 +100,11 @@ export const DataProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
   }, [fileStore])
 
+  const loadFailed = accountsFailed || balancesFailed
+
   const value = useMemo<DataContextValue>(
-    () => ({ accounts, balances, allMonths, isLoaded, setAccounts, setBalances }),
-    [accounts, balances, allMonths, isLoaded, setAccounts, setBalances],
+    () => ({ accounts, balances, allMonths, isLoaded, loadFailed, setAccounts, setBalances }),
+    [accounts, balances, allMonths, isLoaded, loadFailed, setAccounts, setBalances],
   )
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>

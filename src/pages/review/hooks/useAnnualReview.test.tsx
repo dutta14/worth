@@ -147,6 +147,72 @@ describe('useAnnualReview', () => {
       act(() => result.current.retry())
       await waitFor(() => expect(result.current.status).toBe('ready'))
     })
+
+    it.each(['listFiles', 'readCSV'] as const)(
+      'reports an error, not an empty review, when %s rejects, then recovers on retry',
+      async method => {
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        await seedBudget()
+        const original = store[method].bind(store) as (...args: unknown[]) => Promise<unknown>
+        let failing = true
+        vi.spyOn(store, method).mockImplementation(((...args: unknown[]) =>
+          failing ? Promise.reject(new Error('disk gone')) : original(...args)) as never)
+
+        const { result } = renderHook(() => useAnnualReview(2025), { wrapper })
+        await waitFor(() => expect(result.current.status).toBe('error'))
+        expect(result.current.review).toBeNull()
+
+        failing = false
+        act(() => result.current.retry())
+        await waitFor(() => expect(result.current.status).toBe('ready'))
+        expect(result.current.review?.cashflow.income).toBe(120000)
+      },
+    )
+
+    it('keeps the last good data when a reload fails and restores the review once a reload succeeds', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      await seedBudget()
+      const { result } = renderHook(() => useAnnualReview(2025), { wrapper })
+      await waitFor(() => expect(result.current.status).toBe('ready'))
+      expect(result.current.years).toContain(2025)
+
+      const readCSV = store.readCSV.bind(store)
+      let failing = true
+      vi.spyOn(store, 'readCSV').mockImplementation(async path => {
+        if (failing) throw new Error('transient')
+        return readCSV(path)
+      })
+      act(() => {
+        window.dispatchEvent(new Event('data-changed'))
+      })
+      await waitFor(() => expect(result.current.status).toBe('error'))
+      expect(result.current.years).toContain(2025)
+      expect(result.current.defaultYear).toBe(2025)
+
+      failing = false
+      act(() => {
+        window.dispatchEvent(new Event('data-changed'))
+      })
+      await waitFor(() => expect(result.current.status).toBe('ready'))
+      expect(result.current.review?.cashflow.income).toBe(120000)
+    })
+
+    it('reports an error while DataContext failed to load accounts or balances, and asks it to reload on retry', async () => {
+      mockUseData.mockReturnValue({ accounts: [], balances: [], allMonths: [], isLoaded: true, loadFailed: true })
+      const { result, rerender } = renderHook(() => useAnnualReview(2025), { wrapper })
+      await waitFor(() => expect(result.current.status).toBe('error'))
+      expect(result.current.review).toBeNull()
+
+      const listener = vi.fn()
+      window.addEventListener('data-changed', listener)
+      act(() => result.current.retry())
+      window.removeEventListener('data-changed', listener)
+      expect(listener).toHaveBeenCalledTimes(1)
+
+      mockUseData.mockReturnValue({ accounts, balances, allMonths: [], isLoaded: true, loadFailed: false })
+      rerender()
+      await waitFor(() => expect(result.current.status).toBe('ready'))
+    })
   })
 
   describe('reloading', () => {
