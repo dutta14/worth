@@ -32,4 +32,10 @@ export const FLAGS = {
     description: 'Shows the Annual Review tab under Wealth',
     temporary: true,
   }),
+  IMPORT_WIZARD: defineFlag('import-wizard', {
+    type: 'boolean',
+    default: false,
+    description: 'Guided import wizard for CSV files: column mapping, review, split by month, duplicate skipping, undo',
+    temporary: true,
+  }),
 } as const

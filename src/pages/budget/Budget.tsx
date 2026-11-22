@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useBudget } from './hooks/useBudget'
 import { currentMonthKey, useBudgetTargets } from './hooks/useBudgetTargets'
 import { useCSVUpload } from './hooks/useCSVUpload'
+import { useImportWizard } from './import/hooks/useImportWizard'
 import { BudgetViewMode, TimePeriod } from './types'
 import BudgetHeader from './components/BudgetHeader'
 import { CASHFLOW_TAB_FOCUS_STATE, shouldFocusCashflowTab } from '../../components/CashflowTabs'
@@ -25,6 +26,9 @@ const PdfToCsv = lazy(() => import('../tools/components/PdfToCsv'))
 
 const Budget: FC = () => {
   const {
+    store,
+    commitImport,
+    undoImport,
     years,
     selectedYear,
     setSelectedYear,
@@ -64,6 +68,7 @@ const Budget: FC = () => {
     handlePreviewCancel,
   } = useCSVUpload(uploadCSV)
 
+  const importWizardOn = useFlag(FLAGS.IMPORT_WIZARD)
   const [showFormatHelp, setShowFormatHelp] = useState(false)
   const [showUploadMenu, setShowUploadMenu] = useState(false)
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('month')
@@ -74,6 +79,10 @@ const Budget: FC = () => {
   const pdfToCsvEnabled = getStorageItem('lab-pdf-to-csv', '0') === '1'
   const location = useLocation()
   const navigate = useNavigate()
+  const wizard = useImportWizard(
+    { store, commitImport, undoImport },
+    { onViewTransactions: () => navigate('/transactions', { state: CASHFLOW_TAB_FOCUS_STATE }) },
+  )
   const budgetPath = location.pathname.replace(/\/+$/, '')
   const viewMode: BudgetViewMode = budgetPath.endsWith('/groups')
     ? 'groups'
@@ -160,27 +169,33 @@ const Budget: FC = () => {
               isOpen={txnFormOpen}
               onToggle={setTxnFormOpen}
             />
-            <input
-              ref={quickUploadRef}
-              type="file"
-              accept=".csv"
-              data-testid="quick-upload-input"
-              style={{ display: 'none' }}
-              onChange={handleQuickUpload}
-            />
-            <input
-              ref={bulkUploadRef}
-              type="file"
-              accept=".csv"
-              multiple
-              data-testid="bulk-upload-input"
-              style={{ display: 'none' }}
-              onChange={handleBulkUpload}
-            />
+            {!importWizardOn && (
+              <>
+                <input
+                  ref={quickUploadRef}
+                  type="file"
+                  accept=".csv"
+                  data-testid="quick-upload-input"
+                  style={{ display: 'none' }}
+                  onChange={handleQuickUpload}
+                />
+                <input
+                  ref={bulkUploadRef}
+                  type="file"
+                  accept=".csv"
+                  multiple
+                  data-testid="bulk-upload-input"
+                  style={{ display: 'none' }}
+                  onChange={handleBulkUpload}
+                />
+              </>
+            )}
           </div>
         )}
 
-        {csvPreview && (
+        {importWizardOn && wizard.element}
+
+        {!importWizardOn && csvPreview && (
           <CSVPreviewModal
             csv={csvPreview.csv}
             monthKey={csvPreview.monthKey}
@@ -214,7 +229,7 @@ const Budget: FC = () => {
               {selectedYear <= currentYear && (
                 <button
                   className="budget-action-btn budget-action-btn--accent"
-                  onClick={() => quickUploadRef.current?.click()}
+                  onClick={() => (importWizardOn ? wizard.open() : quickUploadRef.current?.click())}
                 >
                   Import CSV
                 </button>
@@ -316,20 +331,22 @@ const Budget: FC = () => {
                                 role="menuitem"
                                 onClick={() => {
                                   setShowUploadMenu(false)
-                                  quickUploadRef.current?.click()
+                                  if (importWizardOn) wizard.open()
+                                  else quickUploadRef.current?.click()
                                 }}
                               >
-                                Upload CSV
+                                {importWizardOn ? 'Import CSV…' : 'Upload CSV'}
                               </button>
                               <button
                                 className="budget-upload-menu-item"
                                 role="menuitem"
                                 onClick={() => {
                                   setShowUploadMenu(false)
-                                  bulkUploadRef.current?.click()
+                                  if (importWizardOn) wizard.open({ multiple: true })
+                                  else bulkUploadRef.current?.click()
                                 }}
                               >
-                                Bulk Upload
+                                {importWizardOn ? 'Import several CSVs…' : 'Bulk Upload'}
                               </button>
                               {pdfToCsvEnabled && (
                                 <button

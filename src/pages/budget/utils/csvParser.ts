@@ -57,26 +57,15 @@ function normalizeDate(raw: string): string | null {
   return null
 }
 
-/**
- * Parse a CSV string into Transaction[].
- * Expected CSV format:
- *   Date,Category,Amount[,Description]
- *
- * - Date: any parseable date (yyyy-mm-dd recommended)
- * - Category: text string
- * - Amount: number (positive = income, negative = expense)
- * - Description (optional): text
- *
- * The first row must be a header row containing at least: Date, Category, Amount
- */
-export function parseCSV(csvText: string): Transaction[] {
-  const lines = splitCSVRows(csvText.trim())
-  if (lines.length < 2) return []
+export interface LegacyColumns {
+  dateIdx: number
+  catIdx: number
+  amtIdx: number
+  descIdx: number
+}
 
-  // Parse header
-  const headerLine = lines[0]
-  const headers = parseCSVLine(headerLine).map(h => h.trim().toLowerCase())
-
+/** Locates the Date, Category, Amount and Description columns of a lowercased, trimmed header row; -1 when absent. */
+export function findLegacyColumns(headers: string[]): LegacyColumns {
   const dateIdx = headers.findIndex(h => h === 'date')
   const catIdx = headers.findIndex(h => h === 'category')
   const amtIdx = headers.findIndex(h => h === 'amount')
@@ -102,6 +91,31 @@ export function parseCSV(csvText: string): Transaction[] {
     const knownIndices = new Set([dateIdx, catIdx, amtIdx])
     descIdx = headers.findIndex((_h, i) => !knownIndices.has(i))
   }
+
+  return { dateIdx, catIdx, amtIdx, descIdx }
+}
+
+/**
+ * Parse a CSV string into Transaction[].
+ * Expected CSV format:
+ *   Date,Category,Amount[,Description]
+ *
+ * - Date: any parseable date (yyyy-mm-dd recommended)
+ * - Category: text string
+ * - Amount: number (positive = income, negative = expense)
+ * - Description (optional): text
+ *
+ * The first row must be a header row containing at least: Date, Category, Amount
+ */
+export function parseCSV(csvText: string): Transaction[] {
+  const lines = splitCSVRows(csvText.trim())
+  if (lines.length < 2) return []
+
+  // Parse header
+  const headerLine = lines[0]
+  const headers = parseCSVLine(headerLine).map(h => h.trim().toLowerCase())
+
+  const { dateIdx, catIdx, amtIdx, descIdx } = findLegacyColumns(headers)
 
   if (dateIdx === -1 || catIdx === -1 || amtIdx === -1) {
     throw new Error(

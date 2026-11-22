@@ -11,44 +11,18 @@ import {
   saveBudgetSummary,
 } from '../utils/budgetStorage'
 import { parseCSV, buildMonthKey, parseCSVLine, getValidLineIndices } from '../utils/csvParser'
+import {
+  OTHERS_GROUP_ID,
+  REMOVED_GROUP_ID,
+  INCOME_OTHERS_GROUP_ID,
+  addCategoriesToGroup,
+  addDiscoveredCategories,
+  mergeGroupsByType,
+} from '../utils/categoryDiscovery'
+import { executeImport, executeUndo, type CommitResult, type UndoRecord, type UndoResult } from '../import/commitImport'
+import type { PreImportSnapshot } from '../import/importStorage'
+import type { ImportPlan } from '../import/types'
 import { useFileStore } from '../../../contexts/FileStoreContext'
-
-const OTHERS_GROUP_ID = 'others'
-const REMOVED_GROUP_ID = 'removed'
-const INCOME_OTHERS_GROUP_ID = 'income-others'
-
-const addCategoriesToGroup = (groups: CategoryGroup[], groupId: string, categories: string[]): CategoryGroup[] => {
-  if (categories.length === 0) return groups
-
-  const dedupedCategories = [...new Set(categories)]
-  const targetGroup = groups.find(g => g.id === groupId)
-  if (targetGroup) {
-    return groups.map(g => (g.id === groupId ? { ...g, categories: [...g.categories, ...dedupedCategories] } : g))
-  }
-
-  return [
-    ...groups,
-    {
-      id: groupId,
-      name: 'Others',
-      categories: dedupedCategories,
-      ...(groupId === INCOME_OTHERS_GROUP_ID ? { type: 'income' } : {}),
-    },
-  ]
-}
-
-const mergeGroupsByType = (
-  storeGroups: CategoryGroup[],
-  nextGroups: CategoryGroup[],
-  type: 'expense' | 'income',
-): CategoryGroup[] => {
-  const otherGroups = storeGroups.filter(group =>
-    type === 'income' ? group.type !== 'income' : group.type === 'income',
-  )
-  return type === 'income'
-    ? [...getExpenseGroups(otherGroups), ...nextGroups]
-    : [...nextGroups, ...getIncomeGroups(otherGroups)]
-}
 
 const updateMergedGroups = (groups: CategoryGroup[], sourceSet: Set<string>, targetName: string): CategoryGroup[] => {
   const targetGroupId = groups.find(g => g.categories.includes(targetName))?.id
@@ -138,45 +112,9 @@ export function useBudget() {
         }
 
         // Discover new categories and add them to the right "Others" group if not already grouped
-        const currentGroups = getExpenseGroups(next.categoryGroups || [])
-        const currentIncomeGroups = getIncomeGroups(next.categoryGroups || [])
-        const allGroupedCategories = new Set((next.categoryGroups || []).flatMap(group => group.categories))
-        const newCategoryTypes = new Map<string, 'expense' | 'income'>()
-
-        transactions.forEach(transaction => {
-          if (allGroupedCategories.has(transaction.category)) return
-          if (transaction.amount < 0) {
-            newCategoryTypes.set(transaction.category, 'expense')
-            return
-          }
-          if (transaction.amount > 0 && !newCategoryTypes.has(transaction.category)) {
-            newCategoryTypes.set(transaction.category, 'income')
-          }
-        })
-
-        const newExpenseCategories = [...newCategoryTypes.entries()]
-          .filter(([, type]) => type === 'expense')
-          .map(([category]) => category)
-        const newIncomeCategories = [...newCategoryTypes.entries()]
-          .filter(([, type]) => type === 'income')
-          .map(([category]) => category)
-        const newCategories = [...newExpenseCategories, ...newIncomeCategories]
-
-        if (newExpenseCategories.length > 0) {
-          const expenseGroups = addCategoriesToGroup(currentGroups, OTHERS_GROUP_ID, newExpenseCategories)
-          next = updateGlobalCategoryGroups(
-            next,
-            mergeGroupsByType(next.categoryGroups || [], expenseGroups, 'expense'),
-          )
-        }
-        if (newIncomeCategories.length > 0) {
-          const incomeGroups = addCategoriesToGroup(
-            currentIncomeGroups,
-            INCOME_OTHERS_GROUP_ID,
-            newIncomeCategories,
-          ).map(group => ({ ...group, type: 'income' as const }))
-          next = updateGlobalCategoryGroups(next, mergeGroupsByType(next.categoryGroups || [], incomeGroups, 'income'))
-        }
+        const discovered = addDiscoveredCategories(next, transactions)
+        next = discovered.store
+        const newCategories = discovered.newCategories
 
         persist(next)
         return { ok: true, transactions, newCategories }
@@ -185,6 +123,35 @@ export function useBudget() {
       }
     },
     [persist],
+  )
+
+  /**
+   * Applies an import plan. Unlike `persist`, every write is awaited and failures are returned, so the wizard
+   * never reports success for data that was not saved. Only the touched months and categories.json are written.
+   */
+  const commitImport = useCallback(
+    async (plan: ImportPlan, snapshot?: PreImportSnapshot): Promise<CommitResult> => {
+      const { result, store: next } = await executeImport({ fileStore, store: storeRef.current, plan, snapshot })
+      if (next) {
+        storeRef.current = next
+        setStore(next)
+      }
+      return result
+    },
+    [fileStore],
+  )
+
+  /** Reverses the import described by `record`; the caller checks `canUndoImport` first. */
+  const undoImport = useCallback(
+    async (record: UndoRecord): Promise<UndoResult> => {
+      const { result, store: next } = await executeUndo({ fileStore, store: storeRef.current, record })
+      if (next) {
+        storeRef.current = next
+        setStore(next)
+      }
+      return result
+    },
+    [fileStore],
   )
 
   const addTransaction = useCallback(
@@ -586,6 +553,8 @@ export function useBudget() {
     spreadsheetMode,
     setSpreadsheetMode,
     uploadCSV,
+    commitImport,
+    undoImport,
     removeCSV,
     addTransaction,
     createYear: handleCreateYear,
