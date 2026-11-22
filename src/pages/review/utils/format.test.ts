@@ -3,7 +3,9 @@ import {
   formatDelta,
   formatList,
   formatMoney,
+  formatMoneyCompact,
   formatMonthLong,
+  formatMonthName,
   formatMonthShort,
   formatPercent,
   pluralize,
@@ -96,5 +98,21 @@ describe('month names', () => {
     expect(formatMonthShort('2024-12')).toBe('Dec 2024')
     expect(formatMonthLong('2024-12')).toBe('December 2024')
     expect(formatMonthLong('2025-01')).toBe('January 2025')
+  })
+})
+
+describe('formatMonthName', () => {
+  it('returns the month name without the year', () => {
+    expect(formatMonthName('2026-10')).toBe('October')
+  })
+})
+
+describe('formatMoneyCompact', () => {
+  it('shortens axis values and keeps the sign', () => {
+    expect(formatMoneyCompact(460000)).toBe('$460K')
+    expect(formatMoneyCompact(1_200_000)).toBe('$1.2M')
+    expect(formatMoneyCompact(-20000)).toBe('-$20K')
+    expect(formatMoneyCompact(0)).toBe('$0')
+    expect(formatMoneyCompact(-0)).toBe('$0')
   })
 })

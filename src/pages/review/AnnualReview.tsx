@@ -1,8 +1,14 @@
 import { FC, useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { useGoals } from '../../contexts/GoalsContext'
+import ReviewCashflow from './components/ReviewCashflow'
 import ReviewEmpty from './components/ReviewEmpty'
 import ReviewError from './components/ReviewError'
+import ReviewGoals from './components/ReviewGoals'
 import ReviewHeader from './components/ReviewHeader'
+import ReviewNetWorth from './components/ReviewNetWorth'
+import ReviewNotes from './components/ReviewNotes'
+import ReviewSpending from './components/ReviewSpending'
 import { useAnnualReview } from './hooks/useAnnualReview'
 import { describePeriod } from './utils/period'
 import '../../styles/AnnualReview.css'
@@ -13,6 +19,7 @@ const YEAR_PARAM = /^\d{4}$/
 const AnnualReview: FC = () => {
   const { year: param } = useParams<{ year?: string }>()
   const navigate = useNavigate()
+  const { goals } = useGoals()
   const validParam = param === undefined || YEAR_PARAM.test(param)
   const year = param !== undefined && validParam ? Number(param) : null
   const { status, review, years, defaultYear, retry } = useAnnualReview(year)
@@ -51,7 +58,15 @@ const AnnualReview: FC = () => {
         )}
         {status === 'error' && <ReviewError onRetry={retry} />}
         {review?.status === 'empty' && year !== null && <ReviewEmpty year={year} noDataAnywhere={noDataAnywhere} />}
-        {review && review.status !== 'empty' && <div className="ar-sections">{/* Review sections render here */}</div>}
+        {review && review.status !== 'empty' && (
+          <div className="ar-sections">
+            <ReviewNotes review={review} />
+            <ReviewNetWorth review={review} />
+            <ReviewCashflow review={review} />
+            {review.spending && <ReviewSpending year={review.year} spending={review.spending} />}
+            <ReviewGoals review={review} hasGoals={goals.length > 0} />
+          </div>
+        )}
       </div>
     </div>
   )

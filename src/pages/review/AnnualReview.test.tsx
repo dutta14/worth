@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeGoal } from '../../test/factories'
 import { FileStoreTestProvider } from '../../test/fileStoreTestUtils'
 import { balancesFor, GROUPS, makeAccounts } from '../../test/reviewFixtures'
 import { MemoryFileStore } from '../../utils/memoryFileStore'
@@ -169,7 +170,7 @@ describe('AnnualReview header', () => {
     renderPage('/net-worth/review/2025')
 
     await screen.findByRole('heading', { level: 2, name: 'Annual Review 2025' })
-    expect(within(document.querySelector('.ar-page') as HTMLElement).queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /print|download/i })).not.toBeInTheDocument()
   })
 })
 
@@ -227,13 +228,22 @@ describe('AnnualReview year changes and live region', () => {
 })
 
 describe('AnnualReview keyboard order', () => {
-  it('puts the year select first and nothing else focusable in a year with data', async () => {
+  it('tabs from the year select to the monthly values toggle, then the in-page links, and nothing else', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderPage('/net-worth/review/2025')
-    await waitFor(() => expect(yearSelect()).toBeEnabled())
+    await screen.findByRole('button', { name: 'Show monthly values' })
 
     await user.tab()
     expect(yearSelect()).toHaveFocus()
+
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Show monthly values' })).toHaveFocus()
+
+    await user.tab()
+    expect(screen.getByRole('link', { name: 'Go to Cashflow' })).toHaveFocus()
+
+    await user.tab()
+    expect(screen.getByRole('link', { name: 'Open Planning' })).toHaveFocus()
 
     await user.tab()
     expect(screen.getByRole('button', { name: 'back' })).toHaveFocus()
@@ -289,13 +299,50 @@ describe('AnnualReview empty states', () => {
 })
 
 describe('AnnualReview with data', () => {
-  it('renders the section container and no fake figures or empty-state text', async () => {
+  it('renders the sections with the figures from the selector and no empty-state text', async () => {
     renderPage('/net-worth/review/2025')
 
     await screen.findByText('January to December 2025')
-    expect(document.querySelector('.ar-sections')).toBeInTheDocument()
+    const sections = screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)
+    expect(sections).toEqual(['Net worth', 'Income and savings', 'Goal progress at year end'])
+    expect(screen.getByText('Up $60,000')).toBeInTheDocument()
+    expect(screen.getByText('15.0% from $400,000 in Dec 2024 to $460,000 in Dec 2025')).toBeInTheDocument()
     expect(screen.queryByText(/Not enough data|Nothing to review/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/\$/)).not.toBeInTheDocument()
+  })
+
+  it('shows the in-progress year with its note and an end month that is not December', async () => {
+    useBalances(balancesFor(1, { '2025-12': 460000, '2026-10': 483000 }))
+    renderPage('/net-worth/review/2026')
+
+    expect(await screen.findByText('Up $23,000')).toBeInTheDocument()
+    expect(screen.getByText('2026 is still in progress. This review covers January to October.')).toBeInTheDocument()
+  })
+
+  it('shows a negative net worth as negative dollars', async () => {
+    useBalances(balancesFor(1, { '2024-12': -20000, '2025-12': -5000 }))
+    renderPage('/net-worth/review/2025')
+
+    expect(await screen.findByText('Up $15,000')).toBeInTheDocument()
+    expect(screen.getAllByText('-$20,000').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('-$5,000').length).toBeGreaterThan(0)
+  })
+
+  it('says there is no cashflow data when only balances exist, and offers the no-goal prompt', async () => {
+    renderPage('/net-worth/review/2025')
+
+    expect(await screen.findByText(/No income or expense data for 2025/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open Planning' })).toHaveAttribute('href', '/goal/plans')
+    expect(screen.queryByRole('heading', { name: 'Top spending groups' })).not.toBeInTheDocument()
+  })
+
+  it('says no goals existed when the user has goals but none by the end of the year', async () => {
+    mockUseGoals.mockReturnValue({
+      goals: [makeGoal({ id: 1, goalName: 'Later', goalCreatedIn: '2027-01' })],
+      profile: { birthday: '1990-01' },
+    })
+    renderPage('/net-worth/review/2025')
+
+    expect(await screen.findByText('You had no goals set by the end of 2025.')).toBeInTheDocument()
   })
 
   it('reads transactions from the folder so a year with only cashflow data is not empty', async () => {

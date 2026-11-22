@@ -1,7 +1,7 @@
 import type { GrowthSettings } from '../hooks/useGrowthSettings'
 import type { CategoryGroup, Transaction } from '../pages/budget/types'
 import type { Account, BalanceEntry } from '../pages/data/types'
-import type { ReviewInputs } from '../pages/review/types'
+import type { AnnualReview, ReviewInputs } from '../pages/review/types'
 import { makeAccount, makeTransaction } from './factories'
 
 /** 2026-11-08, the date the spec's worked examples assume. */
@@ -74,5 +74,64 @@ export const makeInputs = (overrides: Partial<ReviewInputs> = {}): ReviewInputs 
   goals: [],
   profileBirthday: '1990-01',
   growth: GROWTH,
+  ...overrides,
+})
+
+/** December 2024 and 2025 are the only months with data unless overridden. */
+export const makeSeries = (year: number, totals: Record<number, number | null> = {}, incomplete: number[] = []) =>
+  Array.from({ length: 12 }, (_, i) => ({
+    month: `${year}-${String(i + 1).padStart(2, '0')}`,
+    total: totals[i + 1] ?? null,
+    complete: totals[i + 1] != null && !incomplete.includes(i + 1),
+  }))
+
+/** The W1 review (a clean 2025) as the selector would return it; override any section. */
+export const makeReview = (overrides: Partial<AnnualReview> = {}): AnnualReview => ({
+  year: 2025,
+  status: 'complete',
+  netWorth: {
+    start: { month: '2024-12', total: 400000, status: 'exact', missing: [] },
+    end: { month: '2025-12', total: 460000, status: 'exact', missing: [] },
+    change: 60000,
+    changePct: 15,
+    startNegative: false,
+    series: makeSeries(2025, { 1: 405000, 6: 430000, 12: 460000 }),
+  },
+  cashflow: {
+    source: 'budget',
+    income: 120000,
+    expenses: 78000,
+    savings: 42000,
+    savingsRate: 35,
+    monthsCovered: Array.from({ length: 12 }, (_, i) => `2025-${String(i + 1).padStart(2, '0')}`),
+    gapMonths: [],
+    unreadableMonths: [],
+    mismatch: null,
+  },
+  spending: {
+    top: [
+      { id: 'housing', name: 'Housing', amount: 30000, share: 38.46 },
+      { id: 'food', name: 'Food', amount: 15000, share: 19.23 },
+      { id: 'transport', name: 'Transport', amount: 9000, share: 11.54 },
+      { id: 'travel', name: 'Travel', amount: 8000, share: 10.26 },
+      { id: 'health', name: 'Health', amount: 6000, share: 7.69 },
+    ],
+    other: { count: 2, amount: 10000, share: 12.82 },
+    refundOnlyTotal: 0,
+    uncategorizedShare: null,
+  },
+  goals: [
+    {
+      goalId: 12,
+      name: 'Retire at 55',
+      target: 2_000_000,
+      startBalance: 300000,
+      endBalance: 380000,
+      startPct: 15,
+      endPct: 19,
+    },
+  ],
+  notes: [],
+  prior: null,
   ...overrides,
 })

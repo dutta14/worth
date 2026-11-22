@@ -157,3 +157,278 @@
     flex: 1 1 100%;
   }
 }
+
+.ar-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.ar-section--notes {
+  background: var(--color-surface-alt);
+}
+
+.ar-section__title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+
+.ar-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin: 0;
+}
+
+.ar-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ar-stat dt,
+.ar-stat dd {
+  margin: 0;
+}
+
+.ar-stat__label {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.ar-stat__value {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.ar-stat__sub {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.ar-empty-line,
+.ar-footnote {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.ar-link {
+  color: var(--accent);
+}
+
+.ar-btn.ar-link {
+  color: var(--color-text);
+}
+
+.ar-notes,
+.ar-goals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ar-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  font-size: var(--fs-sm);
+  color: var(--color-text);
+}
+
+.ar-note__icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--color-text-muted);
+}
+
+.ar-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-md);
+  color: var(--color-text);
+}
+
+.ar-goal__sub {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.ar-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0;
+}
+
+.ar-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.ar-chart__grid {
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.ar-chart__zero {
+  stroke: var(--color-text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.ar-chart__axis {
+  font-size: var(--fs-xs);
+  fill: var(--color-text-muted);
+}
+
+.ar-chart__line {
+  fill: none;
+  stroke: var(--chart-nw-line);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.ar-chart__point {
+  fill: var(--chart-nw-line);
+  stroke: var(--chart-nw-line);
+  stroke-width: 2;
+}
+
+.ar-chart__point--hollow {
+  fill: var(--color-surface);
+}
+
+.ar-table:not(.sr-only) {
+  width: 100%;
+}
+
+.ar-table {
+  border-collapse: collapse;
+  font-size: var(--fs-md);
+  color: var(--color-text);
+}
+
+.ar-table caption {
+  padding-bottom: 8px;
+  text-align: left;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.ar-table th,
+.ar-table td {
+  padding: 8px 12px 8px 0;
+  text-align: left;
+  font-weight: var(--fw-normal);
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+
+.ar-table thead th {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-muted);
+}
+
+.ar-table .ar-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-share {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ar-share > span:last-child {
+  min-width: 5ch;
+  text-align: right;
+}
+
+.ar-bar {
+  display: none;
+  flex: none;
+  width: 96px;
+  height: 6px;
+  background: var(--color-surface-alt);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ar-bar__fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  animation: ar-bar-grow 300ms ease-out;
+}
+
+@keyframes ar-bar-grow {
+  from {
+    width: 0;
+  }
+}
+
+@media (min-width: 480px) {
+  .ar-bar {
+    display: block;
+  }
+}
+
+@media (max-width: 479px) {
+  .ar-section {
+    padding: 16px;
+  }
+
+  .ar-table {
+    font-size: var(--fs-sm);
+  }
+
+  .ar-figure__toggle {
+    align-self: stretch;
+  }
+
+  .ar-chart__axis {
+    font-size: 17px;
+  }
+
+  .ar-chart__axis--minor {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ar-bar__fill,
+  .ar-btn {
+    animation: none;
+    transition: none;
+  }
+}

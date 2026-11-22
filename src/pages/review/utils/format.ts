@@ -73,3 +73,21 @@ export function formatMonthLong(ym: string): string {
   const [y, m] = ym.split('-')
   return `${MONTH_NAMES_LONG[parseInt(m, 10) - 1]} ${y}`
 }
+
+/** "December", for sentences that already carry the year elsewhere. */
+export function formatMonthName(ym: string): string {
+  return formatMonthLong(ym).split(' ')[0]
+}
+
+const compactMoney = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  notation: 'compact',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 1,
+})
+
+/** "$460K", "-$1.2M": short axis labels. */
+export function formatMoneyCompact(n: number): string {
+  return compactMoney.format(n === 0 ? 0 : n)
+}
