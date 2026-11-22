@@ -44,6 +44,7 @@ export interface SearchIndexData {
   taxYears?: TaxYearIndex
   taxTemplates?: TaxTemplateIndex[]
   allocationRatios?: AllocationRatioIndex[]
+  annualReviewEnabled?: boolean
 }
 
 /* ─── Category display order & labels ─── */
@@ -465,9 +466,20 @@ function indexAllocationRatios(data: SearchIndexData): SearchItem[] {
 
 /* ─── Build & Search ─── */
 
+const ANNUAL_REVIEW_PAGE: SearchItem = {
+  id: 'page-annual-review',
+  category: 'page',
+  label: 'Annual Review',
+  hint: 'Your year in money: net worth, savings, spending',
+  icon: 'chart',
+  keywords: ['annual review', 'year in review', 'year end', 'yearly', 'savings rate', 'top spending', 'print', 'csv'],
+  route: '/net-worth/review',
+}
+
 export function buildIndex(data: SearchIndexData = {}): SearchItem[] {
   return [
     ...STATIC_PAGES,
+    ...(data.annualReviewEnabled ? [ANNUAL_REVIEW_PAGE] : []),
     ...STATIC_COMMANDS,
     ...indexGoals(data),
     ...indexAccounts(data),

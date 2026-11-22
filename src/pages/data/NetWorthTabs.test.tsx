@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import Data from './Data'
+import { makeFlagContextValue } from '../../test/flagTestUtils'
+import { FlagContext } from '../../flags/FlagContext'
 
 vi.mock('../../contexts/GoalsContext', () => ({
   useGoals: () => ({
@@ -13,6 +15,10 @@ vi.mock('../../contexts/SettingsContext', () => ({
   useSettings: () => ({
     allowCsvImport: false,
   }),
+}))
+
+vi.mock('../review/AnnualReview', () => ({
+  default: () => <div>Review page</div>,
 }))
 
 vi.mock('../../contexts/GitHubSyncContext', () => ({
@@ -133,5 +139,79 @@ describe('Net Worth tab active state', () => {
     renderData('/net-worth/dashboard')
     const link = screen.getByRole('link', { name: 'Growth' })
     expect(link).not.toHaveAttribute('aria-current')
+  })
+})
+
+/* ─── Review tab (annual-review flag) ─── */
+
+const flagValue = (annualReview: boolean) => makeFlagContextValue({ 'annual-review': annualReview })
+
+const LocationProbe = () => <div data-testid="location">{useLocation().pathname}</div>
+
+function renderWithFlag(annualReview: boolean, initialRoute: string) {
+  return render(
+    <FlagContext.Provider value={flagValue(annualReview)}>
+      <MemoryRouter initialEntries={[initialRoute]}>
+        <LocationProbe />
+        <Routes>
+          <Route path="/net-worth/*" element={<Data />} />
+        </Routes>
+      </MemoryRouter>
+    </FlagContext.Provider>,
+  )
+}
+
+describe('Net Worth Review tab with the annual-review flag on', () => {
+  it('lists Review after Growth as the fourth tab', () => {
+    renderWithFlag(true, '/net-worth/dashboard')
+    const nav = screen.getByRole('navigation', { name: 'Wealth sections' })
+    const names = Array.from(nav.querySelectorAll('a')).map(a => a.textContent)
+    expect(names).toEqual(['Dashboard', 'Allocation', 'Growth', 'Review'])
+  })
+
+  it('links the Review tab to /net-worth/review', () => {
+    renderWithFlag(true, '/net-worth/dashboard')
+    expect(screen.getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/net-worth/review')
+  })
+
+  it('marks Review as the current tab on a review year route and renders the page', async () => {
+    renderWithFlag(true, '/net-worth/review/2025')
+    expect(screen.getByRole('link', { name: 'Review' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Dashboard' })).not.toHaveAttribute('aria-current')
+    expect(await screen.findByText('Review page')).toBeInTheDocument()
+  })
+
+  it('renders the page on /net-worth/review with no year', async () => {
+    renderWithFlag(true, '/net-worth/review')
+    expect(await screen.findByText('Review page')).toBeInTheDocument()
+  })
+
+  it('hides the dashboard view tabs on the Review tab', () => {
+    renderWithFlag(true, '/net-worth/review/2025')
+    expect(screen.queryByRole('tablist', { name: 'Data view' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Growth view mode' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Net Worth Review tab with the annual-review flag off', () => {
+  it('keeps exactly Dashboard, Allocation and Growth', () => {
+    renderWithFlag(false, '/net-worth/dashboard')
+    const nav = screen.getByRole('navigation', { name: 'Wealth sections' })
+    expect(Array.from(nav.querySelectorAll('a')).map(a => a.textContent)).toEqual(['Dashboard', 'Allocation', 'Growth'])
+    expect(screen.queryByRole('link', { name: 'Review' })).not.toBeInTheDocument()
+  })
+
+  it.each(['/net-worth/review', '/net-worth/review/2025', '/net-worth/review/2025/extra'])(
+    'redirects %s to the dashboard without rendering the review',
+    route => {
+      renderWithFlag(false, route)
+      expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/dashboard')
+      expect(screen.queryByText('Review page')).not.toBeInTheDocument()
+    },
+  )
+
+  it('renders nothing for other unknown wealth routes, as before', () => {
+    renderWithFlag(false, '/net-worth/nope')
+    expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/nope')
   })
 })

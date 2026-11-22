@@ -425,3 +425,32 @@ describe('PDF → CSV search index entry', () => {
     expect(pdfTool.category).toBe('tool')
   })
 })
+
+/* ─── Annual Review entry (annual-review flag) ─── */
+
+describe('Annual Review search entry', () => {
+  it('is absent unless the flag is on', () => {
+    expect(buildIndex().some(i => i.id === 'page-annual-review')).toBe(false)
+    expect(buildIndex({ annualReviewEnabled: false }).some(i => i.id === 'page-annual-review')).toBe(false)
+  })
+
+  it('is a page that opens the review route when the flag is on', () => {
+    const entry = buildIndex({ annualReviewEnabled: true }).find(i => i.id === 'page-annual-review')
+
+    expect(entry).toMatchObject({
+      category: 'page',
+      label: 'Annual Review',
+      hint: 'Your year in money: net worth, savings, spending',
+      route: '/net-worth/review',
+    })
+  })
+
+  it.each(['year in review', 'year end', 'yearly', 'savings rate', 'top spending', 'print', 'csv'])(
+    'is found by the keyword "%s"',
+    keyword => {
+      const groups = search(buildIndex({ annualReviewEnabled: true }), keyword)
+
+      expect(groups.flatMap(g => g.items).map(i => i.id)).toContain('page-annual-review')
+    },
+  )
+})

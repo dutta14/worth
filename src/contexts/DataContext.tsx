@@ -9,6 +9,8 @@ interface DataContextValue {
   accounts: Account[]
   balances: BalanceEntry[]
   allMonths: string[]
+  /** True once the first read of accounts and balances has settled, so an empty list is real data. */
+  isLoaded: boolean
   setAccounts: (accounts: Account[]) => void
   setBalances: (balances: BalanceEntry[]) => void
 }
@@ -17,6 +19,7 @@ const DataContext = createContext<DataContextValue>({
   accounts: [],
   balances: [],
   allMonths: [],
+  isLoaded: true,
   setAccounts: () => {},
   setBalances: () => {},
 })
@@ -27,6 +30,7 @@ export const DataProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const { fileStore } = useFileStore()
   const [accounts, setAccountsState] = useState<Account[]>([])
   const [balances, setBalancesState] = useState<BalanceEntry[]>([])
+  const [isLoaded, setIsLoaded] = useState(false)
 
   const allMonths = useMemo(() => [...new Set(balances.map(b => b.month))].sort(), [balances])
 
@@ -49,25 +53,24 @@ export const DataProvider: FC<{ children: ReactNode }> = ({ children }) => {
   useEffect(() => {
     let cancelled = false
 
-    const refreshAccounts = () => {
+    const refreshAccounts = () =>
       fileStore
         .readJSON<Account[]>(ACCOUNTS_PATH, [])
         .then(next => {
           if (!cancelled) setAccountsState(next)
         })
         .catch(console.error)
-    }
 
-    const refreshBalances = () => {
+    const refreshBalances = () =>
       loadBalances(fileStore)
         .then(next => {
           if (!cancelled) setBalancesState(next)
         })
         .catch(console.error)
-    }
 
-    refreshAccounts()
-    refreshBalances()
+    Promise.all([refreshAccounts(), refreshBalances()]).then(() => {
+      if (!cancelled) setIsLoaded(true)
+    })
 
     const unsubscribe = fileStore.subscribe(ACCOUNTS_PATH, refreshAccounts)
     const handleCustom = () => {
@@ -84,8 +87,8 @@ export const DataProvider: FC<{ children: ReactNode }> = ({ children }) => {
   }, [fileStore])
 
   const value = useMemo<DataContextValue>(
-    () => ({ accounts, balances, allMonths, setAccounts, setBalances }),
-    [accounts, balances, allMonths, setAccounts, setBalances],
+    () => ({ accounts, balances, allMonths, isLoaded, setAccounts, setBalances }),
+    [accounts, balances, allMonths, isLoaded, setAccounts, setBalances],
   )
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>

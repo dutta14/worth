@@ -21,6 +21,7 @@ vi.mock('../../contexts/DataContext', () => ({
     accounts: [],
     balances: [],
     allMonths: [],
+    isLoaded: true,
     setAccounts: () => {},
     setBalances: () => {},
   })),
@@ -140,6 +141,7 @@ beforeEach(() => {
     accounts: [],
     balances: [],
     allMonths: [],
+    isLoaded: true,
     setAccounts: () => {},
     setBalances: () => {},
   })
@@ -185,6 +187,7 @@ describe('GoalsPeek projection — no budget data', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 500_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -200,6 +203,7 @@ describe('GoalsPeek projection — no budget data', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 500_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -223,6 +227,7 @@ describe('GoalsPeek projection — no budget data', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 500_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -253,6 +258,7 @@ describe('GoalsPeek projection — goal reached', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 3_000_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -272,6 +278,7 @@ describe('GoalsPeek projection — not reachable', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 500_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -286,6 +293,7 @@ describe('GoalsPeek projection — not reachable', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 500_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -306,6 +314,7 @@ describe('GoalsPeek projection — FI date projected', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 500_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -336,6 +345,7 @@ describe('GoalsPeek projection — not reachable via projectFIDate null', () => 
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 1000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -411,6 +421,7 @@ describe('GoalsPeek summary cards and progress', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 500_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -454,6 +465,7 @@ describe('GoalsPeek summary cards and progress', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-06', target / 2)],
       allMonths: ['2025-06'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -499,6 +511,7 @@ describe('GoalsPeek GW goals rendering', () => {
       accounts: [fiAcct, gwAcct],
       balances: [makeBalance(1, '2025-01', 500_000), makeBalance(2, '2025-01', 50_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -530,6 +543,7 @@ describe('GoalsPeek GW goals rendering', () => {
       accounts: [fiAcct, gwAcct],
       balances: [makeBalance(1, '2025-01', 500_000), makeBalance(2, '2025-01', 50_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -574,6 +588,7 @@ describe('GoalsPeek FI monthly saving', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 100_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -599,6 +614,7 @@ describe('GoalsPeek FI progress clamping', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', target * 2)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -621,6 +637,7 @@ describe('GoalsPeek budget-changed subscription (#164)', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 500_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -639,6 +656,7 @@ describe('GoalsPeek budget-changed subscription (#164)', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 500_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -689,6 +707,7 @@ describe('GoalsPeek calcMonthlySaving edge cases', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 100_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -710,6 +729,7 @@ describe('GoalsPeek calcMonthlySaving edge cases', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 500_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -733,6 +753,7 @@ describe('GoalsPeek getTotalForMonth filtering', () => {
       accounts: [fiAcct, gwAcct],
       balances: [makeBalance(1, '2025-01', target / 2), makeBalance(2, '2025-01', target / 4)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -755,6 +776,7 @@ describe('GoalsPeek GW monthly saving display', () => {
       accounts: [fiAcct, gwAcct],
       balances: [makeBalance(1, '2025-01', 500_000), makeBalance(2, '2025-01', 10_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -814,6 +836,7 @@ describe('GoalsPeek GW progress with zero totalNeeded', () => {
       accounts: [fiAcct, gwAcct],
       balances: [makeBalance(1, '2025-01', 500_000), makeBalance(2, '2025-01', 10_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })
@@ -848,6 +871,7 @@ describe('GoalsPeek projection FI date display', () => {
       accounts: [fiAcct],
       balances: [makeBalance(1, '2025-01', 500_000)],
       allMonths: ['2025-01'],
+      isLoaded: true,
       setAccounts: () => {},
       setBalances: () => {},
     })

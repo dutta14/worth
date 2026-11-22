@@ -3,6 +3,9 @@ import { NavLink, useLocation, useNavigate, Routes, Route, Navigate } from 'reac
 import { useGoals } from '../../contexts/GoalsContext'
 import { useSettings } from '../../contexts/SettingsContext'
 import { useData } from '../../contexts/DataContext'
+import ErrorBoundary from '../../components/ErrorBoundary'
+import { FLAGS } from '../../flags/flagDefinitions'
+import { useFlag } from '../../flags/useFlag'
 import { Account, BalanceEntry } from './types'
 import { parseCsvImport } from './csvImport'
 import { exportCsv } from './csvExport'
@@ -14,6 +17,7 @@ import '../../styles/Data.css'
 
 const Allocation = lazy(() => import('../allocation/Allocation'))
 const SavingsGrowthTracker = lazy(() => import('../tools/components/SavingsGrowthTracker'))
+const AnnualReview = lazy(() => import('../review/AnnualReview'))
 
 const DATA_VIEW_TABS = [
   { id: 'charts', label: 'Charts', path: '/net-worth/dashboard' },
@@ -26,6 +30,7 @@ const Data: FC = () => {
   const { profile } = useGoals()
   const { allowCsvImport } = useSettings()
   const { accounts, balances, setAccounts: ctxSetAccounts, setBalances: ctxSetBalances } = useData()
+  const annualReviewEnabled = useFlag(FLAGS.ANNUAL_REVIEW)
 
   const [showAccountsModal, setShowAccountsModal] = useState(false)
   const [inlineEntry, setInlineEntry] = useState<{
@@ -218,7 +223,9 @@ const Data: FC = () => {
     ? 'allocation'
     : location.pathname.startsWith('/net-worth/growth')
       ? 'growth'
-      : 'accounts'
+      : annualReviewEnabled && location.pathname.startsWith('/net-worth/review')
+        ? 'review'
+        : 'accounts'
   const accountsPath = location.pathname
     .replace('/net-worth/dashboard', '')
     .replace('/net-worth', '')
@@ -504,6 +511,11 @@ const Data: FC = () => {
           <NavLink to="/net-worth/growth" className={({ isActive }) => `tab-btn${isActive ? ' active' : ''}`}>
             Growth
           </NavLink>
+          {annualReviewEnabled && (
+            <NavLink to="/net-worth/review" className={() => `tab-btn${activeTab === 'review' ? ' active' : ''}`}>
+              Review
+            </NavLink>
+          )}
         </nav>
         <div className="data-header-right">
           {activeTab === 'accounts' && hasAccounts && (
@@ -591,6 +603,26 @@ const Data: FC = () => {
               >
                 <SavingsGrowthTracker />
               </Suspense>
+            }
+          />
+          <Route
+            path={annualReviewEnabled ? 'review/:year?' : 'review/*'}
+            element={
+              annualReviewEnabled ? (
+                <ErrorBoundary variant="card" resetKey={location.pathname}>
+                  <Suspense
+                    fallback={
+                      <div className="nw-tab-loading" role="status">
+                        Loading…
+                      </div>
+                    }
+                  >
+                    <AnnualReview />
+                  </Suspense>
+                </ErrorBoundary>
+              ) : (
+                <Navigate to="/net-worth/dashboard" replace />
+              )
             }
           />
         </Routes>

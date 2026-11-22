@@ -26,4 +26,10 @@ export const FLAGS = {
       'Protects data files: flush on page hide, visible save errors, corrupt-file quarantine, external-change detection, and _backups snapshots',
     temporary: true,
   }),
+  ANNUAL_REVIEW: defineFlag('annual-review', {
+    type: 'boolean',
+    default: false,
+    description: 'Shows the Annual Review tab under Wealth',
+    temporary: true,
+  }),
 } as const
