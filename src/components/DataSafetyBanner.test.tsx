@@ -16,7 +16,7 @@ const makeValue = (overrides: Partial<SafetyNetContextValue> = {}): SafetyNetCon
   enabled: true,
   snapshot: EMPTY_SAFETY_SNAPSHOT,
   reconnectDenied: false,
-  retryFailed: vi.fn(async () => {}),
+  retryFailed: vi.fn(async () => false),
   reconnect: vi.fn(async () => {}),
   chooseFolderAgain: vi.fn(async () => {}),
   ...overrides,
@@ -41,15 +41,18 @@ afterEach(() => {
 
 describe('DataSafetyBanner', () => {
   describe('visibility', () => {
-    it('renders nothing when there are no issues', () => {
+    it('shows no banner or region when there are no issues, but keeps an empty live region mounted', () => {
       renderBanner(makeValue())
       expect(screen.queryByRole('region', { name: 'Data safety' })).not.toBeInTheDocument()
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getByRole('status')).toBeEmptyDOMElement()
     })
 
     it('renders nothing when the safety net is off, even with issues in the snapshot', () => {
       renderBanner(makeValue({ enabled: false, snapshot: failedSnapshot('a.json') }))
       expect(screen.queryByRole('region', { name: 'Data safety' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     })
 
     it('has no way to dismiss it', () => {
@@ -84,7 +87,7 @@ describe('DataSafetyBanner', () => {
     it('shows a busy state while retrying and ignores a second click', async () => {
       const user = userEvent.setup()
       let finish: () => void = () => {}
-      const retryFailed = vi.fn(() => new Promise<void>(resolve => (finish = resolve)))
+      const retryFailed = vi.fn(() => new Promise<boolean>(resolve => (finish = () => resolve(false))))
       renderBanner(makeValue({ snapshot: failedSnapshot('a.json'), retryFailed }))
       await user.click(screen.getByRole('button', { name: 'Try again' }))
       const busy = screen.getByRole('button', { name: 'Trying again...' })
@@ -99,7 +102,7 @@ describe('DataSafetyBanner', () => {
 
     it('says so when the retry still fails, and resets the wording after it clears', async () => {
       const user = userEvent.setup()
-      const value = makeValue({ snapshot: failedSnapshot('a.json') })
+      const value = makeValue({ snapshot: failedSnapshot('a.json'), retryFailed: vi.fn(async () => true) })
       const { update } = renderBanner(value)
       await user.click(screen.getByRole('button', { name: 'Try again' }))
       expect(screen.getByRole('alert')).toHaveTextContent(
@@ -108,6 +111,23 @@ describe('DataSafetyBanner', () => {
       update({ ...value, snapshot: EMPTY_SAFETY_SNAPSHOT })
       update({ ...value, snapshot: failedSnapshot('a.json') })
       expect(screen.getByRole('alert')).toHaveTextContent('Your changes are still on screen but not on disk.')
+    })
+
+    it('uses the first-failure wording for a new failure after a successful retry', async () => {
+      const user = userEvent.setup()
+      const diskFull: SafetySnapshot = { failed: [{ path: 'b.json', kind: 'disk-full' }], permissionLost: false }
+      // The store clears its failures while the retry is still resolving, as in the real flow.
+      const retryFailed = vi.fn(async () => {
+        update({ ...value, snapshot: EMPTY_SAFETY_SNAPSHOT })
+        return false
+      })
+      const value = makeValue({ snapshot: failedSnapshot('a.json'), retryFailed })
+      const { update } = renderBanner(value)
+      await user.click(screen.getByRole('button', { name: 'Try again' }))
+      update({ ...value, snapshot: diskFull })
+      const alert = screen.getByRole('alert')
+      expect(alert).not.toHaveTextContent("Still couldn't save")
+      expect(alert).toHaveTextContent('The disk looks full. Free some space, then try again.')
     })
   })
 
@@ -177,17 +197,29 @@ describe('DataSafetyBanner', () => {
   })
 
   describe('when issues resolve', () => {
+    it('keeps the same live region element across the whole failure and recovery cycle', () => {
+      const { update } = renderBanner(makeValue())
+      const status = screen.getByRole('status')
+      update(makeValue({ snapshot: failedSnapshot('a.json') }))
+      expect(screen.getByRole('status')).toBe(status)
+      update(makeValue())
+      expect(screen.getByRole('status')).toBe(status)
+    })
+
     it('announces "All changes saved." once and clears it after a second', () => {
       vi.useFakeTimers()
       const { update } = renderBanner(makeValue({ snapshot: failedSnapshot('a.json') }))
       expect(screen.getByRole('region')).toBeInTheDocument()
       update(makeValue())
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-      expect(screen.getByRole('status')).toHaveTextContent('All changes saved.')
+      const status = screen.getByRole('status')
+      expect(status).toHaveTextContent('All changes saved.')
       act(() => {
         vi.advanceTimersByTime(1000)
       })
       expect(screen.queryByRole('region')).not.toBeInTheDocument()
+      expect(screen.getByRole('status')).toBe(status)
+      expect(status).toBeEmptyDOMElement()
     })
 
     it('moves focus to the main content when the pressed button disappears', async () => {
@@ -213,7 +245,7 @@ describe('DataSafetyBanner', () => {
     it('does not announce anything for a banner that never had an issue', () => {
       const { update } = renderBanner(makeValue())
       update(makeValue())
-      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(screen.getByRole('status')).toBeEmptyDOMElement()
     })
 
     it('clears a pending saved message when a new issue arrives', () => {

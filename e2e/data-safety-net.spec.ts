@@ -40,6 +40,12 @@ async function openApp(
 const disk = (page: Page, path: string) =>
   page.evaluate(p => (window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa?.files.get(p) ?? null, path)
 
+const fakeFsa = (page: Page) =>
+  page.evaluate(() => {
+    const { failCloseTimes } = (window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa!
+    return { failCloseTimes }
+  })
+
 const setFsa = (page: Page, patch: Partial<FakeFsaControls>) =>
   page.evaluate(values => Object.assign((window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa!, values), patch)
 
@@ -116,9 +122,13 @@ test.describe('Data safety net: save failures', () => {
     await setFsa(page, { failCloseTimes: PERSISTENT, failClosePath: 'accounts.json' })
 
     await addAccount(page, 'Rainy Day Fund')
-    await page.waitForTimeout(800)
 
+    // The injected failure being consumed proves a save was attempted and rejected.
+    await expect.poll(async () => (await fakeFsa(page)).failCloseTimes).toBeLessThan(PERSISTENT)
+    expect(await disk(page, 'accounts.json')).not.toContain('Rainy Day Fund')
     await expect(page.getByRole('region', { name: 'Data safety' })).toHaveCount(0)
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    await expect(page.getByRole('status').filter({ hasText: 'All changes saved.' })).toHaveCount(0)
   })
 })
 
@@ -158,9 +168,13 @@ test.describe('Data safety net: folder permission', () => {
     const alert = page.getByRole('alert')
     await expect(alert).toContainText('Access to your data folder was lost.')
 
+    await addAccount(page, 'Rainy Day Fund')
+    expect((await disk(page, 'accounts.json')) ?? '').not.toContain('Rainy Day Fund')
+
     await page.getByRole('button', { name: 'Reconnect folder' }).click()
 
     await expect(alert).toBeHidden()
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
     const calls = await page.evaluate(
       () => (window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa?.requestPermissionCalls,
     )

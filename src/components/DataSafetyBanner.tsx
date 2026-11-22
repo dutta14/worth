@@ -90,14 +90,14 @@ const DataSafetyBanner: FC = () => {
     if (retrying) return
     setRetrying(true)
     try {
-      await retryFailed()
+      // Only flag a retry when something is still failing, or a later unrelated failure would read as a repeat.
+      setRetried(await retryFailed())
     } finally {
       setRetrying(false)
-      setRetried(true)
     }
   }, [retrying, retryFailed])
 
-  if (!enabled || (!hasIssues && !savedMessage)) return null
+  if (!enabled) return null
 
   const top = issues[0]
   const copy = top
@@ -106,8 +106,15 @@ const DataSafetyBanner: FC = () => {
       : writeFailedCopy(top, retried)
     : null
 
+  const visible = hasIssues || savedMessage !== ''
+
   return (
-    <div className="dsn-region" role="region" aria-label="Data safety" ref={regionRef}>
+    <div
+      className="dsn-region"
+      role={visible ? 'region' : undefined}
+      aria-label={visible ? 'Data safety' : undefined}
+      ref={regionRef}
+    >
       {top && copy && (
         <section className="dsn-banner dsn-banner--error" role="alert" aria-busy={retrying || undefined}>
           <WarningIcon />
@@ -133,6 +140,7 @@ const DataSafetyBanner: FC = () => {
           </div>
         </section>
       )}
+      {/* Always mounted so assistive tech registers it before the text changes. */}
       <p className="sr-only" role="status" aria-live="polite">
         {savedMessage}
       </p>

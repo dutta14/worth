@@ -76,6 +76,37 @@ describe('saveBalances', () => {
     expect(await store.exists('balances/notes.csv')).toBe(true)
   })
 
+  it('keeps the stale year file when a write fails', async () => {
+    const store = new MemoryFileStore()
+    await store.writeCSV('balances/2023.csv', [['month', 'accountId', 'balance']])
+    const realWrite = store.writeCSV.bind(store)
+    vi.spyOn(store, 'writeCSV').mockImplementation((path, rows) =>
+      path === 'balances/2024.csv' ? Promise.reject(new Error('disk full')) : realWrite(path, rows),
+    )
+    const deleteFile = vi.spyOn(store, 'delete')
+    await expect(saveBalances(store, [entry(1, '2024-01')])).rejects.toThrow('disk full')
+    expect(deleteFile).not.toHaveBeenCalled()
+    expect(await store.exists('balances/2023.csv')).toBe(true)
+  })
+
+  it('deletes the stale year file only after the new year has been written', async () => {
+    const store = new MemoryFileStore()
+    await store.writeCSV('balances/2023.csv', [['month', 'accountId', 'balance']])
+    const order: string[] = []
+    const realWrite = store.writeCSV.bind(store)
+    const realDelete = store.delete.bind(store)
+    vi.spyOn(store, 'writeCSV').mockImplementation(async (path, rows) => {
+      await realWrite(path, rows)
+      order.push(`write ${path}`)
+    })
+    vi.spyOn(store, 'delete').mockImplementation(async path => {
+      await realDelete(path)
+      order.push(`delete ${path}`)
+    })
+    await saveBalances(store, [entry(1, '2024-01')])
+    expect(order).toEqual(['write balances/2024.csv', 'delete balances/2023.csv'])
+  })
+
   it('does not delete a year it is writing', async () => {
     const store = new MemoryFileStore()
     await store.writeCSV('balances/2025.csv', [['old']])

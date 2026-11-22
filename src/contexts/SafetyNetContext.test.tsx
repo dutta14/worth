@@ -160,6 +160,15 @@ describe('SafetyNetProvider', () => {
       await act(() => result.current.retryFailed())
       expect(store.retryFailed).toHaveBeenCalledTimes(1)
     })
+
+    it('reports whether anything still fails after the retry', async () => {
+      const { store, setSnapshot } = makeFakeStore()
+      const { Wrapper } = makeWrapper(store, true)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      await expect(result.current.retryFailed()).resolves.toBe(false)
+      act(() => setSnapshot({ failed: [{ path: 'a.json', kind: 'other' }], permissionLost: false }))
+      await expect(result.current.retryFailed()).resolves.toBe(true)
+    })
   })
 
   describe('focus permission check', () => {

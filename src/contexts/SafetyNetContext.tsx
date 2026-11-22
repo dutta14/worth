@@ -26,19 +26,21 @@ export interface SafetyNetContextValue {
   snapshot: SafetySnapshot
   /** True after the user declined the reconnect prompt. */
   reconnectDenied: boolean
-  retryFailed: () => Promise<void>
+  /** Resolves true when at least one write still fails after the retry. */
+  retryFailed: () => Promise<boolean>
   /** Must be called directly from a click handler: the browser requires a user gesture. */
   reconnect: () => Promise<void>
   chooseFolderAgain: () => Promise<void>
 }
 
 const noop = async (): Promise<void> => {}
+const noRetry = async (): Promise<boolean> => false
 
 const defaultValue: SafetyNetContextValue = {
   enabled: false,
   snapshot: EMPTY_SAFETY_SNAPSHOT,
   reconnectDenied: false,
-  retryFailed: noop,
+  retryFailed: noRetry,
   reconnect: noop,
   chooseFolderAgain: noop,
 }
@@ -97,7 +99,9 @@ export const SafetyNetProvider: FC<{ children: ReactNode }> = ({ children }) => 
   }, [snapshot.permissionLost])
 
   const retryFailed = useCallback(async () => {
-    await store?.retryFailed()
+    if (!store) return false
+    await store.retryFailed()
+    return store.getSafetySnapshot().failed.length > 0
   }, [store])
 
   const reconnect = useCallback(async () => {
