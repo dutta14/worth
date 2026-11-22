@@ -15,6 +15,8 @@ const ReviewCashflow: FC<ReviewCashflowProps> = ({ review }) => {
   const { cashflow, prior, year } = review
   const manual = cashflow.source === 'manual'
   const priorYear = year - 1
+  // A part-year of money is not comparable with a full prior year; a rate is.
+  const comparable = review.status === 'complete'
 
   return (
     <section className="ar-section" aria-labelledby="ar-cf-h">
@@ -34,13 +36,13 @@ const ReviewCashflow: FC<ReviewCashflowProps> = ({ review }) => {
             label="Income"
             value={formatMoney(cashflow.income)}
             sub={manual ? MANUAL_SUB : 'Money in, from your transactions'}
-            prior={describePriorYear(priorYear, cashflow.income, prior?.income, 'usd')}
+            prior={comparable ? describePriorYear(priorYear, cashflow.income, prior?.income, 'usd') : null}
           />
           <ReviewStat
             label="Expenses"
             value={formatMoney(cashflow.expenses)}
             sub={manual ? MANUAL_SUB : 'Money out, after refunds'}
-            prior={describePriorYear(priorYear, cashflow.expenses, prior?.expenses, 'usd')}
+            prior={comparable ? describePriorYear(priorYear, cashflow.expenses, prior?.expenses, 'usd') : null}
           />
           <ReviewStat
             label="Savings"

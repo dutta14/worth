@@ -91,27 +91,37 @@ describe('describeNote', () => {
   })
 
   describe('mismatch', () => {
-    const review = (mismatch: NonNullable<AnnualReview['cashflow']['mismatch']>) =>
-      makeReview({ cashflow: { ...makeReview().cashflow, mismatch } })
+    const base = { manualIncome: 120000, manualSavings: 42000, budgetIncome: 120000, budgetSavings: 42000 }
+    const review = (mismatch: Partial<NonNullable<AnnualReview['cashflow']['mismatch']>>) =>
+      makeReview({
+        cashflow: {
+          ...makeReview().cashflow,
+          mismatch: { ...base, incomeDiffers: false, savingsDiffers: false, ...mismatch },
+        },
+      })
 
-    it('shows both income figures when income differs', () => {
-      const r = review({ manualIncome: 118000, manualSavings: 40000, budgetIncome: 120000, budgetSavings: 42000 })
+    it('shows the income pair when income went past the threshold', () => {
+      const r = review({ manualIncome: 118000, manualSavings: 40000, incomeDiffers: true, savingsDiffers: false })
       expect(describeNote({ code: 'mismatch' }, r)).toEqual({
         text: 'Your Growth log shows $118,000 of income and your transactions add up to $120,000. This review uses your transactions.',
         link: { label: 'Open Growth', to: '/net-worth/growth/savings' },
       })
     })
 
-    it('falls back to savings when only the savings figure differs', () => {
-      const r = review({ manualIncome: 120000, manualSavings: 30000, budgetIncome: 120000, budgetSavings: 42000 })
+    it('shows the savings pair, not a trivial income gap, when only savings went past the threshold', () => {
+      const r = review({ manualIncome: 120030, manualSavings: 30000, savingsDiffers: true })
       expect(text({ code: 'mismatch' }, r)).toBe(
         'Your Growth log shows $30,000 of savings and your transactions add up to $42,000. This review uses your transactions.',
       )
     })
 
-    it('still says which figures are used when the log has no comparable value', () => {
-      const r = review({ manualIncome: null, manualSavings: null, budgetIncome: 120000, budgetSavings: 42000 })
-      expect(text({ code: 'mismatch' }, r)).toBe('This review uses your transactions.')
+    it('follows the spec and shows the income pair when both went past their thresholds', () => {
+      const r = review({ manualIncome: 118000, manualSavings: 30000, incomeDiffers: true, savingsDiffers: true })
+      expect(text({ code: 'mismatch' }, r)).toContain('$118,000 of income')
+    })
+
+    it('still says which figures are used when no pair is flagged or there is no mismatch data', () => {
+      expect(text({ code: 'mismatch' }, review({}))).toBe('This review uses your transactions.')
       expect(text({ code: 'mismatch' })).toBe('This review uses your transactions.')
     })
   })

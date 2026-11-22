@@ -23,16 +23,14 @@ const CASHFLOW_LINK: NoteLink = { label: 'Open Cashflow', to: '/budget' }
 const GROWTH_LINK: NoteLink = { label: 'Open Growth', to: '/net-worth/growth/savings' }
 const GROUPS_LINK: NoteLink = { label: 'Open Groups', to: '/budget/groups' }
 
-const moneyDiffers = (a: number | null, b: number): a is number => a !== null && Math.round(a) !== Math.round(b)
-
 function describeMismatch(review: AnnualReview): string {
   const m = review.cashflow.mismatch
   const kept = 'This review uses your transactions.'
-  if (!m) return kept
-  if (moneyDiffers(m.manualIncome, m.budgetIncome)) {
+  // When both figures differ the spec's income wording wins.
+  if (m?.incomeDiffers && m.manualIncome !== null) {
     return `Your Growth log shows ${formatMoney(m.manualIncome)} of income and your transactions add up to ${formatMoney(m.budgetIncome)}. ${kept}`
   }
-  if (m.manualSavings !== null) {
+  if (m?.savingsDiffers && m.manualSavings !== null) {
     return `Your Growth log shows ${formatMoney(m.manualSavings)} of savings and your transactions add up to ${formatMoney(m.budgetSavings)}. ${kept}`
   }
   return kept

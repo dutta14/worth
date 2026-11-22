@@ -63,4 +63,37 @@ describe('ReviewGoals', () => {
     expect(screen.getByRole('link', { name: 'Open Planning' })).toHaveAttribute('href', '/goal/plans')
     expect(screen.queryByText(/measured against/)).not.toBeInTheDocument()
   })
+
+  it('says progress is not shown, not "no goals", when goals existed but have no target today', () => {
+    renderSection(makeReview({ goals: [], skippedGoals: 2 }))
+
+    expect(
+      screen.getByText('2 goals existed by the end of 2025 but have no target today, so progress is not shown.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/You had no goals/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/not set a goal yet/)).not.toBeInTheDocument()
+  })
+
+  it('uses singular wording for one skipped goal', () => {
+    renderSection(makeReview({ goals: [], skippedGoals: 1 }), false)
+
+    expect(
+      screen.getByText('1 goal existed by the end of 2025 but has no target today, so progress is not shown.'),
+    ).toBeInTheDocument()
+  })
+
+  it('adds the skipped-goal sentence under the list when some goals are listed', () => {
+    renderSection(makeReview({ skippedGoals: 1 }))
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(
+      screen.getByText('1 goal existed by the end of 2025 but has no target today, so progress is not shown.'),
+    ).toBeInTheDocument()
+  })
+
+  it('adds nothing about skipped goals when none were skipped', () => {
+    renderSection()
+
+    expect(screen.queryByText(/no target today/)).not.toBeInTheDocument()
+  })
 })

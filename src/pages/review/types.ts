@@ -57,6 +57,9 @@ export interface CashflowReview {
     manualSavings: number | null
     budgetIncome: number
     budgetSavings: number
+    /** Which figure(s) went past the mismatch threshold */
+    incomeDiffers: boolean
+    savingsDiffers: boolean
   } | null
 }
 
@@ -115,6 +118,8 @@ export interface AnnualReview {
   /** null when there are no readable transactions or the cashflow source is manual */
   spending: SpendingReview | null
   goals: GoalSnapshot[]
+  /** Goals that existed by year end but have no positive target today, so they are not listed */
+  skippedGoals: number
   /** Ordered; UI and CSV render the same list */
   notes: ReviewNote[]
   /** Same selector for year - 1, one level deep; null when that year is empty */

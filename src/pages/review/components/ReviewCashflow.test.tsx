@@ -99,6 +99,14 @@ describe('ReviewCashflow', () => {
       expect(within(stat('Savings rate')).getByText('vs. 2024: down 2.1 points')).toBeInTheDocument()
     })
 
+    it('drops the income and expenses comparisons for a year in progress but keeps the savings rate', () => {
+      renderSection(makeReview({ status: 'in-progress', prior }))
+
+      expect(within(stat('Income')).queryByText(/^vs\./)).not.toBeInTheDocument()
+      expect(within(stat('Expenses')).queryByText(/^vs\./)).not.toBeInTheDocument()
+      expect(within(stat('Savings rate')).getByText('vs. 2024: down 2.1 points')).toBeInTheDocument()
+    })
+
     it('leaves out a comparison whose prior figure is unavailable', () => {
       renderSection(makeReview({ prior: { ...prior, savingsRate: null } }))
 

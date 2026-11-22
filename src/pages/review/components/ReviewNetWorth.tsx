@@ -35,6 +35,7 @@ const ReviewNetWorth: FC<ReviewNetWorthProps> = ({ review }) => {
   const [expanded, setExpanded] = useState(false)
   const tableId = useId()
   const { start, end, change, changePct, series } = review.netWorth
+  const comparable = review.status === 'complete'
   const hasBalances = series.some(p => p.total !== null)
   const changeSub =
     change === null || start.month === null || end.month === null
@@ -53,7 +54,7 @@ const ReviewNetWorth: FC<ReviewNetWorthProps> = ({ review }) => {
           label="Net worth change"
           value={formatDelta(change, 'usd')}
           sub={changeSub}
-          prior={describePriorYear(review.year - 1, change, review.prior?.netWorthChange, 'usd')}
+          prior={comparable ? describePriorYear(review.year - 1, change, review.prior?.netWorthChange, 'usd') : null}
         />
         <ReviewStat label="Starting net worth" value={formatMoney(start.total)} sub={anchorSub(start)} />
         <ReviewStat label="Ending net worth" value={formatMoney(end.total)} sub={anchorSub(end)} />

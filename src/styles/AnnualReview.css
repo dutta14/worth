@@ -285,9 +285,14 @@
   margin: 0;
 }
 
+.ar-chart-wrap {
+  align-self: stretch;
+  min-width: 0;
+}
+
 .ar-chart {
   display: block;
-  width: 100%;
+  max-width: 100%;
   height: auto;
 }
 
@@ -414,14 +419,6 @@
 
   .ar-figure__toggle {
     align-self: stretch;
-  }
-
-  .ar-chart__axis {
-    font-size: 17px;
-  }
-
-  .ar-chart__axis--minor {
-    display: none;
   }
 }
 

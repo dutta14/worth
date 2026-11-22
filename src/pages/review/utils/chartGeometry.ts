@@ -1,6 +1,17 @@
 import type { MonthPoint } from '../types'
+import { formatAxisLabels } from './format'
 
-export const CHART = { width: 640, height: 220, left: 64, right: 16, top: 12, bottom: 28 }
+/** Width used before the container has been measured, and where nothing can be measured. */
+export const DEFAULT_CHART_WIDTH = 640
+export const MIN_CHART_WIDTH = 240
+
+const MARGIN = { right: 16, top: 12, bottom: 28 }
+/** Rough width of one axis character at the axis font size (12px). */
+const AXIS_CHAR_WIDTH = 7
+/** Space one month label needs; months are thinned to every third when the plot is too tight. */
+const MONTH_LABEL_WIDTH = 40
+
+export const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export interface ChartPoint {
   month: string
@@ -11,10 +22,25 @@ export interface ChartPoint {
 }
 export interface ChartTick {
   value: number
+  label: string
   y: number
 }
+export interface ChartMonthLabel {
+  label: string
+  x: number
+}
+export interface ChartLayout {
+  width: number
+  height: number
+  left: number
+  right: number
+  top: number
+  bottom: number
+}
 export interface ChartModel {
+  layout: ChartLayout
   ticks: ChartTick[]
+  monthLabels: ChartMonthLabel[]
   /** Runs of consecutive months with data; a month without data ends a run so the line never bridges a gap. */
   segments: ChartPoint[][]
   points: ChartPoint[]
@@ -34,18 +60,34 @@ export function niceTicks(min: number, max: number, target = 4): number[] {
   return Array.from({ length: last - first + 1 }, (_, i) => Number(((first + i) * step).toPrecision(12)))
 }
 
+/** Pixel layout for a container width; the viewBox equals the rendered size, so text keeps its real size. */
+export function chartLayout(width: number, tickLabels: string[]): ChartLayout {
+  const w = Math.max(MIN_CHART_WIDTH, Math.round(width))
+  const widest = Math.max(...tickLabels.map(l => l.length))
+  return {
+    width: w,
+    height: Math.round(Math.min(240, Math.max(160, w * 0.35))),
+    left: Math.max(40, 12 + widest * AXIS_CHAR_WIDTH),
+    right: MARGIN.right,
+    top: MARGIN.top,
+    bottom: MARGIN.bottom,
+  }
+}
+
 /** Pure geometry for the 12-month line; null when no month has a total. */
-export function buildChartModel(series: MonthPoint[]): ChartModel | null {
+export function buildChartModel(series: MonthPoint[], width = DEFAULT_CHART_WIDTH): ChartModel | null {
   const totals = series.flatMap(p => (p.total === null ? [] : [p.total]))
   if (totals.length === 0) return null
 
   const values = niceTicks(Math.min(...totals), Math.max(...totals))
+  const labels = formatAxisLabels(values)
+  const layout = chartLayout(width, labels)
   const domainMin = values[0]
   const domainMax = values[values.length - 1]
-  const plotW = CHART.width - CHART.left - CHART.right
-  const plotH = CHART.height - CHART.top - CHART.bottom
-  const xAt = (i: number) => CHART.left + (series.length > 1 ? (i / (series.length - 1)) * plotW : plotW / 2)
-  const yAt = (v: number) => CHART.top + (1 - (v - domainMin) / (domainMax - domainMin)) * plotH
+  const plotW = layout.width - layout.left - layout.right
+  const plotH = layout.height - layout.top - layout.bottom
+  const xAt = (i: number) => layout.left + (series.length > 1 ? (i / (series.length - 1)) * plotW : plotW / 2)
+  const yAt = (v: number) => layout.top + (1 - (v - domainMin) / (domainMax - domainMin)) * plotH
 
   const segments: ChartPoint[][] = []
   const points: ChartPoint[] = []
@@ -62,13 +104,13 @@ export function buildChartModel(series: MonthPoint[]): ChartModel | null {
   })
   if (run.length > 0) segments.push(run)
 
+  const thin = plotW / (MONTH_LABELS.length - 1) < MONTH_LABEL_WIDTH
   return {
-    ticks: values.map(value => ({ value, y: yAt(value) })),
+    layout,
+    ticks: values.map((value, i) => ({ value, label: labels[i], y: yAt(value) })),
+    monthLabels: MONTH_LABELS.flatMap((label, i) => (thin && i % 3 !== 0 ? [] : [{ label, x: xAt(i) }])),
     segments,
     points,
     zeroY: domainMin < 0 && domainMax > 0 ? yAt(0) : null,
   }
 }
-
-export const xOfMonthIndex = (i: number, count = 12): number =>
-  CHART.left + (i / (count - 1)) * (CHART.width - CHART.left - CHART.right)

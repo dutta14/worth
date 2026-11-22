@@ -131,6 +131,7 @@ export const makeReview = (overrides: Partial<AnnualReview> = {}): AnnualReview 
       endPct: 19,
     },
   ],
+  skippedGoals: 0,
   notes: [],
   prior: null,
   ...overrides,

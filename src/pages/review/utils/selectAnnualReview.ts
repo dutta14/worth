@@ -14,6 +14,7 @@ const emptyReview = (year: number): AnnualReview => ({
   ),
   spending: null,
   goals: [],
+  skippedGoals: 0,
   notes: [],
   prior: null,
 })
@@ -85,7 +86,7 @@ function build(i: ReviewInputs, withPrior: boolean): AnnualReview {
     cashflow.monthsCovered.length > 0 && cashflow.source !== 'manual'
       ? rankGroups(cashflow.monthsCovered, i.transactionsByMonth, i.categoryGroups)
       : null
-  const goals = snapshotGoals(
+  const { goals, skipped: skippedGoals } = snapshotGoals(
     year,
     i.goals,
     i.profileBirthday,
@@ -102,6 +103,7 @@ function build(i: ReviewInputs, withPrior: boolean): AnnualReview {
     cashflow,
     spending,
     goals,
+    skippedGoals,
   }
 
   let prior: AnnualReview['prior'] = null

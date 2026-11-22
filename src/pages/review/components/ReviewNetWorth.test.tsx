@@ -120,6 +120,17 @@ describe('ReviewNetWorth', () => {
     expect(within(stat('Net worth change')).getByText('vs. 2024: up $5,000')).toBeInTheDocument()
   })
 
+  it('shows no net worth prior-year line for a year in progress, since a part year is not comparable', () => {
+    renderSection(
+      makeReview({
+        status: 'in-progress',
+        prior: { netWorthChange: 55000, income: null, expenses: null, savingsRate: null },
+      }),
+    )
+
+    expect(screen.queryByText(/^vs\. /)).not.toBeInTheDocument()
+  })
+
   it('shows no prior-year line without a prior year', () => {
     renderSection()
 

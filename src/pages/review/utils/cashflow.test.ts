@@ -149,6 +149,8 @@ describe('chooseCashflow', () => {
         manualSavings: null,
         budgetIncome: 120000,
         budgetSavings: 42000,
+        incomeDiffers: true,
+        savingsDiffers: false,
       })
     })
 
@@ -163,6 +165,24 @@ describe('chooseCashflow', () => {
       expect(chooseCashflow(budget, { savings: 41579 }).mismatch).toMatchObject({
         manualIncome: null,
         manualSavings: 41579,
+      })
+    })
+
+    it('flags only the figure that went past its threshold', () => {
+      expect(chooseCashflow(budget, { netIncome: 120030, savings: 30000 }).mismatch).toMatchObject({
+        incomeDiffers: false,
+        savingsDiffers: true,
+      })
+      expect(chooseCashflow(budget, { netIncome: 100000, savings: 42010 }).mismatch).toMatchObject({
+        incomeDiffers: true,
+        savingsDiffers: false,
+      })
+    })
+
+    it('flags both figures when both went past their thresholds', () => {
+      expect(chooseCashflow(budget, { netIncome: 118000, savings: 40000 }).mismatch).toMatchObject({
+        incomeDiffers: true,
+        savingsDiffers: true,
       })
     })
 

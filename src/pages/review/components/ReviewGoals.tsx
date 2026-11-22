@@ -1,6 +1,7 @@
 import { FC } from 'react'
 import { Link } from 'react-router-dom'
 import type { AnnualReview } from '../types'
+import { pluralize } from '../utils/format'
 import { describeGoal, describeGoalBalance } from '../utils/goalText'
 
 interface ReviewGoalsProps {
@@ -9,6 +10,9 @@ interface ReviewGoalsProps {
   hasGoals: boolean
 }
 
+const describeSkipped = (count: number, year: number): string =>
+  `${pluralize(count, 'goal')} existed by the end of ${year} but ${count === 1 ? 'has' : 'have'} no target today, so progress is not shown.`
+
 const ReviewGoals: FC<ReviewGoalsProps> = ({ review, hasGoals }) => (
   <section className="ar-section" aria-labelledby="ar-goals-h">
     <h3 id="ar-goals-h" className="ar-section__title">
@@ -16,7 +20,9 @@ const ReviewGoals: FC<ReviewGoalsProps> = ({ review, hasGoals }) => (
     </h3>
     {review.goals.length === 0 ? (
       <p className="ar-empty-line">
-        {hasGoals ? (
+        {review.skippedGoals > 0 ? (
+          describeSkipped(review.skippedGoals, review.year)
+        ) : hasGoals ? (
           `You had no goals set by the end of ${review.year}.`
         ) : (
           <>
@@ -41,6 +47,7 @@ const ReviewGoals: FC<ReviewGoalsProps> = ({ review, hasGoals }) => (
           })}
         </ul>
         <p className="ar-footnote">Progress is measured against each goal as it is set today.</p>
+        {review.skippedGoals > 0 && <p className="ar-footnote">{describeSkipped(review.skippedGoals, review.year)}</p>}
       </>
     )}
   </section>
