@@ -681,3 +681,46 @@ describe('BalanceDetails partial month with the flag off', () => {
     expect(line).toHaveTextContent('↓ $12,400 (100.0%)')
   })
 })
+
+describe('BalanceDetails check-in: focus after leaving edit mode', () => {
+  const addEntryButton = () => screen.getByRole('button', { name: '+ Add Entry' })
+
+  it('moves focus to Add Entry after saving', async () => {
+    const user = userEvent.setup()
+    render(<Harness balances={septemberToOctober} startCheckInMonth="2026-10" />)
+    await firstInputFocused()
+
+    await user.type(screen.getByLabelText('Roth IRA balance'), '12500')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(addEntryButton()).toHaveFocus())
+  })
+
+  it('moves focus to Add Entry after Cancel and after Escape', async () => {
+    const user = userEvent.setup()
+    render(<Harness balances={septemberToOctober} startCheckInMonth="2026-10" />)
+    await firstInputFocused()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(addEntryButton()).toHaveFocus())
+  })
+
+  it('does not take focus on first render', () => {
+    render(<Harness balances={septemberToOctober} />)
+
+    expect(addEntryButton()).not.toHaveFocus()
+  })
+
+  it('leaves focus alone after saving with the flag off', async () => {
+    mockFlag = false
+    const user = userEvent.setup()
+    render(<Harness balances={septemberToOctober} />)
+
+    await user.click(addEntryButton())
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await firstInputFocused()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(addEntryButton()).not.toHaveFocus()
+  })
+})

@@ -421,6 +421,16 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
     return () => window.cancelAnimationFrame(frameId)
   }, [isEditingMode])
 
+  // Save, Cancel and Escape unmount the focused control; without this focus would fall back to the page body.
+  const wasEditingRef = useRef(false)
+  useEffect(() => {
+    const wasEditing = wasEditingRef.current
+    wasEditingRef.current = isEditingMode
+    if (checkInEnabled && wasEditing && !isEditingMode) {
+      detailsRef.current?.querySelector<HTMLButtonElement>('.data-add-entry-btn')?.focus()
+    }
+  }, [checkInEnabled, isEditingMode])
+
   const selectedMonthIndex = selectedMonth ? allMonths.indexOf(selectedMonth) : -1
   const previousMonth = selectedMonthIndex >= 0 ? allMonths[selectedMonthIndex + 1] : undefined
   const latestMonth = allMonths[0]

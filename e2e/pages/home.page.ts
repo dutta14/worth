@@ -18,6 +18,15 @@ export class HomePage {
   readonly setupStepsCurrent: Locator
   readonly setupStepCta: Locator
 
+  // Monthly check-in strip (flag: monthly-check-in)
+  readonly checkInCard: Locator
+  readonly checkInTitle: Locator
+  readonly checkInStatus: Locator
+  readonly checkInMissingList: Locator
+  readonly checkInCta: Locator
+  readonly checkInSnoozeBtn: Locator
+  readonly partialBadge: Locator
+
   // Card Grid
   readonly cardGrid: Locator
 
@@ -79,6 +88,14 @@ export class HomePage {
     this.setupStepsDone = page.locator('.setup-step--done')
     this.setupStepsCurrent = page.locator('.setup-step--current')
     this.setupStepCta = page.locator('.setup-step-cta')
+
+    this.checkInCard = page.locator('section.checkin-card')
+    this.checkInTitle = this.checkInCard.locator('#checkin-heading')
+    this.checkInStatus = this.checkInCard.getByRole('status')
+    this.checkInMissingList = this.checkInCard.locator('ul.checkin-card__list')
+    this.checkInCta = this.checkInCard.locator('.checkin-card__cta')
+    this.checkInSnoozeBtn = this.checkInCard.getByRole('button', { name: 'Snooze for 7 days' })
+    this.partialBadge = page.locator('.partial-badge')
 
     this.cardGrid = page.locator('.home-grid')
 

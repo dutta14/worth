@@ -55,12 +55,14 @@ src/
 │   └── searchIndex.ts       # Indexes pages, goals, accounts for SearchModal
 ├── hooks/
 │   ├── useProfile.ts        # Profile state (name, birthday, avatar, partner)
+│   ├── useNow.ts            # Current Date, refreshed on focus and visibility (no timers)
 │   └── useFocusTrap.ts      # Focus trap for modals
 ├── pages/
 │   ├── home/                # Dashboard with draggable cards
 │   │   ├── Home.tsx
 │   │   ├── GoalsPeek.tsx    # Top 3 goals with progress bars
 │   │   ├── NetWorthSummary, MiniCharts, AllocationBreakdown
+│   │   ├── CheckIn{Strip,Card}.tsx, checkInSnooze.ts  # Monthly check-in strip (flag-gated)
 │   │   └── WelcomeGuide.tsx # First-visit onboarding
 │   ├── goal/                # FI goals + withdrawal goals
 │   │   ├── Goal.tsx         # Goal list page
@@ -69,7 +71,8 @@ src/
 │   │   ├── data/goalTemplates.ts  # Presets: Early Retirement, Coast FI, etc.
 │   │   ├── hooks/           # useFinancialGoals, useGwGoals
 │   │   └── utils/           # FI math, formatting
-│   ├── data/                # Accounts, balances, charts
+│   ├── data/                # Accounts, balances, charts; monthStatus.ts holds the pure month-state
+│   │                        # rules (missing/partial/due/stale) used by Home and Details (monthly-check-in flag)
 │   ├── budget/              # CSV-based budget tracking; monthly targets live in
 │   │                        # utils/budgetTargets*.ts, hooks/useBudgetTargets.ts,
 │   │                        # components/BudgetTarget{Cell,Status}.tsx (flag-gated)
@@ -204,7 +207,7 @@ The flag system in `src/flags/` controls runtime feature rollout:
 3. **Usage** — `const enabled = useFlag(FLAGS.MODERN_DESIGN)` in any component.
 4. **Adding a flag** — Define in `flagDefinitions.ts`, add rollout config to `feature-flags.json`.
 5. **Local override** — Set `flag-overrides` in localStorage (JSON object of `{ "flag-name": true/false }`) for development/testing.
-6. **Experimental flags** — `annual-review` (Review tab under Wealth, route `/net-worth/review/:year?`), `category-budget-targets`, `data-safety-net` and `import-wizard` default to off at 0% rollout. Enable one locally with `localStorage.setItem('flag-overrides', JSON.stringify({ 'annual-review': true }))`; e2e specs do the same in an init script (see `e2e/fixtures/annual-review.fixtures.ts`). With the flag off the tab, route, and search entry do not exist.
+6. **Experimental flags** — `monthly-check-in`, `annual-review` (Review tab under Wealth, route `/net-worth/review/:year?`), `category-budget-targets`, `data-safety-net` and `import-wizard` default to off at 0% rollout. Enable one locally with `localStorage.setItem('flag-overrides', JSON.stringify({ 'annual-review': true }))`; e2e specs do the same in an init script (see `e2e/fixtures/annual-review.fixtures.ts`). With the flag off the tab, route, and search entry do not exist. The check-in Playwright suite, `e2e/monthly-check-in.spec.ts`, pins the clock with `page.clock.setFixedTime`.
 7. **ModernDesignToggle** — A special component that adds/removes `body.modern-design` class based on the `modern-design` flag.
 
 ## Modern Design
