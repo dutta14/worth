@@ -606,5 +606,6 @@ export function useBudget() {
     categorySums,
     summary,
     monthsWithData,
+    loaded,
   }
 }

@@ -49,6 +49,8 @@ const dollarFormat = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
 })
 
+export const formatTargetAmount = (dollars: number): string => dollarFormat.format(dollars)
+
 const toCents = (dollars: number): number => Math.round(dollars * 100) || 0
 
 // Whole dollars from integer cents, half away from zero. Never returns -0.
@@ -225,7 +227,7 @@ export function evaluatePeriod(args: {
 }
 
 export function formatTargetStatus(r: TargetResult): { text: string; icon: 'up' | 'down' | 'check' } {
-  const amount = dollarFormat.format(r.deltaDollars)
+  const amount = formatTargetAmount(r.deltaDollars)
   switch (r.status) {
     case 'over':
       return { text: `${amount} over`, icon: 'up' }
