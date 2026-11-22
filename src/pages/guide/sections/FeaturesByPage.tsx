@@ -98,6 +98,10 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>Switch to Aggregated when you only want group totals.</li>
         <li>Use Overview to read income against expenses over time.</li>
         <li>Change the period between monthly, quarterly, and half-yearly views.</li>
+        <li>
+          Experimental, off by default: turn on the Category budget targets feature flag to set a monthly target per
+          expense group in the Aggregated view of Spreadsheet and see how each period compares.
+        </li>
         <li>Use the built-in PDF → CSV converter when the bank only gives you a statement PDF.</li>
       </ul>
       <p>

@@ -2,7 +2,7 @@
 
 - **Status:** Current state
 - **Owner:** Riley
-- **Last updated:** 2025-06-09
+- **Last updated:** 2026-11-22
 
 ## Page summary
 - **Purpose:** Help the user import, organize, review, and adjust cashflow data for a selected year.
@@ -14,15 +14,16 @@
 | Area / feature | One-line purpose |
 |---|---|
 | Header and year navigation | Switch years and change how budget data is viewed. |
-| View controls | Toggle between Aggregated, Detailed, and Cashflow views plus M/Q/H time grouping. |
+| View controls | Switch between the Overview, Spreadsheet, Groups, and Transactions tabs, plus M/Q/H time grouping and an Aggregated/Detailed toggle inside Spreadsheet. |
 | Upload controls | Import one CSV, bulk import multiple CSVs, and optionally open the PDF → CSV lab tool. |
 | CSV format help | Show the expected import format and examples. |
 | Manual transaction entry | Add a single transaction directly without importing a file. |
 | Empty state | Explain what to do when the selected year has no data. |
 | CSV preview modal | Review a file before import and optionally exclude columns. |
 | Summary cards | Show Total Income, Total Expenses, and Save Rate for the selected year. |
-| Category group manager | Create, rename, reorder, merge, and move expense groups and categories. |
+| Category group manager | Create, rename, reorder, and move expense groups and categories, and merge categories. |
 | Detailed and aggregated tables | Review totals by category, group, month, quarter, or half-year. |
+| Monthly targets (flag) | Set a monthly target per expense group and compare it with actual spend in the aggregated table and on Home. Off by default. |
 | Month drilldown | Inspect transaction-level detail for a month and edit categories inline. |
 | Cashflow charts | Visualize inflows, outflows, net cashflow, and annual source-to-spend flows. |
 | PDF → CSV modal | Open the lab conversion tool when the lab flag is enabled. |
@@ -49,15 +50,22 @@
 - **End state:** The transaction is appended to that month and the button briefly changes to **Added ✓**.
 - **Notes:** The category must be chosen from existing non-removed categories.
 
+### Set a monthly target for a group
+- **Start:** With the flag on, user opens **Spreadsheet**, **Aggregated**, **Expenses**.
+- **User intent:** Record how much to spend per month on a group and see how each period compares.
+- **Steps:** 1. Click **Set target** on a group row. 2. Type a monthly amount. 3. Press **Enter**.
+- **End state:** The target is saved to `budget/targets.json` and the row shows a verdict per period column.
+- **Notes:** Leave the field blank to clear a target. Changing a target does not rewrite earlier months.
+
 ### Review a month in detail
-- **Start:** In **Detailed** view with **M** selected, user clicks a month header such as **Jan**.
+- **Start:** In **Spreadsheet** with **Detailed** and **M** selected, user clicks a month header such as **Jan**.
 - **User intent:** Inspect and clean up individual transactions.
 - **Steps:** 1. Open the drilldown. 2. Sort by **Date**, **Category**, **Amount**, or **Description**. 3. Filter categories from **All Categories**. 4. Optionally show **Removed (N)** transactions. 5. Double-click a category to edit it.
 - **End state:** The user understands or updates the transactions for that month.
 - **Notes:** Drilldown is only available in monthly detailed view.
 
 ### Reorganize expense categories
-- **Start:** User clicks **Groups**.
+- **Start:** User opens the **Groups** tab (`/budget/groups`).
 - **User intent:** Make expense reporting more meaningful.
 - **Steps:** 1. Expand or collapse groups. 2. Add, rename, move, or delete groups. 3. Drag categories between groups. 4. Use **Merge Categories** to combine overlapping categories.
 - **End state:** Expense groups, subtotals, and chart groupings reflect the user’s preferred structure.
@@ -65,27 +73,27 @@
 
 ## Feature specs
 ### Header and year navigation
-- **What it is:** The top bar with the **Budget** title, previous and next year buttons, view toggles, upload controls, and help.
+- **What it is:** The top bar with the **Cashflow** title (the sidebar label and page `<h1>`), the **Overview / Spreadsheet / Groups / Transactions** tabs, the **M / Q / H** toggle, and previous and next year buttons.
 - **Why it exists:** It gives the user the main controls for moving around the page.
 - **Who sees it:** Always visible.
 - **Data shown:** Page title and selected year.
-- **Actions available:** Previous year, next year, change main view, change time grouping, show or hide groups, upload data, and open help.
-- **Default state:** Selected year starts at the current year and the main view starts on **Aggregated**.
-- **Other states:** **Groups** becomes **Hide Groups** when the group manager is open, and the upload menu and help panel open inline.
+- **Actions available:** Previous year, next year, change tab, and change time grouping. Importing, adding a transaction, and the CSV format help live in the **⋯ More actions** menu inside Spreadsheet.
+- **Default state:** Selected year starts at the current year and the page opens on **Overview** (`/budget` redirects to `/budget/cashflow`).
+- **Other states:** The **M / Q / H** toggle is hidden on the **Groups** tab. **Transactions** leaves the page and opens `/transactions`.
 - **Rules:** Budget years can be browsed forward and backward, including future years.
 - **Edge cases:** Simply visiting a new year can make that year available for manual entry even before any transactions exist.
 - **Related workflows:** Import a monthly CSV; Bulk import multiple CSVs; Reorganize expense categories.
 
 ### View controls
-- **What it is:** The **Aggregated / Detailed / Cashflow** toggle and the **M / Q / H** toggle.
-- **Why it exists:** It lets the user switch between summary tables, transaction tables, and charts at different time grains.
+- **What it is:** The tabs **Overview** (`/budget/cashflow`), **Spreadsheet** (`/budget/spreadsheet`), **Groups** (`/budget/groups`), and **Transactions** (`/transactions`), the **M / Q / H** toggle, and, inside Spreadsheet, the **Income / Expenses** tabs and the **Aggregated / Detailed** toggle.
+- **Why it exists:** It lets the user switch between summary tables, transaction tables, charts, and group management at different time grains.
 - **Who sees it:** Always visible.
 - **Data shown:** Active selection state only.
 - **Actions available:** Switch the main view and switch the time grouping.
-- **Default state:** **Aggregated** and **M** are selected.
-- **Other states:** Detailed view shows tables, Aggregated view shows rolled-up tables, and Cashflow shows charts.
+- **Default state:** **Overview** and **M** are selected.
+- **Other states:** Spreadsheet shows the Detailed or Aggregated tables, Overview shows summary cards and charts, and Groups shows the category group manager.
 - **Rules:** The Sankey view remains annual even when **Q** or **H** is selected.
-- **Edge cases:** Month-level actions such as month drilldown and month-header upload only work in monthly detailed view.
+- **Edge cases:** Month-level actions such as month drilldown and month-header upload only work in the Spreadsheet tab's monthly Detailed view.
 - **Related workflows:** Review a month in detail.
 
 ### Upload controls
@@ -163,7 +171,7 @@
 ### Category group manager
 - **What it is:** The **Expense Category Groups** panel.
 - **Why it exists:** It lets the user shape how expenses roll up across the page.
-- **Who sees it:** Users who click **Groups**.
+- **Who sees it:** Users on the **Groups** tab.
 - **Data shown:** Group names, category counts, category pills, and merge or delete prompts.
 - **Actions available:** Expand or collapse groups, rename, move up or down, delete a group, drag categories between groups, add a new group, enter **Merge Categories** mode, and delete categories.
 - **Default state:** All groups start expanded when the panel opens.
@@ -175,14 +183,26 @@
 ### Detailed and aggregated tables
 - **What it is:** The main budget tables for detailed category review and rolled-up group review.
 - **Why it exists:** They help the user understand budget performance from different levels of detail.
-- **Who sees it:** Users in **Detailed** or **Aggregated** view.
+- **Who sees it:** Users in the **Spreadsheet** tab (**Detailed** or **Aggregated**).
 - **Data shown:** In **Detailed**, **Income** and **Expenses** tables with category rows, expense group subtotals, monthly, quarterly, or half-year columns, and **Grand Total**. In **Aggregated**, **Income — Aggregated** and **Expenses — Aggregated** with group-level totals and **Grand Total**.
 - **Actions available:** Toggle **Total** to **%**, click month headers in monthly detailed view, and open month-header menus when available.
 - **Default state:** Totals are shown as currency.
 - **Other states:** Percentage mode shows share of the annual total, including **100%** in the grand total for aggregated view.
 - **Rules:** Income stays flat in detailed view, while expenses stay grouped. In aggregated view, all income categories roll into a single **Income** row.
 - **Edge cases:** Category labels can shorten within their own group, such as showing **Groceries** instead of a repeated group prefix.
-- **Related workflows:** Review a month in detail; Reorganize expense categories.
+- **Related workflows:** Review a month in detail; Reorganize expense categories; Set a monthly target for a group.
+
+### Monthly targets (feature flag `category-budget-targets`, off by default)
+- **What it is:** Two extra columns, **Monthly target** and **Vs target**, on the Expenses tab of the Aggregated table, plus one line on Home.
+- **Why it exists:** It lets the user say what they meant to spend per expense group and see over or under without doing the subtraction by eye.
+- **Who sees it:** Only users with the flag on (local override or rollout). With the flag off the page is unchanged and `budget/targets.json` is never read or written.
+- **Data shown:** The target per group and, for each period column, a verdict with an icon and text (**$120 over**, **$40 under**, **$80 left** while the period includes the current month, or **On target**), with a caption such as **8 of 12 months** when only some months have data. Home shows one line such as **October: over target in 2 of 5 groups** with a **See targets** link.
+- **Actions available:** Click a target to edit it, **Enter** to save, **Escape** to cancel. A blank value clears the target and **0** is a valid target.
+- **Default state:** No targets, so no verdicts and no Home line.
+- **Other states:** If `budget/targets.json` cannot be read, or was written by a newer version, an alert explains it and editing is disabled so the file is never overwritten.
+- **Rules:** Targets are monthly and stored per group id in `budget/targets.json`. Changing a target applies from the current month on; earlier months keep the target that applied then. A period target is the sum of the monthly target for each month that has data. Spend is net of refunds, matching the table. Targets for deleted groups are pruned on the next save. Income groups have no targets.
+- **Edge cases:** Groups without a target show no indicator. Home counts a refund as spend (existing behavior), so its verdict can differ slightly from the table.
+- **Related workflows:** Set a monthly target for a group.
 
 ### Month-header context menu
 - **What it is:** A right-click menu on monthly table headers in detailed monthly view.
@@ -223,7 +243,7 @@
 ### Cashflow charts
 - **What it is:** The **Cashflow — YYYY** bar chart and **Cashflow Sankey**.
 - **Why it exists:** They help the user understand cashflow shape and annual source-to-spend distribution.
-- **Who sees it:** Users in **Cashflow** view.
+- **Who sees it:** Users on the **Overview** tab.
 - **Data shown:** Income bars, expense bars, net cashflow legend, Sankey totals, and percentage shares.
 - **Actions available:** Hover the bar chart for tooltip detail and switch Sankey **Group / Category** mode.
 - **Default state:** Sankey starts in **Group** mode.
@@ -252,8 +272,8 @@
 ## Data and decisions
 - **User inputs captured:** Year selection, main view, time grouping, CSV files, column exclusions in preview, manual transaction date, description, amount, category, group names, group order, drag-and-drop placement, merge targets, drilldown category edits, drilldown filters, and sort choices.
 - **Derived values shown:** Annual income, annual expenses, save rate, group totals, category totals, grand totals, percentage shares, filtered drilldown subtotal, net cashflow by period, Sankey totals and percentages, and row and column counts in CSV preview.
-- **Saved choices / preferences:** Imported months, manually added transactions, category edits, group structure, merged categories, removed categories, and the stored budget year data.
-- **Cross-page impact:** Budget data updates shared savings information used elsewhere for goal progress and FI projection messaging. Imported budget files also appear in Drive and in backup and restore flows.
+- **Saved choices / preferences:** Monthly targets per expense group (`budget/targets.json`, flag only), imported months, manually added transactions, category edits, group structure, merged categories, removed categories, and the stored budget year data.
+- **Cross-page impact:** Targets feed the Home spending line when the flag is on. Budget data updates shared savings information used elsewhere for goal progress and FI projection messaging. Imported budget files also appear in Drive and in backup and restore flows.
 
 ## Open questions / known gaps
 - The removal-group language is split between **Remove from Budget** and **Removed (N)**, which may be confusing.

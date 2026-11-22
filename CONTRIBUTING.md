@@ -49,7 +49,7 @@ src/
 │   ├── FlagContext.tsx      # Provider: fetches config, manages overrides
 │   ├── flagSystem.ts        # Resolution logic (override > rollout > default)
 │   ├── flagDefinitions.ts   # Flag names and defaults
-│   ├── useFlag.ts           # Hook: useFlag('flag-name') → boolean
+│   ├── useFlag.ts           # Hook: useFlag(FLAGS.NAME) → boolean
 │   └── ModernDesignToggle   # Applies body.modern-design class when flag is on
 ├── search/                  # Search index builder
 │   └── searchIndex.ts       # Indexes pages, goals, accounts for SearchModal
@@ -70,7 +70,9 @@ src/
 │   │   ├── hooks/           # useFinancialGoals, useGwGoals
 │   │   └── utils/           # FI math, formatting
 │   ├── data/                # Accounts, balances, charts
-│   ├── budget/              # CSV-based budget tracking
+│   ├── budget/              # CSV-based budget tracking; monthly targets live in
+│   │                        # utils/budgetTargets*.ts, hooks/useBudgetTargets.ts,
+│   │                        # components/BudgetTarget{Cell,Status}.tsx (flag-gated)
 │   ├── allocation/          # Asset allocation & rebalancing
 │   ├── taxes/               # Tax document management
 │   ├── drive/               # Hierarchical file browser
@@ -115,6 +117,7 @@ The chosen folder handle is persisted in IndexedDB via `src/utils/handlePersiste
 | `transactions/{year}/{yyyy-mm}.csv` | Budget transactions per month |
 | `budget/categories.json` | Category groups and tracked years |
 | `budget/summary-cache.json` | Derived savings-rate summary |
+| `budget/targets.json` | Monthly targets per expense group, keyed by group id (only read and written when the `category-budget-targets` flag is on) |
 | `goals.json` | `{ financialGoals, gwGoals }` |
 | `taxes/{year}.json` | Tax checklist for that year |
 | `taxes/templates.json` | Reusable tax checklists |
@@ -179,7 +182,7 @@ The flag system in `src/flags/` controls runtime feature rollout:
 
 1. **Config** — `feature-flags.json` at repo root. Deployed as a static file. Fetched publicly (no auth) on app load. Admin writes (updating rollout %) require GitHub auth.
 2. **Resolution order** — local override → rollout percentage → default value. Each user gets a stable random seed (`flag-user-seed` in localStorage) for consistent percentage bucketing.
-3. **Usage** — `const enabled = useFlag('modern-design')` in any component.
+3. **Usage** — `const enabled = useFlag(FLAGS.MODERN_DESIGN)` in any component.
 4. **Adding a flag** — Define in `flagDefinitions.ts`, add rollout config to `feature-flags.json`.
 5. **Local override** — Set `flag-overrides` in localStorage (JSON object of `{ "flag-name": true/false }`) for development/testing.
 6. **ModernDesignToggle** — A special component that adds/removes `body.modern-design` class based on the `modern-design` flag.
