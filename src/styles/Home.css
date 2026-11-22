@@ -24,6 +24,11 @@
   color: transparent;
   width: fit-content;
 }
+/* Programmatic focus target (after the check-in strip is snoozed). */
+.home-greeting h1:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
 
 /* 2×2 Grid */
 .home-grid {

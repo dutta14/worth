@@ -3,12 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import { useGoals } from '../../contexts/GoalsContext'
 import { useData } from '../../contexts/DataContext'
 import { useTouchDrag } from '../../hooks/useTouchDrag'
+import { useFlag } from '../../flags/useFlag'
+import { FLAGS } from '../../flags/flagDefinitions'
 import ErrorBoundary from '../../components/ErrorBoundary'
 import NetWorthSummary from './NetWorthSummary'
 import MiniCharts from './MiniCharts'
 import GoalsPeek from './GoalsPeek'
 import AllocationBreakdown from './AllocationBreakdown'
 import SetupProgress from './SetupProgress'
+import CheckInStrip from './CheckInStrip'
 import SpendingPeek from './SpendingPeek'
 import { loadBudgetStore } from '../budget/utils/budgetStorage'
 import { useFileStore } from '../../contexts/FileStoreContext'
@@ -42,6 +45,7 @@ const Home: FC = () => {
   const [dragOver, setDragOver] = useState<number | null>(null)
   const [announcement, setAnnouncement] = useState('')
   const gridRef = useRef<HTMLDivElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
 
   const { accounts, balances } = useData()
   const { fileStore } = useFileStore()
@@ -57,6 +61,14 @@ const Home: FC = () => {
 
   const allComplete = accounts.length > 0 && balances.length > 0 && goals.length > 0 && hasBudgetData
   const [setupDismissed, setSetupDismissed] = useState(() => getStorageItem('onboarding-dismissed', '0') === '1')
+
+  const checkInEnabled = useFlag(FLAGS.MONTHLY_CHECK_IN)
+
+  const handleCheckInSnoozed = useCallback((message: string) => {
+    setAnnouncement(message)
+    // The strip unmounts with the focused button, so hand focus to the page heading first.
+    headingRef.current?.focus()
+  }, [])
 
   const allMonths = useMemo(
     () => [...new Set(balances.map(b => b.month))].sort((a, b) => b.localeCompare(a)),
@@ -209,7 +221,9 @@ const Home: FC = () => {
   return (
     <div className="home-page">
       <div className="home-greeting">
-        <h1>{greeting}</h1>
+        <h1 ref={headingRef} tabIndex={checkInEnabled ? -1 : undefined}>
+          {greeting}
+        </h1>
         {setupDismissed && !allComplete && dataLoaded && (
           <button
             className="setup-guide-link"
@@ -232,6 +246,14 @@ const Home: FC = () => {
             setStorageItem('onboarding-dismissed', '1')
             setSetupDismissed(true)
           }}
+        />
+      )}
+      {checkInEnabled && (
+        <CheckInStrip
+          accounts={accounts}
+          balances={balances}
+          dataLoaded={dataLoaded}
+          onSnoozed={handleCheckInSnoozed}
         />
       )}
       <div className="home-grid" ref={gridRef}>
