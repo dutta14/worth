@@ -43,6 +43,12 @@
 - **End state:** All reviewable files are processed and skipped files are summarized.
 - **Notes:** Canceling one preview does not cancel the remaining queue.
 
+### Import with the wizard (flag, off by default)
+- **Start:** With the `import-wizard` flag on, the same entry points (empty-year **Import CSV**, **Upload CSV**, **Bulk Upload**, the month-header menu, Drive drop, **PDF → CSV**, and **Import** on Transactions) open the **Import transactions** dialog instead of the filename-based preview.
+- **Steps:** 1. Choose one or more CSVs. 2. **Columns**: confirm the date, description and amount columns and whether negative numbers are spending (skipped when the file has the legacy `Date, Category, Amount` headers or a saved format matches). 3. **Review before importing**: see new, duplicate and skipped rows per month. 4. **Import**.
+- **End state:** Rows are appended to each month they belong to, duplicates are skipped, and **Undo import** restores the previous files while the touched months are unchanged. The result can be followed by **View in Transactions**.
+- **Notes:** The month comes from the row dates, not the filename. Saved column formats live in `budget/import-formats.json`; categorization rules in `budget/category-rules.json`. With the flag off the workflows above are unchanged. Full behavior: `docs/specs/import-wizard.md`.
+
 ### Add a one-off transaction manually
 - **Start:** User clicks **Add Transaction**.
 - **User intent:** Capture a transaction without re-exporting a CSV.

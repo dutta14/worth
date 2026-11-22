@@ -75,7 +75,8 @@ src/
 │   │                        # rules (missing/partial/due/stale) used by Home and Details (monthly-check-in flag)
 │   ├── budget/              # CSV-based budget tracking; monthly targets live in
 │   │                        # utils/budgetTargets*.ts, hooks/useBudgetTargets.ts,
-│   │                        # components/BudgetTarget{Cell,Status}.tsx (flag-gated)
+│   │                        # components/BudgetTarget{Cell,Status}.tsx (flag-gated); the import wizard
+│   │                        # (flag `import-wizard`, spec docs/specs/import-wizard.md) lives in import/
 │   ├── review/              # Annual Review tab under Wealth (flag-gated `annual-review`);
 │   │                        # pure selectors in utils/, hooks/useAnnualReview.ts, components/Review*.tsx
 │   ├── allocation/          # Asset allocation & rebalancing
@@ -192,8 +193,8 @@ Custom DOM events for cross-component communication:
 `App.tsx` composes all providers in a fixed nesting order:
 
 ```
-FlagProvider → SettingsProvider → FileStoreProvider → DataProvider →
-GoalsProvider → LayoutProvider → AppShell
+FileStoreProvider → SettingsProvider, LayoutProvider → (FileStoreGate) →
+GoalsProvider → DataProvider → FlagProvider → SafetyNetProvider → AppShell
 ```
 
 Each context lives in `src/contexts/` and exports a provider + a `useXxx()` hook. Components consume state via the hooks (e.g., `useSettings()`, `useGoals()`, `useFileStore()`, `useLayout()`). Never access context values directly — always use the exported hook.
@@ -207,7 +208,7 @@ The flag system in `src/flags/` controls runtime feature rollout:
 3. **Usage** — `const enabled = useFlag(FLAGS.MODERN_DESIGN)` in any component.
 4. **Adding a flag** — Define in `flagDefinitions.ts`, add rollout config to `feature-flags.json`.
 5. **Local override** — Set `flag-overrides` in localStorage (JSON object of `{ "flag-name": true/false }`) for development/testing.
-6. **Experimental flags** — `monthly-check-in`, `annual-review` (Review tab under Wealth, route `/net-worth/review/:year?`), `category-budget-targets`, `data-safety-net` and `import-wizard` default to off at 0% rollout. Enable one locally with `localStorage.setItem('flag-overrides', JSON.stringify({ 'annual-review': true }))`; e2e specs do the same in an init script (see `e2e/fixtures/annual-review.fixtures.ts`). With the flag off the tab, route, and search entry do not exist. The check-in Playwright suite, `e2e/monthly-check-in.spec.ts`, pins the clock with `page.clock.setFixedTime`.
+6. **Experimental flags** — `monthly-check-in`, `annual-review` (Review tab under Wealth, route `/net-worth/review/:year?`), `category-budget-targets`, `data-safety-net` and `import-wizard` default to off at 0% rollout. Enable one locally with `localStorage.setItem('flag-overrides', JSON.stringify({ 'annual-review': true }))`; e2e specs do the same in an init script (see `e2e/fixtures/annual-review.fixtures.ts`). With the flag off the tab, route, and search entry do not exist. The import wizard Playwright suite, `e2e/import-wizard.spec.ts`, turns its flag on after `seedBudget` (which clears localStorage) with `enableImportWizard` from `e2e/fixtures/import-wizard.fixtures.ts`; it never hardcodes a port or origin, so it runs unchanged against `vite preview` at `/worth` in CI. The check-in Playwright suite, `e2e/monthly-check-in.spec.ts`, pins the clock with `page.clock.setFixedTime`.
 7. **ModernDesignToggle** — A special component that adds/removes `body.modern-design` class based on the `modern-design` flag.
 
 ## Modern Design

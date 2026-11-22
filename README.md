@@ -163,6 +163,7 @@ A year-based budgeting workspace that is more interested in patterns than ceremo
 - Change the period between monthly, quarterly, and half-yearly views
 - Experimental, off by default: set a monthly target per expense group in Spreadsheet → Aggregated and compare it with what you spent (feature flag `category-budget-targets`)
 - Use the built-in PDF → CSV converter when the bank only gives you a statement PDF
+- Experimental, off by default: turn on the `import-wizard` flag to import bank CSVs with any column names. The wizard asks which column is the date, description and amount (and whether spending is negative), splits a statement into the right months whatever the filename says, skips transactions you already have, shows everything for review before it writes anything, and offers Undo. It remembers the mapping for the next file from the same bank. It also adds categorization rules ("description contains Starbucks → Dining") that run on every import, from Transactions (Import, Rules, Apply rules to uncategorized) and from the category menu on a row. Nothing leaves your machine; rules live in `budget/category-rules.json` and saved mappings in `budget/import-formats.json`
 
 **One tip:** Start in Aggregated view the first time you import a messy file. It lets you find the categories that matter before you get lost in line items.
 

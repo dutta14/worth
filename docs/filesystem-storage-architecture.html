@@ -188,6 +188,8 @@
 ├── _backups/                        ← safety copies, newest 10 per file (flag: data-safety-net)
 ├── budget/
 │   ├── categories.json              ← category groups (expense &amp; income)
+│   ├── import-formats.json          ← saved CSV column formats (flag: import-wizard)
+│   ├── category-rules.json          ← import categorization rules (flag: import-wizard)
 │   ├── summary-cache.json           ← derived: annualSavings, saveRate, monthsOfData
 │   └── targets.json                 ← monthly targets per expense group (flag: category-budget-targets)
 ├── transactions/
@@ -330,6 +332,8 @@ interface FileStore {
   <tr><td><code>data-balances</code></td><td><code>balances/{year}.csv</code></td><td>CSV</td></tr>
   <tr><td><code>budget-store</code> (csvs only)</td><td><code>transactions/{year}/{yyyy-mm}.csv</code></td><td>CSV</td></tr>
   <tr><td><code>budget-config</code> + <code>budget-store</code> (categoryGroups, years)</td><td><code>budget/categories.json</code></td><td>JSON</td></tr>
+  <tr><td>Saved import formats (new, flag <code>import-wizard</code>)</td><td><code>budget/import-formats.json</code></td><td>JSON</td></tr>
+  <tr><td>Categorization rules (new, flag <code>import-wizard</code>)</td><td><code>budget/category-rules.json</code></td><td>JSON</td></tr>
   <tr><td><code>budget-summary</code></td><td><code>budget/summary-cache.json</code></td><td>JSON</td></tr>
   <tr><td><code>tax-store</code></td><td><code>taxes/{year}.json</code></td><td>JSON</td></tr>
   <tr><td><code>tax-templates</code></td><td><code>taxes/templates.json</code></td><td>JSON</td></tr>

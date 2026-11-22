@@ -118,6 +118,18 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
           expense group in the Aggregated view of Spreadsheet and see how each period compares.
         </li>
         <li>Use the built-in PDF → CSV converter when the bank only gives you a statement PDF.</li>
+        <li>
+          Experimental, off by default: turn on the Import wizard feature flag to import a bank CSV with any column
+          names. Importing a bank CSV takes three steps. Choose which column is the date, description and amount, and
+          whether spending is negative. Check the review, which lists new rows, duplicates it will skip and rows it
+          could not read. Then import. Rows go into the month their date belongs to, whatever the file is called, and
+          Undo import puts the old files back. Worth remembers the mapping for the next file from the same bank.
+        </li>
+        <li>
+          Experimental, off by default: with the Import wizard flag on, Rules sort transactions for you. A rule says
+          that a description containing, say, Starbucks belongs in Dining. The first matching rule wins, rules run on
+          every import, and you can reorder, turn off or delete them from Rules on the Transactions tab.
+        </li>
       </ul>
       <p>
         <strong>One tip:</strong> Start in Aggregated view the first time you import a messy file. It lets you find the
@@ -139,6 +151,11 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>Filter the list when you want to isolate one account, merchant, or category pattern.</li>
         <li>Categorize or recategorize items before they pollute your longer-term summaries.</li>
         <li>Use it as the place for cleanup work, not just for reading totals.</li>
+        <li>
+          Experimental, off by default: with the Import wizard flag on, this tab also has Import, Rules and Apply rules
+          to uncategorized. Open a row&apos;s category menu and choose Always categorize merchants like this to create a
+          rule from it.
+        </li>
       </ul>
       <p>
         <strong>One tip:</strong> Treat the Transactions tab as the inbox and the other Cashflow tabs as the monthly

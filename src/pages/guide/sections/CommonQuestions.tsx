@@ -54,6 +54,12 @@ const questions = [
       'The web app works on mobile browsers (Chrome or Edge required for folder access), and a native app would require an account system, an app store, and a backend. The whole point of this app is that none of those exist.',
   },
   {
+    id: 'faq-import-columns',
+    question: 'Can I import a CSV from my bank?',
+    answer:
+      'Yes. Experimental, off by default: with the Import wizard feature flag on, you choose which column is the date, description and amount, review the result, and import. Worth skips transactions it already has and can undo the import. With the flag off, the CSV needs Date, Category and Amount columns and a month in the filename.',
+  },
+  {
     id: 'faq-browser',
     question: 'Which browsers are supported?',
     answer:
