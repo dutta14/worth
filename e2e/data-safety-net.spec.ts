@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import { NetWorthPage } from './pages/net-worth.page'
-import { installFakeFsa } from './fixtures/fake-fsa'
+import { changeOnDisk, installFakeFsa, removeOnDisk, touchOnDisk } from './fixtures/fake-fsa'
 import type { FakeFsaControls } from './fixtures/fake-fsa'
 
 /*
@@ -467,6 +467,213 @@ test.describe('Data safety net: corrupt files', () => {
     await addAccount(page, 'Rainy Day Fund')
     await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
     expect(await keys(page, 'accounts.json.corrupt-')).toEqual([])
+    expect(await keys(page, '_backups/')).toEqual([])
+  })
+})
+
+test.describe('Data safety net: external changes', () => {
+  const OTHER_COMPUTER = JSON.stringify([
+    {
+      id: 1,
+      name: 'Backup Savings',
+      type: 'liquid',
+      owner: 'primary',
+      status: 'active',
+      goalType: 'gw',
+      nature: 'asset',
+      allocation: 'cash',
+    },
+  ])
+
+  const keys = (page: Page, prefix: string) =>
+    page.evaluate(
+      p =>
+        [...((window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa?.files.keys() ?? [])]
+          .filter(path => path.startsWith(p))
+          .sort(),
+      prefix,
+    )
+
+  const commitsTo = (page: Page, path: string) =>
+    page.evaluate(
+      p =>
+        ((window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa?.commits ?? []).filter(c => c.path === p)
+          .length,
+      path,
+    )
+
+  const banner = (page: Page) => page.getByRole('region', { name: 'Data safety' })
+  const external = (page: Page) =>
+    banner(page)
+      .getByRole('status')
+      .filter({ hasText: /changed on disk|deleted outside this tab/ })
+  const focusWindow = (page: Page) => page.evaluate(() => window.dispatchEvent(new Event('focus')))
+
+  test('flags a file changed elsewhere, holds edits, and Reload shows the disk version', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': '[]' } })
+    await changeOnDisk(page, 'accounts.json', OTHER_COMPUTER)
+    await focusWindow(page)
+
+    const status = external(page)
+    await expect(status).toContainText('accounts.json changed on disk.')
+    await expect(status).toContainText('Saving to it is paused so nothing gets overwritten.')
+    await expect(page.getByRole('alert')).toHaveCount(0)
+
+    await addAccount(page, 'Rainy Day Fund')
+    await page.waitForTimeout(600)
+    expect(await commitsTo(page, 'accounts.json')).toBe(0)
+    expect(await disk(page, 'accounts.json')).toBe(OTHER_COMPUTER)
+
+    await page.getByRole('button', { name: 'Reload' }).click()
+
+    await expect(status).toBeHidden()
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Reloaded from disk. Any unsaved edits were kept in _backups.' }),
+    ).toBeAttached()
+    await expect(page.locator('#main-content')).toBeFocused()
+    expect(await disk(page, 'accounts.json')).toBe(OTHER_COMPUTER)
+    expect(await commitsTo(page, 'accounts.json')).toBe(0)
+    const unsaved = (await keys(page, '_backups/accounts/')).filter(path => path.endsWith('-unsaved.json'))
+    expect(unsaved).toHaveLength(1)
+    expect(await disk(page, unsaved[0])).toContain('Rainy Day Fund')
+
+    const nw = new NetWorthPage(page)
+    await nw.openAccountsModal()
+    await expect(nw.modal).toContainText('Backup Savings')
+    await expect(nw.modal).not.toContainText('Rainy Day Fund')
+  })
+
+  test('Keep my version saves the edit and leaves the other version in _backups', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': '[]' } })
+    await changeOnDisk(page, 'accounts.json', OTHER_COMPUTER)
+    await focusWindow(page)
+    await expect(external(page)).toContainText('accounts.json changed on disk.')
+
+    await addAccount(page, 'Rainy Day Fund')
+    await page.waitForTimeout(600)
+    expect(await commitsTo(page, 'accounts.json')).toBe(0)
+
+    await page.getByRole('button', { name: 'Keep my version' }).click()
+
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Saved your version. The previous version is in _backups.' }),
+    ).toBeAttached()
+    await expect(external(page)).toHaveCount(0)
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
+    const copies = await keys(page, '_backups/accounts/')
+    const contents = await Promise.all(copies.map(path => disk(page, path)))
+    expect(contents).toContain(OTHER_COMPUTER)
+  })
+
+  test('Keep my version with no edit writes the tab version back over the changed file', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': OTHER_COMPUTER } })
+    await expect(page.getByText('No accounts yet')).toHaveCount(0)
+    await changeOnDisk(page, 'accounts.json', '[]')
+    await focusWindow(page)
+    await expect(external(page)).toContainText('accounts.json changed on disk.')
+
+    await page.getByRole('button', { name: 'Keep my version' }).click()
+
+    await expect
+      .poll(async () => JSON.parse((await disk(page, 'accounts.json')) ?? 'null'))
+      .toEqual(JSON.parse(OTHER_COMPUTER))
+    const copies = await keys(page, '_backups/accounts/')
+    expect(await Promise.all(copies.map(path => disk(page, path)))).toContain('[]')
+  })
+
+  test('ignores a file whose modified time moved but whose content did not', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': '[]' } })
+    await touchOnDisk(page, 'accounts.json')
+    await focusWindow(page)
+    await page.waitForTimeout(600)
+
+    await expect(page.getByRole('region', { name: 'Data safety' })).toHaveCount(0)
+    await addAccount(page, 'Rainy Day Fund')
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
+  })
+
+  test('blocks the save instead of overwriting when the file changed and no focus event ran', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': '[]' } })
+    await changeOnDisk(page, 'accounts.json', OTHER_COMPUTER)
+
+    await addAccount(page, 'Rainy Day Fund')
+
+    await expect(external(page)).toContainText('accounts.json changed on disk.')
+    expect(await disk(page, 'accounts.json')).toBe(OTHER_COMPUTER)
+    expect(await commitsTo(page, 'accounts.json')).toBe(0)
+  })
+
+  test('reports a deleted file, and Reload shows the empty state', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': OTHER_COMPUTER } })
+    await removeOnDisk(page, 'accounts.json')
+    await focusWindow(page)
+
+    await expect(external(page)).toContainText('accounts.json was deleted outside this tab. Saving to it is paused.')
+    await page.getByRole('button', { name: 'Reload' }).click()
+
+    await expect(page.getByText('No accounts yet')).toBeVisible()
+    await expect(external(page)).toHaveCount(0)
+    expect(await disk(page, 'accounts.json')).toBeNull()
+  })
+
+  test('recreates a deleted file when you keep your version', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': OTHER_COMPUTER } })
+    await removeOnDisk(page, 'accounts.json')
+    await focusWindow(page)
+    await expect(external(page)).toContainText('accounts.json was deleted outside this tab.')
+
+    await page.getByRole('button', { name: 'Keep my version' }).click()
+
+    await expect
+      .poll(async () => JSON.parse((await disk(page, 'accounts.json')) ?? 'null'))
+      .toEqual(JSON.parse(OTHER_COMPUTER))
+  })
+
+  test('does not delete a balances file that this tab never loaded', async ({ page }) => {
+    const CSV = 'month,accountId,balance\n2025-06,1,500\n'
+    await openApp(page, {
+      seed: { 'accounts.json': OTHER_COMPUTER, 'balances/2026.csv': 'month,accountId,balance\n2026-01,1,1000\n' },
+    })
+    await changeOnDisk(page, 'balances/2025.csv', CSV)
+
+    const nw = new NetWorthPage(page)
+    await nw.spreadsheetTab.click()
+    await nw.addEntryBtn.click()
+    await nw.addEntryContinueBtn.click()
+    await nw.getInlineBalanceInput(0).fill('200')
+    await nw.inlineSaveBtn.click()
+
+    await expect(external(page)).toContainText('changed on disk')
+    expect(await disk(page, 'balances/2025.csv')).toBe(CSV)
+  })
+
+  test('resolves with the keyboard alone and moves focus to the page', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': '[]' } })
+    await changeOnDisk(page, 'accounts.json', OTHER_COMPUTER)
+    await focusWindow(page)
+    const reload = page.getByRole('button', { name: 'Reload' })
+    await expect(reload).toBeVisible()
+
+    for (let i = 0; i < 60; i++) {
+      if (await reload.evaluate(el => el === document.activeElement)) break
+      await page.keyboard.press('Tab')
+    }
+    await expect(reload).toBeFocused()
+    await page.keyboard.press('Enter')
+
+    await expect(page.getByRole('button', { name: 'Reload' })).toHaveCount(0)
+    await expect(page.locator('#main-content')).toBeFocused()
+  })
+
+  test('does nothing when the flag is off: no banner, and the next save replaces the file', async ({ page }) => {
+    await openApp(page, { flagOn: false, seed: { 'accounts.json': '[]' } })
+    await changeOnDisk(page, 'accounts.json', OTHER_COMPUTER)
+    await focusWindow(page)
+    await page.waitForTimeout(600)
+    await expect(page.getByRole('region', { name: 'Data safety' })).toHaveCount(0)
+
+    await addAccount(page, 'Rainy Day Fund')
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
     expect(await keys(page, '_backups/')).toEqual([])
   })
 })

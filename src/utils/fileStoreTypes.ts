@@ -55,6 +55,22 @@ export interface SafetyNetStore {
    * edit that was held (if any) and resolves `null`. Rejects with the file untouched when a step fails.
    */
   resolveCorrupt(path: string, action: CorruptAction): Promise<BackupEntry | null>
+  /**
+   * Compares the files this tab has loaded with the disk and flags any that changed or vanished outside the
+   * tab. Skips content reads unless only the modified time differs. Never rejects for a single unreadable file.
+   */
+  checkExternalChanges(): Promise<void>
+  /**
+   * Discards this tab's version of every externally changed file and lets subscribers re-read the disk. Any
+   * edit that was waiting to be saved is kept as an `-unsaved` copy first; rejects with nothing changed if
+   * that copy cannot be made.
+   */
+  reloadFromDisk(): Promise<void>
+  /**
+   * Overwrites every externally changed file with this tab's version (the held edit, or what the tab has
+   * loaded). The disk version is copied to `_backups/` first and the file is left alone if that fails.
+   */
+  keepLocal(): Promise<void>
 }
 
 export const isSafetyNetStore = (store: FileStore): store is FileStore & SafetyNetStore => 'getSafetySnapshot' in store

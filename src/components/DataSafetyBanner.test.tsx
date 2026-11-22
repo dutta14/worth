@@ -10,6 +10,7 @@ import type { BackupEntry, SafetySnapshot } from '../utils/safetyNet'
 const failedSnapshot = (...paths: string[]): SafetySnapshot => ({
   failed: paths.map(path => ({ path, kind: 'other' as const })),
   corrupt: [],
+  stale: [],
   permissionLost: false,
   backupsHealthy: true,
 })
@@ -24,6 +25,8 @@ const makeValue = (overrides: Partial<SafetyNetContextValue> = {}): SafetyNetCon
   listBackups: vi.fn(async () => []),
   restoreBackup: vi.fn(async () => {}),
   resolveCorrupt: vi.fn(async () => null),
+  resolveExternal: vi.fn(async () => {}),
+  notice: '',
   ...overrides,
 })
 
@@ -90,6 +93,7 @@ describe('DataSafetyBanner', () => {
           snapshot: {
             failed: [{ path: 'a.json', kind: 'disk-full' }],
             corrupt: [],
+            stale: [],
             permissionLost: false,
             backupsHealthy: true,
           },
@@ -132,6 +136,7 @@ describe('DataSafetyBanner', () => {
       const diskFull: SafetySnapshot = {
         failed: [{ path: 'b.json', kind: 'disk-full' }],
         corrupt: [],
+        stale: [],
         permissionLost: false,
         backupsHealthy: true,
       }
@@ -151,7 +156,7 @@ describe('DataSafetyBanner', () => {
   })
 
   describe('permission loss', () => {
-    const lost: SafetySnapshot = { failed: [], corrupt: [], permissionLost: true, backupsHealthy: true }
+    const lost: SafetySnapshot = { failed: [], corrupt: [], stale: [], permissionLost: true, backupsHealthy: true }
 
     it('offers to reconnect the folder from a click handler', async () => {
       const user = userEvent.setup()
@@ -182,6 +187,7 @@ describe('DataSafetyBanner', () => {
           snapshot: {
             failed: [{ path: 'a.json', kind: 'permission' }],
             corrupt: [],
+            stale: [],
             permissionLost: true,
             backupsHealthy: true,
           },
@@ -202,6 +208,7 @@ describe('DataSafetyBanner', () => {
               { path: 'b.json', kind: 'disk-full' },
             ],
             corrupt: [],
+            stale: [],
             permissionLost: true,
             backupsHealthy: true,
           },
@@ -218,6 +225,7 @@ describe('DataSafetyBanner', () => {
       const both: SafetySnapshot = {
         failed: [{ path: 'b.json', kind: 'other' }],
         corrupt: [],
+        stale: [],
         permissionLost: true,
         backupsHealthy: true,
       }
@@ -464,6 +472,7 @@ describe('DataSafetyBanner', () => {
           snapshot: {
             failed: [{ path: 'a.json', kind: 'other' }],
             corrupt: [withCopy, { path: 'profile.json', copyPath: null, hasBackup: false }],
+            stale: [],
             permissionLost: false,
             backupsHealthy: true,
           },
@@ -493,6 +502,161 @@ describe('DataSafetyBanner', () => {
     it('shows nothing for a corrupt file when the safety net is off', () => {
       renderBanner(makeValue({ enabled: false, snapshot: corruptSnapshot(withCopy) }))
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('external change', () => {
+    const staleSnapshot = (...files: { path: string; deleted?: boolean }[]): SafetySnapshot => ({
+      ...EMPTY_SAFETY_SNAPSHOT,
+      stale: files.map(({ path, deleted = false }) => ({ path, deleted })),
+    })
+    const region = () => screen.getByRole('region', { name: 'Data safety' })
+    const banner = () =>
+      within(region())
+        .getByText(/on disk\.$/)
+        .closest('section') as HTMLElement
+
+    it('names the file and explains that saving is paused, as a polite status rather than an alert', () => {
+      renderBanner(makeValue({ snapshot: staleSnapshot({ path: 'profile.json' }) }))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(banner()).toHaveAttribute('role', 'status')
+      expect(banner()).toHaveTextContent('profile.json changed on disk.')
+      expect(banner()).toHaveTextContent(
+        'It was changed outside this tab, maybe on another computer or by a sync tool. Saving to it is paused so nothing gets overwritten.',
+      )
+    })
+
+    it('uses the plural wording for several files', () => {
+      renderBanner(makeValue({ snapshot: staleSnapshot({ path: 'a.json' }, { path: 'b.csv' }) }))
+      expect(banner()).toHaveTextContent('Files changed on disk.')
+      expect(banner()).toHaveTextContent('They were changed outside this tab')
+      expect(banner()).toHaveTextContent('Saving to them is paused')
+    })
+
+    it('uses the deleted wording for a file that is gone', () => {
+      renderBanner(makeValue({ snapshot: staleSnapshot({ path: 'profile.json', deleted: true }) }))
+      expect(banner()).toHaveTextContent(
+        "profile.json was deleted outside this tab. Saving to it is paused. Reload to see what's on disk, or keep your version to create it again.",
+      )
+    })
+
+    it('offers Reload and Keep my version, and nothing to dismiss it', () => {
+      renderBanner(makeValue({ snapshot: staleSnapshot({ path: 'profile.json' }) }))
+      expect(
+        within(banner())
+          .getAllByRole('button')
+          .map(button => button.textContent),
+      ).toEqual(['Reload', 'Keep my version'])
+    })
+
+    it.each([
+      ['Reload', 'reload'],
+      ['Keep my version', 'keep'],
+    ])('runs %s for every changed file', async (label, action) => {
+      const user = userEvent.setup()
+      const resolveExternal = vi.fn(async () => {})
+      renderBanner(makeValue({ snapshot: staleSnapshot({ path: 'a.json' }, { path: 'b.json' }), resolveExternal }))
+      await user.click(screen.getByRole('button', { name: label }))
+      expect(resolveExternal).toHaveBeenCalledWith(action)
+    })
+
+    it('ranks below permission, save failures and unreadable files', () => {
+      renderBanner(
+        makeValue({
+          snapshot: {
+            ...failedSnapshot('a.json'),
+            corrupt: [{ path: 'accounts.json', copyPath: null, hasBackup: false }],
+            stale: [{ path: 'profile.json', deleted: false }],
+          },
+        }),
+      )
+      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't save changes to a.json.")
+      expect(screen.getByRole('alert')).toHaveTextContent('2 more issues need attention.')
+    })
+
+    it('shows a "more" line when an unreadable file is also waiting', () => {
+      renderBanner(
+        makeValue({
+          snapshot: {
+            ...staleSnapshot({ path: 'profile.json' }),
+            corrupt: [{ path: 'accounts.json', copyPath: null, hasBackup: false }],
+          },
+        }),
+      )
+      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't read accounts.json.")
+      expect(screen.getByRole('alert')).toHaveTextContent('1 more issue needs attention.')
+    })
+
+    it('shows a busy state and ignores a second click while resolving', async () => {
+      const user = userEvent.setup()
+      let finish: () => void = () => {}
+      const resolveExternal = vi.fn(() => new Promise<void>(resolve => (finish = resolve)))
+      renderBanner(makeValue({ snapshot: staleSnapshot({ path: 'profile.json' }), resolveExternal }))
+      await user.click(screen.getByRole('button', { name: 'Reload' }))
+      await user.click(screen.getByRole('button', { name: 'Keep my version' }))
+      expect(resolveExternal).toHaveBeenCalledTimes(1)
+      expect(banner()).toHaveAttribute('aria-busy', 'true')
+      expect(screen.getByRole('button', { name: 'Reload' })).toHaveAttribute('aria-disabled', 'true')
+      await act(async () => finish())
+      expect(banner()).not.toHaveAttribute('aria-busy')
+    })
+
+    it('says nothing was changed when the resolution fails, and allows another try', async () => {
+      const user = userEvent.setup()
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const resolveExternal = vi
+        .fn<(action: string) => Promise<void>>()
+        .mockRejectedValueOnce(new Error('disk gone'))
+        .mockResolvedValueOnce(undefined)
+      renderBanner(makeValue({ snapshot: staleSnapshot({ path: 'profile.json' }), resolveExternal }))
+      await user.click(screen.getByRole('button', { name: 'Keep my version' }))
+      expect(region()).toHaveTextContent("Couldn't finish that. The file was not changed.")
+      await user.click(screen.getByRole('button', { name: 'Keep my version' }))
+      expect(resolveExternal).toHaveBeenCalledTimes(2)
+      expect(region()).not.toHaveTextContent("Couldn't finish that.")
+    })
+
+    it('announces the notice from the provider, and moves focus to the page when the banner goes', async () => {
+      const user = userEvent.setup()
+      const value = makeValue({ snapshot: staleSnapshot({ path: 'profile.json' }) })
+      const { update } = renderBanner(value)
+      await user.tab()
+      await user.tab()
+      expect(screen.getByRole('button', { name: 'Reload' })).toHaveFocus()
+      update({ ...value, snapshot: EMPTY_SAFETY_SNAPSHOT })
+      expect(document.getElementById('main-content')).toHaveFocus()
+      update({
+        ...value,
+        snapshot: EMPTY_SAFETY_SNAPSHOT,
+        notice: 'Saved your version. The previous version is in _backups.',
+      })
+      expect(screen.getByRole('status')).toHaveTextContent('Saved your version. The previous version is in _backups.')
+    })
+
+    it('announces a notice that was already set when the banner mounts after a remount', () => {
+      renderBanner(makeValue({ notice: 'Reloaded from disk. Any unsaved edits were kept in _backups.' }))
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Reloaded from disk. Any unsaved edits were kept in _backups.',
+      )
+    })
+
+    it('resets the failure message when the set of changed files changes', async () => {
+      const user = userEvent.setup()
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const resolveExternal = vi.fn(async () => {
+        throw new Error('disk gone')
+      })
+      const value = makeValue({ snapshot: staleSnapshot({ path: 'a.json' }), resolveExternal })
+      const { update } = renderBanner(value)
+      await user.click(screen.getByRole('button', { name: 'Reload' }))
+      expect(region()).toHaveTextContent("Couldn't finish that.")
+      update({ ...value, snapshot: staleSnapshot({ path: 'a.json' }, { path: 'b.json' }) })
+      expect(region()).not.toHaveTextContent("Couldn't finish that.")
+    })
+
+    it('shows nothing when the safety net is off', () => {
+      renderBanner(makeValue({ enabled: false, snapshot: staleSnapshot({ path: 'a.json' }) }))
+      expect(screen.queryByRole('region')).not.toBeInTheDocument()
     })
   })
 })

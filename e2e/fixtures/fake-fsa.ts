@@ -12,6 +12,10 @@ import type { Page } from '@playwright/test'
 export interface FakeFsaControls {
   /** Flat map of relative path to text content. Directories are implied by their files. */
   files: Map<string, string>
+  /** Modified time per path in ms; paths without one report `DEFAULT_MTIME`. Every commit takes the next `clock` tick. */
+  mtimes: Map<string, number>
+  /** Last modified time handed out; external edits made through `changeOnDisk` take the next tick too. */
+  clock: number
   /** Extra empty directories created through `getDirectoryHandle({ create: true })`. */
   dirs: Set<string>
   /** Permission state reported by `queryPermission` and enforced on reads and writes. */
@@ -43,6 +47,8 @@ declare global {
 function fakeFsaInitScript(seed: Record<string, string>): void {
   const state: FakeFsaControls = {
     files: new Map(Object.entries(seed)),
+    mtimes: new Map<string, number>(),
+    clock: 1_700_000_000_000,
     dirs: new Set<string>(),
     permission: 'granted',
     grantOnRequest: true,
@@ -56,6 +62,7 @@ function fakeFsaInitScript(seed: Record<string, string>): void {
   }
   window.__fakeFsa = state
 
+  const DEFAULT_MTIME = 1_700_000_000_000
   const fault = (name: string): DOMException => new DOMException(`fake fsa: ${name}`, name)
   const assertAccess = (): void => {
     if (state.permission !== 'granted') throw fault('NotAllowedError')
@@ -78,7 +85,9 @@ function fakeFsaInitScript(seed: Record<string, string>): void {
       assertAccess()
       const content = state.files.get(this.path)
       if (content === undefined) throw fault('NotFoundError')
-      return new File([content], this.name, { lastModified: 1_700_000_000_000 })
+      return new File([content], this.name, {
+        lastModified: state.mtimes.get(this.path) ?? DEFAULT_MTIME,
+      })
     }
 
     async createWritable() {
@@ -98,6 +107,8 @@ function fakeFsaInitScript(seed: Record<string, string>): void {
             throw fault(state.failCloseName)
           }
           state.files.set(path, buffer)
+          state.clock += 1000
+          state.mtimes.set(path, state.clock)
           state.commits.push({ path, content: buffer })
         },
       }
@@ -172,4 +183,33 @@ function fakeFsaInitScript(seed: Record<string, string>): void {
 /** Installs the fake before any page script runs. `seed` maps relative paths to text content. */
 export async function installFakeFsa(page: Page, seed: Record<string, string> = {}): Promise<void> {
   await page.addInitScript(fakeFsaInitScript, seed)
+}
+
+/** Edits a file the way another machine or a sync tool would: new content and a new modified time. */
+export async function changeOnDisk(page: Page, path: string, content: string): Promise<void> {
+  await page.evaluate(
+    ({ target, next }) => {
+      const state = window.__fakeFsa as FakeFsaControls
+      state.clock += 1000
+      state.files.set(target, next)
+      state.mtimes.set(target, state.clock)
+    },
+    { target: path, next: content },
+  )
+}
+
+/** Moves a file's modified time without touching its content, like a sync client re-stamping it. */
+export async function touchOnDisk(page: Page, path: string): Promise<void> {
+  await page.evaluate(target => {
+    const state = window.__fakeFsa as FakeFsaControls
+    state.clock += 1000
+    state.mtimes.set(target, state.clock)
+  }, path)
+}
+
+/** Removes a file the way another machine would. */
+export async function removeOnDisk(page: Page, path: string): Promise<void> {
+  await page.evaluate(target => {
+    ;(window.__fakeFsa as FakeFsaControls).files.delete(target)
+  }, path)
 }

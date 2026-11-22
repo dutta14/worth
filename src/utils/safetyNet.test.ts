@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   EMPTY_SAFETY_SNAPSHOT,
   FileStoreError,
+  compareFingerprint,
+  fingerprintBytes,
+  hashBytes,
   backupDirFor,
   backupPathFor,
   corruptPathFor,
@@ -39,8 +42,20 @@ describe('snapshotsEqual', () => {
   const failed = (path: string, kind: 'other' | 'disk-full' = 'other') => ({ path, kind })
 
   it('treats identical snapshots as equal', () => {
-    const a: SafetySnapshot = { failed: [failed('a.json')], corrupt: [], permissionLost: true, backupsHealthy: true }
-    const b: SafetySnapshot = { failed: [failed('a.json')], corrupt: [], permissionLost: true, backupsHealthy: true }
+    const a: SafetySnapshot = {
+      failed: [failed('a.json')],
+      corrupt: [],
+      stale: [],
+      permissionLost: true,
+      backupsHealthy: true,
+    }
+    const b: SafetySnapshot = {
+      failed: [failed('a.json')],
+      corrupt: [],
+      stale: [],
+      permissionLost: true,
+      backupsHealthy: true,
+    }
     expect(snapshotsEqual(a, b)).toBe(true)
   })
 
@@ -50,7 +65,13 @@ describe('snapshotsEqual', () => {
 
   it('detects a permission change', () => {
     expect(
-      snapshotsEqual(EMPTY_SAFETY_SNAPSHOT, { failed: [], corrupt: [], permissionLost: true, backupsHealthy: true }),
+      snapshotsEqual(EMPTY_SAFETY_SNAPSHOT, {
+        failed: [],
+        corrupt: [],
+        stale: [],
+        permissionLost: true,
+        backupsHealthy: true,
+      }),
     ).toBe(false)
   })
 
@@ -59,6 +80,7 @@ describe('snapshotsEqual', () => {
       snapshotsEqual(EMPTY_SAFETY_SNAPSHOT, {
         failed: [failed('a.json')],
         corrupt: [],
+        stale: [],
         permissionLost: false,
         backupsHealthy: true,
       }),
@@ -69,16 +91,24 @@ describe('snapshotsEqual', () => {
     const base: SafetySnapshot = {
       failed: [failed('a.json')],
       corrupt: [],
+      stale: [],
       permissionLost: false,
       backupsHealthy: true,
     }
     expect(
-      snapshotsEqual(base, { failed: [failed('b.json')], corrupt: [], permissionLost: false, backupsHealthy: true }),
+      snapshotsEqual(base, {
+        failed: [failed('b.json')],
+        corrupt: [],
+        stale: [],
+        permissionLost: false,
+        backupsHealthy: true,
+      }),
     ).toBe(false)
     expect(
       snapshotsEqual(base, {
         failed: [failed('a.json', 'disk-full')],
         corrupt: [],
+        stale: [],
         permissionLost: false,
         backupsHealthy: true,
       }),
@@ -98,6 +128,7 @@ describe('deriveIssues', () => {
         { path: 'balances/2026.csv', kind: 'disk-full' },
       ],
       corrupt: [],
+      stale: [],
       permissionLost: false,
       backupsHealthy: true,
     })
@@ -108,6 +139,7 @@ describe('deriveIssues', () => {
     const [issue] = deriveIssues({
       failed: [{ path: 'a.json', kind: 'other' }],
       corrupt: [],
+      stale: [],
       permissionLost: false,
       backupsHealthy: true,
     })
@@ -118,6 +150,7 @@ describe('deriveIssues', () => {
     const issues = deriveIssues({
       failed: [{ path: 'a.json', kind: 'permission' }],
       corrupt: [],
+      stale: [],
       permissionLost: true,
       backupsHealthy: true,
     })
@@ -131,6 +164,7 @@ describe('deriveIssues', () => {
         { path: 'b.json', kind: 'disk-full' },
       ],
       corrupt: [],
+      stale: [],
       permissionLost: true,
       backupsHealthy: true,
     })
@@ -141,6 +175,7 @@ describe('deriveIssues', () => {
     const issues = deriveIssues({
       failed: [{ path: 'a.json', kind: 'permission' }],
       corrupt: [],
+      stale: [],
       permissionLost: false,
       backupsHealthy: true,
     })
@@ -317,6 +352,7 @@ describe('corrupt files', () => {
         { path: 'accounts.json', copyPath: 'accounts.json.corrupt-x', hasBackup: true },
         { path: 'profile.json', copyPath: null, hasBackup: false },
       ],
+      stale: [],
       permissionLost: true,
       backupsHealthy: true,
     })
@@ -335,5 +371,73 @@ describe('corrupt files', () => {
     expect(snapshotsEqual(base, { ...base, corrupt: [{ ...base.corrupt[0], path: 'b.json' }] })).toBe(false)
     expect(snapshotsEqual(base, { ...base, corrupt: [{ ...base.corrupt[0], copyPath: null }] })).toBe(false)
     expect(snapshotsEqual(base, { ...base, corrupt: [{ ...base.corrupt[0], hasBackup: false }] })).toBe(false)
+  })
+})
+
+describe('fingerprints', () => {
+  const enc = (text: string) => new TextEncoder().encode(text)
+
+  it('hashes the same bytes to the same value and different bytes to different values', () => {
+    expect(hashBytes(enc('{"a":1}'))).toBe(hashBytes(enc('{"a":1}')))
+    expect(hashBytes(enc('{"a":1}'))).not.toBe(hashBytes(enc('{"a":2}')))
+    expect(hashBytes(enc(''))).toMatch(/^[0-9a-f]+$/)
+  })
+
+  it('tells same-size content apart', () => {
+    expect(hashBytes(enc('abc'))).not.toBe(hashBytes(enc('acb')))
+  })
+
+  it('records the modified time, the byte length and the hash', () => {
+    expect(fingerprintBytes(enc('héllo'), 42)).toEqual({ lastModified: 42, size: 6, hash: hashBytes(enc('héllo')) })
+  })
+
+  describe('compareFingerprint', () => {
+    const base = fingerprintBytes(enc('hello'), 1000)
+
+    it('is same when size and modified time match', () => {
+      expect(compareFingerprint(base, { lastModified: 1000, size: 5 })).toBe('same')
+    })
+
+    it('is size-changed whenever the size differs, even if the modified time matches', () => {
+      expect(compareFingerprint(base, { lastModified: 1000, size: 6 })).toBe('size-changed')
+      expect(compareFingerprint(base, { lastModified: 2000, size: 6 })).toBe('size-changed')
+    })
+
+    it('is mtime-only when just the modified time moved', () => {
+      expect(compareFingerprint(base, { lastModified: 2000, size: 5 })).toBe('mtime-only')
+    })
+  })
+})
+
+describe('external change issues', () => {
+  it('groups every changed file into one issue, after unreadable files', () => {
+    const issues = deriveIssues({
+      ...EMPTY_SAFETY_SNAPSHOT,
+      corrupt: [{ path: 'accounts.json', copyPath: null, hasBackup: false }],
+      stale: [
+        { path: 'a.json', deleted: false },
+        { path: 'b.csv', deleted: true },
+      ],
+    })
+    expect(issues.map(issue => issue.type)).toEqual(['corrupt', 'external-change'])
+    expect(issues[1]).toEqual({ type: 'external-change', paths: ['a.json', 'b.csv'], deleted: false })
+  })
+
+  it('marks the issue deleted only for a single deleted file', () => {
+    const one = deriveIssues({ ...EMPTY_SAFETY_SNAPSHOT, stale: [{ path: 'a.json', deleted: true }] })
+    expect(one[0]).toMatchObject({ deleted: true })
+  })
+
+  it('compares changed files in snapshotsEqual', () => {
+    const base = { ...EMPTY_SAFETY_SNAPSHOT, stale: [{ path: 'a.json', deleted: false }] }
+    expect(snapshotsEqual(base, { ...base, stale: [{ path: 'a.json', deleted: false }] })).toBe(true)
+    expect(snapshotsEqual(base, EMPTY_SAFETY_SNAPSHOT)).toBe(false)
+    expect(snapshotsEqual(base, { ...base, stale: [{ path: 'b.json', deleted: false }] })).toBe(false)
+    expect(snapshotsEqual(base, { ...base, stale: [{ path: 'a.json', deleted: true }] })).toBe(false)
+  })
+
+  it('carries the new error codes', () => {
+    expect(new FileStoreError('stale-blocked', 'x').code).toBe('stale-blocked')
+    expect(new FileStoreError('unseen-file', 'x').code).toBe('unseen-file')
   })
 })
