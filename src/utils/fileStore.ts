@@ -1,7 +1,9 @@
 import type { FileStore, SafetyNetStore } from './fileStoreTypes'
 import { parseCSV, serializeCSV } from './csvUtils'
+import { createBackupManager, createHandleIO } from './backupManager'
+import type { BackupManager } from './backupManager'
 import { EMPTY_SAFETY_SNAPSHOT, errorKind, snapshotsEqual } from './safetyNet'
-import type { SafetySnapshot, WriteFailureKind } from './safetyNet'
+import type { BackupEntry, SafetySnapshot, WriteFailureKind } from './safetyNet'
 
 const CHANNEL_NAME = 'filestore-sync'
 const WRITE_DEBOUNCE_MS = 300
@@ -58,6 +60,8 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
   private failed = new Map<string, FailedWrite>()
   private inFlight = new Map<string, number>()
   private permissionLost = false
+  private backupsHealthy = true
+  private backupManager: BackupManager | null = null
   private safetySnapshot: SafetySnapshot = EMPTY_SAFETY_SNAPSHOT
   private safetySubscribers = new Set<() => void>()
 
@@ -66,6 +70,8 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     this.cache.clear()
     this.failed.clear()
     this.permissionLost = false
+    this.backupsHealthy = true
+    this.backupManager = null
     this.refreshSafetySnapshot()
     this.setupChannel()
   }
@@ -184,7 +190,11 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     const dir = await this.resolveDir(dirs, false)
     if (!dir) return
     try {
-      await withLock(`filestore:${path}`, () => dir.removeEntry(name))
+      await withLock(`filestore:${path}`, async () => {
+        // Always copy before a delete: a snapshot taken earlier this session may already be out of date.
+        await this.snapshotBeforeWrite(dir, name, path, true)
+        await dir.removeEntry(name)
+      })
     } catch (error) {
       if (!isNotFound(error)) throw error
     }
@@ -211,6 +221,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     if (opts.enabled) return
     this.failed.clear()
     this.permissionLost = false
+    this.backupsHealthy = true
     this.refreshSafetySnapshot()
   }
 
@@ -266,6 +277,99 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     return state
   }
 
+  /** Every copy in `_backups/`, newest first. */
+  async listBackups(): Promise<BackupEntry[]> {
+    return this.requireBackups().list()
+  }
+
+  /**
+   * Replaces a file with one of its backups. The current disk version is copied aside first, and any edit
+   * still waiting to be saved is kept as an `-unsaved` copy, so nothing is lost. The file is untouched if
+   * any step fails.
+   */
+  async restoreBackup(entry: BackupEntry): Promise<void> {
+    const backups = this.requireBackups()
+    const path = entry.path
+    // Taken before the lock so a debounced write cannot land after the restore and undo it.
+    const queued = this.pending.get(path)
+    if (queued) {
+      clearTimeout(queued.timer)
+      this.pending.delete(path)
+    }
+    try {
+      await withLock(`filestore:${path}`, async () => {
+        if (queued?.payload.kind === 'text') {
+          await backups.snapshot(path, new TextEncoder().encode(queued.payload.value), { tag: 'unsaved', force: true })
+        }
+        await backups.restore(entry)
+      })
+    } catch (error) {
+      if (queued) this.requeue(path, queued)
+      throw error
+    }
+    queued?.waiters.forEach(w => w.resolve())
+    this.cache.delete(path)
+    if (this.failed.delete(path)) this.refreshSafetySnapshot()
+    this.setBackupsHealthy(true)
+    this.announce(path)
+  }
+
+  private requireBackups(): BackupManager {
+    const backups = this.getBackups()
+    if (!backups) throw new Error('Backups are not available.')
+    return backups
+  }
+
+  private getBackups(): BackupManager | null {
+    if (!this.safetyEnabled || !this.root) return null
+    this.backupManager ??= createBackupManager(createHandleIO(this.root))
+    return this.backupManager
+  }
+
+  private setBackupsHealthy(value: boolean): void {
+    if (this.backupsHealthy === value) return
+    this.backupsHealthy = value
+    this.refreshSafetySnapshot()
+  }
+
+  /**
+   * Copies the bytes on disk into `_backups/` right before they are overwritten or deleted. A failed copy
+   * is reported through `backupsHealthy` and never blocks the user's write.
+   */
+  private async snapshotBeforeWrite(
+    dir: FileSystemDirectoryHandle,
+    name: string,
+    path: string,
+    force = false,
+  ): Promise<void> {
+    const backups = this.getBackups()
+    if (!backups || (!force && !backups.isDue(path))) return
+    try {
+      let file: File
+      try {
+        file = await (await dir.getFileHandle(name)).getFile()
+      } catch (error) {
+        if (isNotFound(error)) return
+        throw error
+      }
+      await backups.snapshot(path, new Uint8Array(await file.arrayBuffer()), { force })
+      this.setBackupsHealthy(true)
+    } catch (error) {
+      console.error(`FileStore backup of "${path}" failed:`, error)
+      this.setBackupsHealthy(false)
+    }
+  }
+
+  private requeue(path: string, entry: PendingWrite): void {
+    const newer = this.pending.get(path)
+    if (newer) {
+      newer.waiters.push(...entry.waiters)
+      return
+    }
+    entry.timer = setTimeout(() => void this.flushPath(path), SAFE_WRITE_DEBOUNCE_MS)
+    this.pending.set(path, entry)
+  }
+
   private setPermissionLost(value: boolean): void {
     if (this.permissionLost === value) return
     this.permissionLost = value
@@ -290,9 +394,11 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     const next: SafetySnapshot = {
       failed: [...this.failed].map(([path, { kind }]) => ({ path, kind })),
       permissionLost: this.permissionLost,
+      backupsHealthy: this.backupsHealthy,
     }
     if (snapshotsEqual(next, this.safetySnapshot)) return
-    this.safetySnapshot = next.failed.length === 0 && !next.permissionLost ? EMPTY_SAFETY_SNAPSHOT : next
+    this.safetySnapshot =
+      next.failed.length === 0 && !next.permissionLost && next.backupsHealthy ? EMPTY_SAFETY_SNAPSHOT : next
     for (const cb of this.safetySubscribers) {
       try {
         cb()
@@ -422,6 +528,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     await withLock(`filestore:${path}`, async () => {
       const dir = await this.resolveDir(dirs, true)
       if (!dir) return
+      await this.snapshotBeforeWrite(dir, name, path)
       const handle = await dir.getFileHandle(name, { create: true })
       const writable = await handle.createWritable()
       await writable.write(payload.kind === 'text' ? payload.value : new Blob([payload.value]))

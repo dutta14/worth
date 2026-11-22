@@ -18,11 +18,34 @@ vi.mock('../../../contexts/FileStoreContext', () => ({
   }),
 }))
 
+const safetyState = vi.hoisted(() => ({ enabled: false }))
+
+vi.mock('../../../contexts/SafetyNetContext', () => ({
+  useSafetyNet: () => ({
+    enabled: safetyState.enabled,
+    snapshot: { backupsHealthy: true },
+    listBackups: async () => [],
+  }),
+}))
+
 describe('DataFolderPane', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     storeState.folderName = 'Household'
     storeState.isReady = true
+    safetyState.enabled = false
+  })
+
+  it('has no Backups section while the data safety net is off', () => {
+    render(<DataFolderPane />)
+    expect(screen.queryByRole('heading', { name: 'Backups' })).not.toBeInTheDocument()
+  })
+
+  it('shows the Backups section once the data safety net is on', async () => {
+    safetyState.enabled = true
+    render(<DataFolderPane />)
+    expect(screen.getByRole('heading', { name: 'Backups', level: 4 })).toBeInTheDocument()
+    expect(await screen.findByText(/No backups yet/)).toBeInTheDocument()
   })
 
   it('shows the current folder and allows disconnect when ready', async () => {

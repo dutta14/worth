@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest'
-import { EMPTY_SAFETY_SNAPSHOT, deriveIssues, errorKind, moreIssuesText, snapshotsEqual } from './safetyNet'
+import {
+  EMPTY_SAFETY_SNAPSHOT,
+  backupDirFor,
+  backupPathFor,
+  deriveIssues,
+  errorKind,
+  formatBackupSize,
+  isBackupEligible,
+  moreIssuesText,
+  parseBackupName,
+  pruneList,
+  snapshotsEqual,
+  stampFor,
+  stampToDate,
+} from './safetyNet'
 import type { SafetySnapshot } from './safetyNet'
 
 describe('errorKind', () => {
@@ -22,23 +36,39 @@ describe('snapshotsEqual', () => {
   const failed = (path: string, kind: 'other' | 'disk-full' = 'other') => ({ path, kind })
 
   it('treats identical snapshots as equal', () => {
-    const a: SafetySnapshot = { failed: [failed('a.json')], permissionLost: true }
-    const b: SafetySnapshot = { failed: [failed('a.json')], permissionLost: true }
+    const a: SafetySnapshot = { failed: [failed('a.json')], permissionLost: true, backupsHealthy: true }
+    const b: SafetySnapshot = { failed: [failed('a.json')], permissionLost: true, backupsHealthy: true }
     expect(snapshotsEqual(a, b)).toBe(true)
   })
 
+  it('detects a backup health change', () => {
+    expect(snapshotsEqual(EMPTY_SAFETY_SNAPSHOT, { ...EMPTY_SAFETY_SNAPSHOT, backupsHealthy: false })).toBe(false)
+  })
+
   it('detects a permission change', () => {
-    expect(snapshotsEqual(EMPTY_SAFETY_SNAPSHOT, { failed: [], permissionLost: true })).toBe(false)
+    expect(snapshotsEqual(EMPTY_SAFETY_SNAPSHOT, { failed: [], permissionLost: true, backupsHealthy: true })).toBe(
+      false,
+    )
   })
 
   it('detects a different number of failures', () => {
-    expect(snapshotsEqual(EMPTY_SAFETY_SNAPSHOT, { failed: [failed('a.json')], permissionLost: false })).toBe(false)
+    expect(
+      snapshotsEqual(EMPTY_SAFETY_SNAPSHOT, {
+        failed: [failed('a.json')],
+        permissionLost: false,
+        backupsHealthy: true,
+      }),
+    ).toBe(false)
   })
 
   it('detects a different path or kind', () => {
-    const base: SafetySnapshot = { failed: [failed('a.json')], permissionLost: false }
-    expect(snapshotsEqual(base, { failed: [failed('b.json')], permissionLost: false })).toBe(false)
-    expect(snapshotsEqual(base, { failed: [failed('a.json', 'disk-full')], permissionLost: false })).toBe(false)
+    const base: SafetySnapshot = { failed: [failed('a.json')], permissionLost: false, backupsHealthy: true }
+    expect(snapshotsEqual(base, { failed: [failed('b.json')], permissionLost: false, backupsHealthy: true })).toBe(
+      false,
+    )
+    expect(
+      snapshotsEqual(base, { failed: [failed('a.json', 'disk-full')], permissionLost: false, backupsHealthy: true }),
+    ).toBe(false)
   })
 })
 
@@ -54,17 +84,26 @@ describe('deriveIssues', () => {
         { path: 'balances/2026.csv', kind: 'disk-full' },
       ],
       permissionLost: false,
+      backupsHealthy: true,
     })
     expect(issues).toEqual([{ type: 'write-failed', paths: ['a.json', 'balances/2026.csv'], diskFull: true }])
   })
 
   it('does not flag disk-full when no failure is disk-full', () => {
-    const [issue] = deriveIssues({ failed: [{ path: 'a.json', kind: 'other' }], permissionLost: false })
+    const [issue] = deriveIssues({
+      failed: [{ path: 'a.json', kind: 'other' }],
+      permissionLost: false,
+      backupsHealthy: true,
+    })
     expect(issue).toEqual({ type: 'write-failed', paths: ['a.json'], diskFull: false })
   })
 
   it('puts permission first and folds permission-caused failures into it', () => {
-    const issues = deriveIssues({ failed: [{ path: 'a.json', kind: 'permission' }], permissionLost: true })
+    const issues = deriveIssues({
+      failed: [{ path: 'a.json', kind: 'permission' }],
+      permissionLost: true,
+      backupsHealthy: true,
+    })
     expect(issues).toEqual([{ type: 'permission' }])
   })
 
@@ -75,12 +114,17 @@ describe('deriveIssues', () => {
         { path: 'b.json', kind: 'disk-full' },
       ],
       permissionLost: true,
+      backupsHealthy: true,
     })
     expect(issues).toEqual([{ type: 'permission' }, { type: 'write-failed', paths: ['b.json'], diskFull: true }])
   })
 
   it('keeps permission-kind failures visible when permission is not flagged lost', () => {
-    const issues = deriveIssues({ failed: [{ path: 'a.json', kind: 'permission' }], permissionLost: false })
+    const issues = deriveIssues({
+      failed: [{ path: 'a.json', kind: 'permission' }],
+      permissionLost: false,
+      backupsHealthy: true,
+    })
     expect(issues).toEqual([{ type: 'write-failed', paths: ['a.json'], diskFull: false }])
   })
 })
@@ -92,5 +136,129 @@ describe('moreIssuesText', () => {
 
   it('uses the plural for several issues', () => {
     expect(moreIssuesText(3)).toBe('3 more issues need attention.')
+  })
+})
+
+describe('stampFor', () => {
+  it('formats a UTC time with no separators and millisecond precision', () => {
+    expect(stampFor(Date.UTC(2026, 10, 8, 18, 34, 37, 123))).toBe('20261108T183437123Z')
+  })
+
+  it('zero-pads every field', () => {
+    expect(stampFor(Date.UTC(2026, 0, 2, 3, 4, 5, 6))).toBe('20260102T030405006Z')
+  })
+
+  it('accepts a Date and sorts chronologically as text', () => {
+    const earlier = stampFor(new Date('2026-01-01T00:00:00.000Z'))
+    const later = stampFor(new Date('2026-01-01T00:00:00.001Z'))
+    expect(earlier < later).toBe(true)
+  })
+
+  it('round-trips through stampToDate', () => {
+    const time = Date.UTC(2026, 10, 8, 18, 34, 37, 123)
+    expect(stampToDate(stampFor(time)).getTime()).toBe(time)
+  })
+})
+
+describe('backupPathFor', () => {
+  const stamp = '20261108T183437123Z'
+
+  it.each([
+    ['accounts.json', `_backups/accounts/${stamp}.json`],
+    ['balances/2026.csv', `_backups/balances/2026/${stamp}.csv`],
+    ['transactions/2025/2025-03.csv', `_backups/transactions/2025/2025-03/${stamp}.csv`],
+    ['taxes/2025.json', `_backups/taxes/2025/${stamp}.json`],
+    ['budget/categories.json', `_backups/budget/categories/${stamp}.json`],
+  ])('maps %s', (path, expected) => {
+    expect(backupPathFor(path, stamp)).toBe(expected)
+  })
+
+  it('adds the unsaved tag before the extension', () => {
+    expect(backupPathFor('accounts.json', stamp, 'unsaved')).toBe(`_backups/accounts/${stamp}-unsaved.json`)
+  })
+
+  it('tolerates a path without an extension', () => {
+    expect(backupPathFor('notes', stamp)).toBe(`_backups/notes/${stamp}`)
+  })
+
+  it('shares one folder per original path, ignoring the extension', () => {
+    expect(backupDirFor('a/b.csv')).toBe('_backups/a/b')
+  })
+})
+
+describe('parseBackupName', () => {
+  it('reads the stamp, tag and extension', () => {
+    expect(parseBackupName('20261108T183437123Z.json')).toEqual({
+      stamp: '20261108T183437123Z',
+      unsaved: false,
+      ext: 'json',
+    })
+    expect(parseBackupName('20261108T183437123Z-unsaved.csv')).toEqual({
+      stamp: '20261108T183437123Z',
+      unsaved: true,
+      ext: 'csv',
+    })
+  })
+
+  it.each(['README.txt', '2026.csv', '20261108T183437123Z.pdf', '20261108T183437123Z-other.json'])(
+    'rejects %s',
+    name => {
+      expect(parseBackupName(name)).toBeNull()
+    },
+  )
+})
+
+describe('isBackupEligible', () => {
+  it.each([
+    ['accounts.json', true],
+    ['balances/2026.csv', true],
+    ['budget/categories.json', true],
+    ['taxes/2025.json', true],
+    ['Upper/Case.CSV', true],
+    ['taxes/2025/files/w2.pdf', false],
+    ['taxes/2025/files/notes.json', false],
+    ['budget/summary-cache.json', false],
+    ['_backups/accounts/20261108T183437123Z.json', false],
+    ['_backups/README.txt', false],
+    ['notes.txt', false],
+    ['accounts.json.corrupt-20261108T183437123Z', false],
+    ['', false],
+  ])('%s is %s', (path, eligible) => {
+    expect(isBackupEligible(path)).toBe(eligible)
+  })
+})
+
+describe('pruneList', () => {
+  const entries = Array.from({ length: 13 }, (_, i) => ({ stamp: String(i).padStart(2, '0') }))
+
+  it('returns nothing to delete at or under the limit', () => {
+    expect(pruneList(entries.slice(0, 10))).toEqual([])
+  })
+
+  it('returns the oldest entries beyond the newest ten', () => {
+    expect(pruneList(entries).map(entry => entry.stamp)).toEqual(['02', '01', '00'])
+  })
+
+  it('honors a custom limit and does not mutate its input', () => {
+    const input = [{ stamp: 'b' }, { stamp: 'c' }, { stamp: 'a' }]
+    expect(pruneList(input, 1)).toEqual([{ stamp: 'b' }, { stamp: 'a' }])
+    expect(input.map(entry => entry.stamp)).toEqual(['b', 'c', 'a'])
+  })
+
+  it('keeps equal stamps in a stable order', () => {
+    expect(pruneList([{ stamp: 'a' }, { stamp: 'a' }], 1)).toHaveLength(1)
+  })
+})
+
+describe('formatBackupSize', () => {
+  it.each([
+    [0, '0 B'],
+    [1023, '1023 B'],
+    [1024, '1.0 KB'],
+    [4300, '4.2 KB'],
+    [1024 * 1024, '1.0 MB'],
+    [5.5 * 1024 * 1024, '5.5 MB'],
+  ])('formats %d bytes as %s', (bytes, text) => {
+    expect(formatBackupSize(bytes)).toBe(text)
   })
 })

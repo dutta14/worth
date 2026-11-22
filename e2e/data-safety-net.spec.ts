@@ -206,3 +206,111 @@ test.describe('Data safety net: folder permission', () => {
     await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
   })
 })
+
+test.describe('Data safety net: backups', () => {
+  const backupPaths = (page: Page, dir: string) =>
+    page.evaluate(
+      prefix =>
+        [...((window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa?.files.keys() ?? [])]
+          .filter(path => path.startsWith(prefix))
+          .sort(),
+      `${dir}/`,
+    )
+
+  async function openDataFolderSettings(page: Page) {
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Settings' })
+    await dialog.getByRole('tab', { name: 'Data Folder' }).click()
+    return dialog
+  }
+
+  test('copies the previous file into _backups on the first change and not again in the same session', async ({
+    page,
+  }) => {
+    await openApp(page, { seed: { 'accounts.json': '[]' } })
+
+    await addAccount(page, 'Rainy Day Fund')
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
+
+    const copies = await backupPaths(page, '_backups/accounts')
+    expect(copies).toHaveLength(1)
+    expect(copies[0]).toMatch(/^_backups\/accounts\/\d{8}T\d{9}Z\.json$/)
+    expect(await disk(page, copies[0])).toBe('[]')
+    expect(await disk(page, '_backups/README.txt')).toContain('automatic copies made by worth')
+
+    const nw = new NetWorthPage(page)
+    await nw.openAccountsModal()
+    await nw.addAccount('Emergency Fund', 'Chase')
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Emergency Fund')
+    expect(await backupPaths(page, '_backups/accounts')).toHaveLength(1)
+  })
+
+  test('lists the copies in Settings and restores one, refreshing the page behind it', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': '[]' } })
+    await addAccount(page, 'Rainy Day Fund')
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
+    await expect.poll(() => backupPaths(page, '_backups/accounts')).toHaveLength(1)
+
+    const dialog = await openDataFolderSettings(page)
+    await expect(dialog.getByRole('heading', { name: 'Backups' })).toBeVisible()
+    await expect(dialog.getByLabel('File')).toHaveValue('accounts.json')
+    await expect(dialog.getByRole('listitem')).toHaveCount(1)
+
+    await dialog.getByRole('button', { name: /^Restore accounts\.json from / }).click()
+    await expect(dialog.getByRole('button', { name: 'Restore this copy' })).toBeFocused()
+    await dialog.getByRole('button', { name: 'Restore this copy' }).click()
+
+    await expect(dialog.getByRole('status').filter({ hasText: /^Restored accounts\.json from / })).toBeVisible()
+    expect(await disk(page, 'accounts.json')).toBe('[]')
+    // The version that was replaced is kept too.
+    await expect(dialog.getByRole('listitem')).toHaveCount(2)
+    const copies = await backupPaths(page, '_backups/accounts')
+    expect(copies).toHaveLength(2)
+    const contents = await Promise.all(copies.map(path => disk(page, path)))
+    expect(contents.some(text => text?.includes('Rainy Day Fund'))).toBe(true)
+
+    await dialog.getByRole('button', { name: 'Close' }).click()
+    await expect(page.getByText('No accounts yet')).toBeVisible()
+  })
+
+  test('shows the empty state before anything has been backed up', async ({ page }) => {
+    await openApp(page)
+    const dialog = await openDataFolderSettings(page)
+    await expect(dialog.getByText('No backups yet. Copies appear the first time a file is changed.')).toBeVisible()
+    expect(await backupPaths(page, '_backups')).toHaveLength(0)
+  })
+
+  test('keeps the save and warns in Settings when the backup copy fails', async ({ page }) => {
+    await openApp(page, { seed: { 'accounts.json': '[]' } })
+    await page.evaluate(() => {
+      const fsa = (window as Window & { __fakeFsa?: FakeFsaControls }).__fakeFsa
+      if (fsa) {
+        const originalSet = fsa.files.set.bind(fsa.files)
+        fsa.files.set = (path, value) => {
+          if (path.startsWith('_backups/accounts/')) throw new DOMException('disk full', 'QuotaExceededError')
+          return originalSet(path, value)
+        }
+      }
+    })
+
+    await addAccount(page, 'Rainy Day Fund')
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
+    await expect(page.getByRole('alert')).toHaveCount(0)
+
+    const dialog = await openDataFolderSettings(page)
+    await expect(
+      dialog.getByText("The last backup copy couldn't be saved. Your changes were saved normally."),
+    ).toBeVisible()
+  })
+
+  test('has no Backups section and writes no _backups folder when the flag is off', async ({ page }) => {
+    await openApp(page, { flagOn: false, seed: { 'accounts.json': '[]' } })
+    await addAccount(page, 'Rainy Day Fund')
+    await expect.poll(() => disk(page, 'accounts.json')).toContain('Rainy Day Fund')
+
+    const dialog = await openDataFolderSettings(page)
+    await expect(dialog.getByRole('heading', { name: 'Data Folder' })).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: 'Backups' })).toHaveCount(0)
+    expect(await backupPaths(page, '_backups')).toHaveLength(0)
+  })
+})

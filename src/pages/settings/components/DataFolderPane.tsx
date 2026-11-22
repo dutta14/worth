@@ -1,8 +1,11 @@
 import { FC, useCallback, useState } from 'react'
 import { useFileStore } from '../../../contexts/FileStoreContext'
+import { useSafetyNet } from '../../../contexts/SafetyNetContext'
+import BackupsSection from './BackupsSection'
 
 const DataFolderPane: FC = () => {
   const { folderName, isReady, pickFolder, disconnect } = useFileStore()
+  const { enabled: safetyNetEnabled } = useSafetyNet()
   const [error, setError] = useState('')
 
   const handleChange = useCallback(async () => {
@@ -50,6 +53,8 @@ const DataFolderPane: FC = () => {
         <p className="settings-description">
           Disconnecting only forgets the folder — your files stay exactly where they are.
         </p>
+
+        {safetyNetEnabled && <BackupsSection />}
       </div>
     </div>
   )
