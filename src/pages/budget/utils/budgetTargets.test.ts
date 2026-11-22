@@ -183,6 +183,16 @@ describe('normalizeTargetsFile', () => {
     expect(result!.groups.g.history.map(e => e.from)).toEqual([null, '2026-03', '2026-09'])
   })
 
+  it('keeps dated entries in order whether they arrive ascending or descending', () => {
+    const history = (froms: MonthKey[]) => froms.map((from, i) => ({ from, monthly: i }))
+    const sorted = (froms: MonthKey[]) =>
+      normalizeTargetsFile({ version: 1, groups: { g: { history: history(froms) } } })!.groups.g.history.map(
+        e => e.from,
+      )
+    expect(sorted(['2026-01', '2026-03', '2026-09'])).toEqual(['2026-01', '2026-03', '2026-09'])
+    expect(sorted(['2026-09', '2026-03', '2026-01'])).toEqual(['2026-01', '2026-03', '2026-09'])
+  })
+
   it('lets the last entry win when a from value is duplicated', () => {
     const result = normalizeTargetsFile({
       version: 1,
@@ -635,6 +645,23 @@ describe('evaluatePeriod edge cases', () => {
     const r = evaluate(flat(0), ['2025-01'], { '2025-01': 0 })
     expect(Object.is(r!.spendDollars, 0)).toBe(true)
   })
+
+  it.each([0.3, 0.125])(
+    'reports positive zero spend and on-target for a net credit of $%s against a $0 target',
+    credit => {
+      const r = evaluatePeriod({
+        record: flat(0),
+        monthKeys: ['2025-01'],
+        monthsWithData: new Set(['2025-01']),
+        signedNetFor: () => credit,
+        nowMonth: NOW,
+      })
+      expect(Object.is(r!.spendDollars, 0)).toBe(true)
+      expect(Object.is(r!.deltaDollars, 0)).toBe(true)
+      expect(r!.status).toBe('on-target')
+      expect(formatTargetStatus(r!).text).toBe('On target')
+    },
+  )
 
   it('treats a non-finite net as zero', () => {
     expect(evaluate(flat(0), ['2025-01'], { '2025-01': NaN })).toMatchObject({ spendDollars: 0 })

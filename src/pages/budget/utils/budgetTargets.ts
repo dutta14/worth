@@ -51,10 +51,10 @@ const dollarFormat = new Intl.NumberFormat('en-US', {
 
 const toCents = (dollars: number): number => Math.round(dollars * 100) || 0
 
-// Whole dollars from integer cents, half away from zero.
+// Whole dollars from integer cents, half away from zero. Never returns -0.
 const centsToDollars = (cents: number): number => {
   const abs = Math.floor((Math.abs(cents) + 50) / 100)
-  return cents < 0 ? -abs : abs
+  return cents < 0 && abs > 0 ? -abs : abs
 }
 
 export function emptyTargetsFile(): BudgetTargetsFile {
