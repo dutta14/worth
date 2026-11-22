@@ -166,11 +166,12 @@ describe('AnnualReview header', () => {
     expect(screen.queryByText(/^January to December/)).not.toBeInTheDocument()
   })
 
-  it('offers no Print or Download buttons yet', async () => {
+  it('offers Print and Download buttons, enabled once the review is ready', async () => {
     renderPage('/net-worth/review/2025')
 
-    await screen.findByRole('heading', { level: 2, name: 'Annual Review 2025' })
-    expect(screen.queryByRole('button', { name: /print|download/i })).not.toBeInTheDocument()
+    const print = await screen.findByRole('button', { name: 'Print or save as PDF' })
+    expect(print).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Download CSV' })).toBeEnabled()
   })
 })
 
@@ -228,13 +229,19 @@ describe('AnnualReview year changes and live region', () => {
 })
 
 describe('AnnualReview keyboard order', () => {
-  it('tabs from the year select to the monthly values toggle, then the in-page links, and nothing else', async () => {
+  it('tabs from the year select to Print and Download, then the monthly values toggle and the in-page links, and nothing else', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderPage('/net-worth/review/2025')
     await screen.findByRole('button', { name: 'Show monthly values' })
 
     await user.tab()
     expect(yearSelect()).toHaveFocus()
+
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Print or save as PDF' })).toHaveFocus()
+
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Download CSV' })).toHaveFocus()
 
     await user.tab()
     expect(screen.getByRole('button', { name: 'Show monthly values' })).toHaveFocus()
@@ -410,5 +417,165 @@ describe('AnnualReview error state', () => {
 
     await screen.findByRole('alert')
     expect(yearSelect()).toBeDisabled()
+  })
+})
+
+describe('AnnualReview print and CSV', () => {
+  const stubDownload = () => {
+    const createObjectURL = vi.fn(() => 'blob:review')
+    const revokeObjectURL = vi.fn()
+    Object.assign(URL, { createObjectURL, revokeObjectURL })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    return { createObjectURL, revokeObjectURL, click }
+  }
+
+  it('disables Print and Download while loading', async () => {
+    useBalances(FULL_YEARS, false)
+    renderPage('/net-worth/review/2025')
+
+    await screen.findByText('Loading your review...')
+    expect(screen.getByRole('button', { name: 'Print or save as PDF' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Download CSV' })).toBeDisabled()
+  })
+
+  it('disables Print and Download for a year with no data, and shows no print footer', async () => {
+    renderPage('/net-worth/review/2019')
+
+    await screen.findByRole('heading', { level: 3, name: 'Not enough data for 2019' })
+    expect(screen.getByRole('button', { name: 'Print or save as PDF' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Download CSV' })).toBeDisabled()
+    expect(document.querySelector('.ar-print-footer')).toBeNull()
+  })
+
+  it('disables Print and Download in the error state', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(store, 'readJSON').mockRejectedValue(new Error('boom'))
+    renderPage('/net-worth/review/2025')
+
+    await screen.findByRole('alert')
+    expect(screen.getByRole('button', { name: 'Print or save as PDF' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Download CSV' })).toBeDisabled()
+  })
+
+  it('opens the browser print dialog from the Print button', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const print = vi.spyOn(window, 'print').mockImplementation(() => {})
+    renderPage('/net-worth/review/2025')
+
+    await user.click(await screen.findByRole('button', { name: 'Print or save as PDF' }))
+
+    expect(print).toHaveBeenCalledTimes(1)
+  })
+
+  it('saves worth-annual-review-{year}.csv from the Download button and announces it', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const { createObjectURL, revokeObjectURL, click } = stubDownload()
+    renderPage('/net-worth/review/2025')
+
+    await user.click(await screen.findByRole('button', { name: 'Download CSV' }))
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1)
+    const blob = (createObjectURL.mock.calls[0] as unknown as [Blob])[0]
+    expect(blob.type).toBe('text/csv;charset=utf-8;')
+    expect(await blob.text()).toContain('networth,change,Net worth change,60000.00,usd,,')
+    expect(await blob.text()).toContain('report,generated,Generated on,2026-11-08,date,,')
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:review')
+    expect(liveRegion()).toHaveTextContent('Downloaded worth-annual-review-2025.csv.')
+  })
+
+  it('says the file could not be created, and leaves the page working, when the download fails', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    Object.assign(URL, {
+      createObjectURL: () => {
+        throw new Error('no blob')
+      },
+      revokeObjectURL: vi.fn(),
+    })
+    renderPage('/net-worth/review/2025')
+
+    await user.click(await screen.findByRole('button', { name: 'Download CSV' }))
+
+    expect(liveRegion()).toHaveTextContent('The CSV file could not be created. Your files were not changed.')
+    expect(screen.getByRole('button', { name: 'Download CSV' })).toBeEnabled()
+  })
+
+  it('re-announces the download on every click by clearing the live region before the same text returns', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    stubDownload()
+    renderPage('/net-worth/review/2025')
+    const button = await screen.findByRole('button', { name: 'Download CSV' })
+
+    await user.click(button)
+    expect(liveRegion()).toHaveTextContent('Downloaded worth-annual-review-2025.csv.')
+    await user.click(button)
+
+    expect(liveRegion()).toBeEmptyDOMElement()
+    await waitFor(() => expect(liveRegion()).toHaveTextContent('Downloaded worth-annual-review-2025.csv.'))
+  })
+
+  it('re-announces a repeated failure the same way', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    Object.assign(URL, {
+      createObjectURL: () => {
+        throw new Error('no blob')
+      },
+      revokeObjectURL: vi.fn(),
+    })
+    renderPage('/net-worth/review/2025')
+    const button = await screen.findByRole('button', { name: 'Download CSV' })
+
+    await user.click(button)
+    await user.click(button)
+
+    expect(liveRegion()).toBeEmptyDOMElement()
+    await waitFor(() => expect(liveRegion()).toHaveTextContent('The CSV file could not be created.'))
+  })
+
+  it('does not touch the live region after unmount while a repeat is pending', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    stubDownload()
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { unmount } = renderPage('/net-worth/review/2025')
+    const button = await screen.findByRole('button', { name: 'Download CSV' })
+    await user.click(button)
+    await user.click(button)
+
+    unmount()
+    await new Promise(resolve => setTimeout(resolve, 150))
+
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  it('renders the print-only footer with today and the privacy line', async () => {
+    renderPage('/net-worth/review/2025')
+
+    await screen.findByText('January to December 2025')
+    expect(document.querySelector('.ar-print-footer')).toHaveTextContent(
+      'Prepared with worth on 2026-11-08. Your data stays on your computer.',
+    )
+  })
+
+  it('sets the document title to the review year and restores it on unmount and year changes', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    document.title = 'worth'
+    const { unmount } = renderPage('/net-worth/review/2025')
+
+    await waitFor(() => expect(document.title).toBe('Annual Review 2025 - worth'))
+    await waitFor(() => expect(yearSelect()).toBeEnabled())
+    await user.selectOptions(yearSelect(), '2024')
+    await waitFor(() => expect(document.title).toBe('Annual Review 2024 - worth'))
+
+    unmount()
+    expect(document.title).toBe('worth')
+  })
+
+  it('leaves the document title alone while the route has no year yet', async () => {
+    document.title = 'worth'
+    useBalances(FULL_YEARS, false)
+    renderPage('/net-worth/review')
+
+    await screen.findByText('Loading your review...')
+    expect(document.title).toBe('worth')
   })
 })

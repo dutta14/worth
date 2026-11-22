@@ -105,3 +105,9 @@ export function formatAxisLabels(values: number[]): string[] {
     return `${v < 0 && Number(magnitude.replace(/,/g, '')) !== 0 ? '-' : ''}$${magnitude}${suffix}`
   })
 }
+
+/** "2026-11-08" in the local time zone. */
+export function formatIsoDate(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}

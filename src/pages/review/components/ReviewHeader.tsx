@@ -6,12 +6,25 @@ interface ReviewHeaderProps {
   years: number[]
   period: string | null
   disabled: boolean
+  /** Print and Download are off while loading and when there is nothing to export. */
+  actionsDisabled: boolean
   onYearChange: (year: number) => void
+  onPrint: () => void
+  onDownload: () => void
 }
 
 const yearOptions = (years: number[], year: number): number[] => [...new Set([...years, year])].sort((a, b) => b - a)
 
-const ReviewHeader: FC<ReviewHeaderProps> = ({ year, years, period, disabled, onYearChange }) => (
+const ReviewHeader: FC<ReviewHeaderProps> = ({
+  year,
+  years,
+  period,
+  disabled,
+  actionsDisabled,
+  onYearChange,
+  onPrint,
+  onDownload,
+}) => (
   <header className="ar-header">
     <div className="ar-header__titles">
       <h2 className="ar-title">
@@ -47,6 +60,12 @@ const ReviewHeader: FC<ReviewHeaderProps> = ({ year, years, period, disabled, on
           ))
         )}
       </select>
+      <button type="button" className="ar-btn" disabled={actionsDisabled} onClick={onPrint}>
+        Print or save as PDF
+      </button>
+      <button type="button" className="ar-btn" disabled={actionsDisabled} onClick={onDownload}>
+        Download CSV
+      </button>
     </div>
   </header>
 )
