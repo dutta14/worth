@@ -911,6 +911,39 @@ describe('FileSystemFileStore safety net', () => {
       expect(root.dirs.has('_backups')).toBe(false)
     })
 
+    it('deletes an ineligible file without reading it or touching backup health', async () => {
+      const { root, store } = await setup()
+      const docs = await (
+        await (await root.getDirectoryHandle('taxes', { create: true })).getDirectoryHandle('2025', { create: true })
+      ).getDirectoryHandle('files', { create: true })
+      docs.contents.set('w2.pdf', 'pdf-bytes')
+      const getFile = vi.spyOn(FakeFileHandle.prototype, 'getFile')
+
+      await store.delete('taxes/2025/files/w2.pdf')
+
+      expect(getFile).not.toHaveBeenCalled()
+      expect(docs.contents.has('w2.pdf')).toBe(false)
+      expect(root.dirs.has('_backups')).toBe(false)
+      expect(store.getSafetySnapshot().backupsHealthy).toBe(true)
+      getFile.mockRestore()
+    })
+
+    it('does not report a backup failure when an ineligible file cannot be read before deletion', async () => {
+      const { root, store } = await setup()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      root.contents.set('notes.txt', 'hello')
+      const getFile = vi
+        .spyOn(FakeFileHandle.prototype, 'getFile')
+        .mockRejectedValue(new DOMException('x', 'NotReadableError'))
+
+      await store.delete('notes.txt')
+
+      expect(store.getSafetySnapshot().backupsHealthy).toBe(true)
+      expect(errorSpy).not.toHaveBeenCalled()
+      getFile.mockRestore()
+      errorSpy.mockRestore()
+    })
+
     it('lists copies newest first', async () => {
       const { root, store } = await setup()
       seed(root, 'accounts.json', '[1]')
@@ -978,8 +1011,9 @@ describe('FileSystemFileStore safety net', () => {
         expect(store.hasUnsavedWork()).toBe(false)
       })
 
-      it('clears a failed save for that file', async () => {
+      it('keeps a failed save as an unsaved copy before clearing it', async () => {
         const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
         seed(root, 'accounts.json', '["current"]')
         const entry = await seedBackup(root, '["old"]')
         root.faults.close = diskError('InvalidStateError')
@@ -990,6 +1024,30 @@ describe('FileSystemFileStore safety net', () => {
         await store.restoreBackup(entry)
 
         expect(store.getSafetySnapshot().failed).toEqual([])
+        const dir = folder(root, '_backups/accounts')
+        const unsaved = copiesIn(root, '_backups/accounts').find(name => name.endsWith('-unsaved.json'))
+        expect(unsaved).toBeDefined()
+        expect(JSON.parse(await textOf(dir?.contents.get(unsaved ?? '')))).toEqual(['x'])
+        errorSpy.mockRestore()
+      })
+
+      it('keeps the failed save when the unsaved copy cannot be made, and leaves the file alone', async () => {
+        const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        seed(root, 'accounts.json', '["current"]')
+        const entry = await seedBackup(root, '["old"]')
+        root.faults.close = diskError('InvalidStateError')
+        await settle(store.writeJSON('accounts.json', ['x']))
+        root.faults.close = undefined
+        const dir = folder(root, '_backups/accounts')
+        if (dir) dir.faults.createWritable = diskError('QuotaExceededError')
+
+        await expect(store.restoreBackup(entry)).rejects.toThrow('boom')
+
+        expect(store.getSafetySnapshot().failed).toEqual([{ path: 'accounts.json', kind: 'other' }])
+        expect(store.hasUnsavedWork()).toBe(true)
+        expect(root.contents.get('accounts.json')).toBe('["current"]')
+        errorSpy.mockRestore()
       })
 
       it('leaves the file alone and re-queues the waiting edit when the restore fails', async () => {

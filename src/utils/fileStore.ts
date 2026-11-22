@@ -2,7 +2,7 @@ import type { FileStore, SafetyNetStore } from './fileStoreTypes'
 import { parseCSV, serializeCSV } from './csvUtils'
 import { createBackupManager, createHandleIO } from './backupManager'
 import type { BackupManager } from './backupManager'
-import { EMPTY_SAFETY_SNAPSHOT, errorKind, snapshotsEqual } from './safetyNet'
+import { EMPTY_SAFETY_SNAPSHOT, errorKind, isBackupEligible, snapshotsEqual } from './safetyNet'
 import type { BackupEntry, SafetySnapshot, WriteFailureKind } from './safetyNet'
 
 const CHANNEL_NAME = 'filestore-sync'
@@ -296,10 +296,12 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
       clearTimeout(queued.timer)
       this.pending.delete(path)
     }
+    // A write that already failed lives only in `failed`, so it needs the same protection as a queued one.
+    const unsaved = queued?.payload ?? this.failed.get(path)?.payload
     try {
       await withLock(`filestore:${path}`, async () => {
-        if (queued?.payload.kind === 'text') {
-          await backups.snapshot(path, new TextEncoder().encode(queued.payload.value), { tag: 'unsaved', force: true })
+        if (unsaved?.kind === 'text') {
+          await backups.snapshot(path, new TextEncoder().encode(unsaved.value), { tag: 'unsaved', force: true })
         }
         await backups.restore(entry)
       })
@@ -343,7 +345,8 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     force = false,
   ): Promise<void> {
     const backups = this.getBackups()
-    if (!backups || (!force && !backups.isDue(path))) return
+    // Checked first so a binary or tax document is never read just to be skipped.
+    if (!backups || !isBackupEligible(path) || (!force && !backups.isDue(path))) return
     try {
       let file: File
       try {
