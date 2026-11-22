@@ -115,10 +115,10 @@ Folder `src/pages/budget/import/` (NEW), one co-located test per file:
 | Module | Responsibility |
 | --- | --- |
 | `types.ts`, `constants.ts` | Shared types. `UNCATEGORIZED_EXPENSE = 'Uncategorized'`, `UNCATEGORIZED_INCOME = 'Uncategorized income'`, limits |
-| `readFile.ts` | Size check, `decodeBytes(bytes)`: UTF-8 (strip BOM), UTF-16 LE/BE by BOM, else fall back to `windows-1252` via `TextDecoder` |
+| `readFile.ts` | Size check, `decodeBytes(bytes)`: UTF-8 (strip BOM), UTF-16 LE/BE by BOM, else fall back to `windows-1252` (decoded with a built-in table, see R10) |
 | `delimiter.ts` | `sniffDelimiter(text)` over `, ; \t \|` by consistent column count across the first 20 records |
 | `tokenize.ts` | `tokenize(text, delimiter)`: RFC 4180 (quotes, escaped quotes, newlines in quotes, CRLF/LF/CR). Reports an unterminated quote with a row number |
-| `headerDetect.ts` | `detectHeaderRow(records)` skips preamble rows, finds the header, drops footer rows; `suggestMapping(headers)` with synonym dictionaries. "type" is excluded as ambiguous |
+| `headerDetect.ts` | `detectHeaderRow(records)` skips preamble rows, finds the header (only when no data-looking row sits above it; otherwise the file is headerless), drops footer rows (no date and either no amount or a Total/Balance-style label; a trailing row with an amount and a bad date is kept so it is reported), and returns `preambleCount`/`footerCount` so every source record is accounted for; `suggestMapping(headers)` with synonym dictionaries. "type" is excluded as ambiguous |
 | `parseAmount.ts` | `parseAmountToCents(text, decimalSeparator)`: integer cents; handles currency symbols, NBSP, Swiss apostrophe, parentheses, leading plus, leading or trailing minus |
 | `parseDate.ts` | `detectDateFormats(samples)`, `parseDate(text, format)`: string math only; strict calendar validation; strips a time suffix; implausible-year check (1990 to current year + 1) |
 | `normalizeRows.ts` | `normalizeRows(records, mapping)`: rows to `NormalizedRow[]` plus `SkippedRow[]` |
@@ -761,7 +761,7 @@ Fixtures with CRLF, BOM, UTF-16 and 50k rows are built programmatically in tests
 | R7 | Provider order drift between CONTRIBUTING.md and `App.tsx` | No new provider; fix the doc in PR6 |
 | R8 | `persist` swallows write errors | `commitImport` awaits its own writes and reports failures |
 | R9 | Same-day identical rows edited in Transactions hit the first match (existing limitation, 2.6) | Not fixed here; apply-rules edits by row index, not by value matching |
-| R10 | `TextDecoder('windows-1252')` support | Assumed for Chrome and Edge (the only supported browsers); the decode test runs in the Vitest environment and falls back to a Latin-1 mapping if the label is unsupported |
+| R10 | `TextDecoder('windows-1252')` differs between runtimes (Node decodes the label as plain Latin-1, so the euro sign and smart quotes come out wrong) | `decodeBytes` decodes windows-1252 with its own byte table instead of the native label, so the browser and the Vitest runtime behave identically |
 
 ## 8. Cross-feature dependencies
 

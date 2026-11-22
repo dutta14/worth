@@ -1,0 +1,6 @@
+Date,Description,Amount
+2026-10-01,Good row one,-10.00
+2026-10-02,"Unterminated quote,-20.00
+2026-10-03,Too few columns
+2026-10-04,Too many columns,-30.00,extra,stuff
+2026-10-05,Good row two,-40.00

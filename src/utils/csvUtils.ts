@@ -5,8 +5,8 @@
  * fields, and `""` escaping for literal quotes.
  */
 
-/** Parses CSV text into a matrix of raw cell strings. */
-export function parseCSV(text: string): string[][] {
+/** Parses CSV text into a matrix of raw cell strings. `delimiter` is a single character and defaults to a comma. */
+export function parseCSV(text: string, delimiter = ','): string[][] {
   if (text === '') return []
 
   const rows: string[][] = []
@@ -38,7 +38,7 @@ export function parseCSV(text: string): string[][] {
       continue
     }
 
-    if (char === ',') {
+    if (char === delimiter) {
       row.push(field)
       field = ''
       sawAnyChar = true
@@ -77,12 +77,13 @@ export function parseCSV(text: string): string[][] {
   return rows
 }
 
-const needsQuoting = (value: string): boolean =>
-  value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')
+const needsQuoting = (value: string, delimiter: string): boolean =>
+  value.includes(delimiter) || value.includes('"') || value.includes('\n') || value.includes('\r')
 
-const escapeCell = (value: string): string => (needsQuoting(value) ? `"${value.replace(/"/g, '""')}"` : value)
+const escapeCell = (value: string, delimiter: string): string =>
+  needsQuoting(value, delimiter) ? `"${value.replace(/"/g, '""')}"` : value
 
-/** Serializes a matrix of cells back into RFC 4180 CSV text. */
-export function serializeCSV(rows: string[][]): string {
-  return rows.map(row => row.map(cell => escapeCell(cell ?? '')).join(',')).join('\n')
+/** Serializes a matrix of cells back into RFC 4180 CSV text. `delimiter` defaults to a comma. */
+export function serializeCSV(rows: string[][], delimiter = ','): string {
+  return rows.map(row => row.map(cell => escapeCell(cell ?? '', delimiter)).join(delimiter)).join('\n')
 }

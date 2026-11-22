@@ -41,6 +41,27 @@ describe('parseCSV', () => {
   })
 })
 
+describe('parseCSV with a custom delimiter', () => {
+  it('splits on a semicolon and leaves commas alone', () => {
+    expect(parseCSV('a;b,c;d', ';')).toEqual([['a', 'b,c', 'd']])
+  })
+
+  it('splits on a tab', () => {
+    expect(parseCSV('a\tb\tc\n1\t2\t3', '\t')).toEqual([
+      ['a', 'b', 'c'],
+      ['1', '2', '3'],
+    ])
+  })
+
+  it('splits on a pipe and honors quotes around the delimiter', () => {
+    expect(parseCSV('a|"b|c"|d', '|')).toEqual([['a', 'b|c', 'd']])
+  })
+
+  it('keeps comma as the default delimiter', () => {
+    expect(parseCSV('a,b;c')).toEqual([['a', 'b;c']])
+  })
+})
+
 describe('serializeCSV', () => {
   it('joins plain cells with commas and newlines', () => {
     expect(
@@ -61,6 +82,20 @@ describe('serializeCSV', () => {
 
   it('quotes cells containing a newline', () => {
     expect(serializeCSV([['line1\nline2']])).toBe('"line1\nline2"')
+  })
+})
+
+describe('serializeCSV with a custom delimiter', () => {
+  it('joins with the delimiter and quotes only cells that contain it', () => {
+    expect(serializeCSV([['a', 'b;c', 'd,e']], ';')).toBe('a;"b;c";d,e')
+  })
+
+  it('round-trips through parseCSV with the same delimiter', () => {
+    const rows = [
+      ['x', 'with;semicolon', 'with "quote"'],
+      ['1', 'line\nbreak', ''],
+    ]
+    expect(parseCSV(serializeCSV(rows, ';'), ';')).toEqual(rows)
   })
 })
 
