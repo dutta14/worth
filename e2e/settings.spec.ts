@@ -406,6 +406,32 @@ test.describe('Settings — Non-Security E2E', () => {
       // (3) UI state reflects the change.
       await expect(settings.labPdfToCsvToggle).toHaveAttribute('aria-checked', 'true')
     })
+
+    test('18b. Feature preview switch turns the Annual Review tab on and survives a reload', async ({ page }) => {
+      await seedEmpty(page)
+      const settings = new SettingsPage(page)
+      await page.goto('/worth/#/net-worth')
+      await expect(page.getByRole('link', { name: 'Review' })).toHaveCount(0)
+
+      await settings.open()
+      await settings.navTo('labs')
+      const preview = settings.dialog.getByRole('switch', { name: 'Annual review' })
+      await expect(preview).toHaveAttribute('aria-checked', 'false')
+      await preview.click()
+      await expect(preview).toHaveAttribute('aria-checked', 'true')
+
+      await page.reload()
+      await page.goto('/worth/#/net-worth')
+      await expect(page.getByRole('link', { name: 'Review' })).toBeVisible()
+
+      await settings.open()
+      await settings.navTo('labs')
+      await settings.dialog.getByRole('button', { name: 'Reset previews to default' }).click()
+      await expect(settings.dialog.getByRole('switch', { name: 'Annual review' })).toHaveAttribute(
+        'aria-checked',
+        'false',
+      )
+    })
   })
 
   /* ── Layout & Export ──────────────────────────────────────────── */
