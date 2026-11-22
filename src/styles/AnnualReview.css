@@ -422,10 +422,132 @@
   }
 }
 
+.ar-print-footer {
+  display: none;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ar-bar__fill,
   .ar-btn {
     animation: none;
     transition: none;
+  }
+}
+
+@page {
+  size: letter portrait;
+  margin: 0.6in;
+}
+
+/* Every global rule is scoped to pages that contain the review, so other pages print as before. */
+@media print {
+  body:has(.ar-page) .sidebar,
+  body:has(.ar-page) .sidebar-overlay,
+  body:has(.ar-page) .sidebar-toggle-wrapper,
+  body:has(.ar-page) .skip-link,
+  body:has(.ar-page) .demo-banner,
+  body:has(.ar-page) .dsn-region,
+  body:has(.ar-page) .data-header,
+  body:has(.ar-page) .undo-toast,
+  body:has(.ar-page) .ar-controls,
+  body:has(.ar-page) .ar-live,
+  body:has(.ar-page) .ar-link,
+  body:has(.ar-page) .ar-figure__toggle {
+    display: none !important;
+  }
+
+  body:has(.ar-page) .app-layout {
+    display: block;
+  }
+
+  body:has(.ar-page) .main-content {
+    margin: 0;
+    padding: 0;
+    transition: none;
+  }
+
+  body:has(.ar-page) .data-page {
+    height: auto;
+    max-width: none;
+    padding: 0;
+    overflow: visible;
+  }
+
+  body:has(.ar-page) .data-scroll-area {
+    overflow: visible;
+    padding-bottom: 0;
+  }
+
+  body:has(.ar-page) .ar-page {
+    --color-text: #111827;
+    --color-text-muted: #4b5563;
+    --color-surface: #ffffff;
+    --color-surface-alt: #f3f4f6;
+    --color-border: #d1d5db;
+    --color-border-light: #d1d5db;
+    --accent: #2563eb;
+    --chart-nw-line: #0f766e;
+    max-width: none;
+    gap: 16px;
+    padding-top: 0;
+    color: var(--color-text);
+  }
+
+  body:has(.ar-page),
+  body:has(.ar-page) .app-layout,
+  body:has(.ar-page) .main-content {
+    background: #ffffff !important;
+    color: #111827;
+  }
+
+  body:has(.ar-page) .ar-page * {
+    box-shadow: none !important;
+    transition: none !important;
+    animation: none !important;
+  }
+
+  body:has(.ar-page) .ar-sections,
+  body:has(.ar-page) .ar-body {
+    gap: 16px;
+  }
+
+  body:has(.ar-page) .ar-section,
+  body:has(.ar-page) .ar-figure,
+  body:has(.ar-page) .ar-stat,
+  body:has(.ar-page) .ar-goal,
+  body:has(.ar-page) .ar-note,
+  body:has(.ar-page) tr {
+    break-inside: avoid;
+  }
+
+  body:has(.ar-page) .ar-page h3 {
+    break-after: avoid;
+  }
+
+  body:has(.ar-page) .ar-page thead {
+    display: table-header-group;
+  }
+
+  /* The monthly table gives the chart numbers on paper. */
+  body:has(.ar-page) .ar-table.sr-only {
+    position: static;
+    width: 100%;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+
+  body:has(.ar-page) .ar-bar__fill {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body:has(.ar-page) .ar-print-footer {
+    display: block;
   }
 }

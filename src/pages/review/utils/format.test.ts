@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   formatDelta,
+  formatIsoDate,
   formatList,
   formatMoney,
   formatAxisLabels,
@@ -125,5 +126,12 @@ describe('formatAxisLabels', () => {
 
   it('shows negative zero as $0', () => {
     expect(formatAxisLabels([-0])).toEqual(['$0'])
+  })
+})
+
+describe('formatIsoDate', () => {
+  it('pads month and day and uses the local calendar date', () => {
+    expect(formatIsoDate(new Date(2026, 0, 5))).toBe('2026-01-05')
+    expect(formatIsoDate(new Date(2026, 10, 8, 23, 59))).toBe('2026-11-08')
   })
 })
