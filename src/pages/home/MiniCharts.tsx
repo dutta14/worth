@@ -18,6 +18,8 @@ import { Account, BalanceEntry, formatMonth, formatCurrency } from '../data/type
 import { useDateFilter } from '../../hooks/useDateFilter'
 import { DateFilterBar } from '../../components/DateFilterBar'
 import { useChartColors } from '../../hooks/useChartColors'
+import PartialMonthCaption from '../data/components/PartialMonthCaption'
+import { monthLabel } from '../data/monthStatus'
 
 type MiniChartType = 'fi-gw' | 'net-worth' | 'assets-liabilities'
 
@@ -27,6 +29,7 @@ interface MiniChartsProps {
   balanceMap: Map<string, number>
   allMonths: string[]
   onNavigate: () => void
+  omitMonth?: string | null
 }
 
 interface ChartDatum {
@@ -59,13 +62,23 @@ const CHART_OPTIONS: { key: MiniChartType; label: string }[] = [
 const FI_CHART_COLOR = '#4f46e5'
 const GW_CHART_COLOR = '#b45309'
 
-const MiniCharts: FC<MiniChartsProps> = ({ accounts, balances, balanceMap, allMonths, onNavigate }) => {
+const MiniCharts: FC<MiniChartsProps> = ({ accounts, balances, balanceMap, allMonths, onNavigate, omitMonth }) => {
   const [chartRef, chartColors] = useChartColors()
   const [chartType, setChartType] = useState<MiniChartType>('net-worth')
-  const { dateFilter, setDateFilter, customFrom, customTo, setCustomFrom, setCustomTo, filteredMonths } = useDateFilter(
-    allMonths,
-    'last-12',
+  const {
+    dateFilter,
+    setDateFilter,
+    customFrom,
+    customTo,
+    setCustomFrom,
+    setCustomTo,
+    filteredMonths: dateFilteredMonths,
+  } = useDateFilter(allMonths, 'last-12')
+  const filteredMonths = useMemo(
+    () => (omitMonth ? dateFilteredMonths.filter(month => month !== omitMonth) : dateFilteredMonths),
+    [dateFilteredMonths, omitMonth],
   )
+  const showOmitCaption = !!omitMonth && filteredMonths.length !== dateFilteredMonths.length
 
   const fiAccounts = useMemo(() => accounts.filter(a => a.goalType === 'fi'), [accounts])
   const gwAccounts = useMemo(() => accounts.filter(a => a.goalType === 'gw'), [accounts])
@@ -501,6 +514,7 @@ const MiniCharts: FC<MiniChartsProps> = ({ accounts, balances, balanceMap, allMo
           </ResponsiveContainer>
         )}
       </div>
+      {showOmitCaption && omitMonth && <PartialMonthCaption monthLabel={monthLabel(omitMonth, new Date())} />}
     </div>
   )
 }

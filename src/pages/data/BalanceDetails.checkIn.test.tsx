@@ -582,3 +582,102 @@ describe('BalanceDetails footer layout hook', () => {
     expect(footer?.classList.contains('data-details-entry-footer--check-in')).toBe(hasModifier)
   })
 })
+
+describe('BalanceDetails partial month', () => {
+  const changeLineFor = (name: string) =>
+    screen.getByText(name).closest('article')?.querySelector('.account-card__change') ?? null
+
+  it('shows the Partial month badge beside Net worth when the latest month is partial', () => {
+    render(<Harness balances={septemberToOctober} />)
+
+    const summary = screen.getByLabelText('Net worth summary')
+    expect(within(summary).getByText('Partial month')).toHaveAccessibleDescription(
+      /^1 account has no balance for October( 2026)?\. Net worth leaves it out\.$/,
+    )
+  })
+
+  it('shows no badge when the latest month is complete', () => {
+    render(<Harness balances={completeSeptember} />)
+
+    expect(screen.queryByText('Partial month')).not.toBeInTheDocument()
+  })
+
+  it('shows no badge for a historical month, even one with gaps', async () => {
+    const user = userEvent.setup()
+    const balances = [
+      makeBalanceEntry({ id: 1, accountId: 1, month: '2026-08', balance: 900 }),
+      ...septemberToOctober.slice(0, 3),
+      makeBalanceEntry({ id: 9, accountId: 1, month: '2026-10', balance: 1100 }),
+      makeBalanceEntry({ id: 10, accountId: 2, month: '2026-10', balance: 2100 }),
+      makeBalanceEntry({ id: 11, accountId: 3, month: '2026-10', balance: 12500 }),
+    ]
+    render(<Harness balances={balances} />)
+    expect(screen.queryByText('Partial month')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /October 2026|Oct 2026/ }))
+    await user.click(await screen.findByRole('button', { name: /August|Aug/ }))
+
+    expect(screen.queryByText('Partial month')).not.toBeInTheDocument()
+  })
+
+  it('hides the badge while the check-in form is open', async () => {
+    render(<Harness balances={septemberToOctober} startCheckInMonth="2026-10" />)
+
+    await screen.findByText('Adding the missing balances for October 2026')
+    expect(screen.queryByText('Partial month')).not.toBeInTheDocument()
+  })
+
+  it('brings the badge back after the missing balance is saved and the form closes', async () => {
+    const user = userEvent.setup()
+    render(<Harness balances={septemberToOctober} startCheckInMonth="2026-10" />)
+    await screen.findByText('Adding the missing balances for October 2026')
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.getByText('Partial month')).toBeInTheDocument()
+  })
+
+  it('hides the change line for an account with no balance this month', () => {
+    render(<Harness balances={septemberToOctober} />)
+
+    expect(changeLineFor('Checking')).not.toBeNull()
+    expect(changeLineFor('Roth IRA')).toBeNull()
+  })
+
+  it('hides the change line for a group with no balance this month', () => {
+    const grouped = [
+      makeAccount({ id: 1, name: 'Checking' }),
+      makeAccount({ id: 2, name: 'Brokerage', group: 'Trusts' }),
+      makeAccount({ id: 3, name: 'Roth IRA', group: 'Trusts' }),
+    ]
+    const balances = [
+      makeBalanceEntry({ id: 1, accountId: 1, month: '2026-09', balance: 1000 }),
+      makeBalanceEntry({ id: 2, accountId: 2, month: '2026-09', balance: 2000 }),
+      makeBalanceEntry({ id: 3, accountId: 3, month: '2026-09', balance: 3000 }),
+      makeBalanceEntry({ id: 4, accountId: 1, month: '2026-10', balance: 1100 }),
+    ]
+    render(<Harness balances={balances} accountList={grouped} />)
+
+    const groupCard = screen.getByText('Trusts').closest('article') as HTMLElement
+    expect(groupCard.querySelector('.account-group-card__meta .account-card__change')).toBeNull()
+  })
+})
+
+describe('BalanceDetails partial month with the flag off', () => {
+  beforeEach(() => {
+    mockFlag = false
+  })
+
+  it('shows no badge', () => {
+    render(<Harness balances={septemberToOctober} />)
+
+    expect(screen.queryByText('Partial month')).not.toBeInTheDocument()
+  })
+
+  it('keeps the existing change line, which treats a missing balance as zero', () => {
+    render(<Harness balances={septemberToOctober} />)
+
+    const line = screen.getByText('Roth IRA').closest('article')?.querySelector('.account-card__change')
+    expect(line).toHaveTextContent('↓ $12,400 (100.0%)')
+  })
+})

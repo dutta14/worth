@@ -9,7 +9,7 @@ import { useFlag, useFlagResolved } from '../../flags/useFlag'
 import { Account, BalanceEntry } from './types'
 import { parseCsvImport } from './csvImport'
 import { getCheckInRequestMonth, hasCheckInRequest } from './checkInRequest'
-import type { MonthKey } from './monthStatus'
+import { getPartialMonth, type MonthKey } from './monthStatus'
 import { exportCsv } from './csvExport'
 import AccountsModal from './AccountsModal'
 import BalanceSpreadsheet from './BalanceSpreadsheet'
@@ -222,6 +222,7 @@ const Data: FC = () => {
   const allMonths = [...new Set(balances.map(b => b.month))].sort((a, b) => b.localeCompare(a))
   const balanceMap = new Map<string, number>()
   for (const b of balances) balanceMap.set(`${b.accountId}:${b.month}`, b.balance)
+  const partialMonth = checkInEnabled ? getPartialMonth(accounts, balances, allMonths[0]) : null
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -330,7 +331,13 @@ const Data: FC = () => {
                 </div>
               </div>
             ) : dataView === 'charts' ? (
-              <BalanceCharts accounts={accounts} balances={balances} allMonths={allMonths} balanceMap={balanceMap} />
+              <BalanceCharts
+                accounts={accounts}
+                balances={balances}
+                allMonths={allMonths}
+                balanceMap={balanceMap}
+                omitMonth={partialMonth?.month}
+              />
             ) : dataView === 'details' ? (
               <BalanceDetails
                 accounts={accounts}

@@ -292,3 +292,53 @@ describe('BalanceCharts', () => {
     expect(screen.getByTestId('responsive-container')).toBeInTheDocument()
   })
 })
+
+describe('BalanceCharts partial month', () => {
+  const caption = /is not plotted until all accounts have a balance\./
+
+  it('shows no caption when no month is omitted', () => {
+    render(<BalanceCharts {...makeProps()} />)
+
+    expect(screen.queryByText(caption)).not.toBeInTheDocument()
+    expect(screen.getByTestId('responsive-container')).toBeInTheDocument()
+  })
+
+  it('shows no caption when omitMonth is null', () => {
+    render(<BalanceCharts {...makeProps({ omitMonth: null })} />)
+
+    expect(screen.queryByText(caption)).not.toBeInTheDocument()
+  })
+
+  it('names the omitted month in the caption and still draws the other months', () => {
+    render(<BalanceCharts {...makeProps({ omitMonth: '2024-03' })} />)
+
+    expect(screen.getByText(/March 20\d\d is not plotted until all accounts have a balance\./)).toBeInTheDocument()
+    expect(screen.getByTestId('responsive-container')).toBeInTheDocument()
+  })
+
+  it('shows the empty message with the caption when the only month is omitted', () => {
+    render(<BalanceCharts {...makeProps({ allMonths: ['2024-03'], omitMonth: '2024-03' })} />)
+
+    expect(screen.getByText('No data for the selected range')).toBeInTheDocument()
+    expect(screen.getByText(caption)).toBeInTheDocument()
+  })
+
+  it('drops the caption when the selected range does not include the omitted month', async () => {
+    const user = userEvent.setup()
+    render(<BalanceCharts {...makeProps({ omitMonth: '2024-03' })} />)
+    expect(screen.getByText(caption)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Year-End' }))
+
+    expect(screen.queryByText(caption)).not.toBeInTheDocument()
+  })
+
+  it.each(['FI vs GW', 'Assets vs Liabilities'])('keeps the caption on the %s chart', async name => {
+    const user = userEvent.setup()
+    render(<BalanceCharts {...makeProps({ omitMonth: '2024-03' })} />)
+
+    await user.click(screen.getByRole('button', { name }))
+
+    expect(screen.getByText(caption)).toBeInTheDocument()
+  })
+})

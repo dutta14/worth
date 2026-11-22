@@ -18,6 +18,8 @@ import { Account, BalanceEntry, formatMonth, formatCurrency } from './types'
 import { useDateFilter } from '../../hooks/useDateFilter'
 import { DateFilterBar } from '../../components/DateFilterBar'
 import { useChartColors } from '../../hooks/useChartColors'
+import PartialMonthCaption from './components/PartialMonthCaption'
+import { monthLabel } from './monthStatus'
 
 type ChartType = 'fi-gw' | 'net-worth' | 'assets-liabilities'
 
@@ -26,6 +28,7 @@ interface BalanceChartsProps {
   balances: BalanceEntry[]
   allMonths: string[]
   balanceMap: Map<string, number>
+  omitMonth?: string | null
 }
 
 interface ChartDatum {
@@ -58,11 +61,23 @@ const CHART_OPTIONS: { key: ChartType; label: string }[] = [
 const FI_CHART_COLOR = '#4f46e5'
 const GW_CHART_COLOR = '#b45309'
 
-const BalanceCharts: FC<BalanceChartsProps> = ({ accounts, balances: _balances, allMonths, balanceMap }) => {
+const BalanceCharts: FC<BalanceChartsProps> = ({ accounts, balances: _balances, allMonths, balanceMap, omitMonth }) => {
   const [chartRef, chartColors] = useChartColors()
   const [chartType, setChartType] = useState<ChartType>('net-worth')
-  const { dateFilter, setDateFilter, customFrom, customTo, setCustomFrom, setCustomTo, filteredMonths } =
-    useDateFilter(allMonths)
+  const {
+    dateFilter,
+    setDateFilter,
+    customFrom,
+    customTo,
+    setCustomFrom,
+    setCustomTo,
+    filteredMonths: dateFilteredMonths,
+  } = useDateFilter(allMonths)
+  const filteredMonths = useMemo(
+    () => (omitMonth ? dateFilteredMonths.filter(month => month !== omitMonth) : dateFilteredMonths),
+    [dateFilteredMonths, omitMonth],
+  )
+  const showOmitCaption = !!omitMonth && filteredMonths.length !== dateFilteredMonths.length
 
   // Build chart data
   const fiAccounts = accounts.filter(a => a.goalType === 'fi')
@@ -477,6 +492,7 @@ const BalanceCharts: FC<BalanceChartsProps> = ({ accounts, balances: _balances, 
           </ResponsiveContainer>
         )}
       </div>
+      {showOmitCaption && omitMonth && <PartialMonthCaption monthLabel={monthLabel(omitMonth, new Date())} />}
     </div>
   )
 }

@@ -12,6 +12,7 @@ import GoalsPeek from './GoalsPeek'
 import AllocationBreakdown from './AllocationBreakdown'
 import SetupProgress from './SetupProgress'
 import CheckInStrip from './CheckInStrip'
+import { getPartialMonth } from '../data/monthStatus'
 import SpendingPeek from './SpendingPeek'
 import { loadBudgetStore } from '../budget/utils/budgetStorage'
 import { useFileStore } from '../../contexts/FileStoreContext'
@@ -73,6 +74,11 @@ const Home: FC = () => {
   const allMonths = useMemo(
     () => [...new Set(balances.map(b => b.month))].sort((a, b) => b.localeCompare(a)),
     [balances],
+  )
+
+  const partialMonth = useMemo(
+    () => (checkInEnabled ? getPartialMonth(accounts, balances, allMonths[0]) : null),
+    [checkInEnabled, accounts, balances, allMonths],
   )
 
   const balanceMap = useMemo(() => {
@@ -187,6 +193,7 @@ const Home: FC = () => {
         balances={balances}
         allMonths={allMonths}
         onNavigate={() => navigate('/net-worth/dashboard/details')}
+        partial={partialMonth}
       />
     </ErrorBoundary>,
     <ErrorBoundary key="charts" variant="card">
@@ -196,6 +203,7 @@ const Home: FC = () => {
         balanceMap={balanceMap}
         allMonths={allMonths}
         onNavigate={() => navigate('/net-worth/dashboard')}
+        omitMonth={partialMonth?.month}
       />
     </ErrorBoundary>,
     <ErrorBoundary key="goals" variant="card">
