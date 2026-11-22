@@ -3,13 +3,24 @@ import { parseCSV, serializeCSV } from './csvUtils'
 import { createBackupManager, createHandleIO } from './backupManager'
 import type { BackupManager } from './backupManager'
 import { saveCorruptCopy } from './corruptCopy'
-import { EMPTY_SAFETY_SNAPSHOT, FileStoreError, errorKind, isBackupEligible, snapshotsEqual } from './safetyNet'
-import type { BackupEntry, CorruptAction, SafetySnapshot, WriteFailureKind } from './safetyNet'
+import {
+  EMPTY_SAFETY_SNAPSHOT,
+  FileStoreError,
+  compareFingerprint,
+  errorKind,
+  fingerprintBytes,
+  isBackupEligible,
+  snapshotsEqual,
+} from './safetyNet'
+import type { BackupEntry, CorruptAction, Fingerprint, SafetySnapshot, WriteFailureKind } from './safetyNet'
 
 const CHANNEL_NAME = 'filestore-sync'
 const WRITE_DEBOUNCE_MS = 300
 /** Used only once the safety net is enabled; shrinks the window for a write lost on tab close. */
 const SAFE_WRITE_DEBOUNCE_MS = 120
+/** A cloud placeholder can block `getFile()` for a long time; such a path is skipped for this check. */
+const STAT_TIMEOUT_MS = 10_000
+const STAT_CONCURRENCY = 6
 
 type Payload = { kind: 'text'; value: string } | { kind: 'binary'; value: ArrayBuffer }
 
@@ -27,6 +38,18 @@ interface CorruptEntry {
   ready: boolean
   settled: Promise<void>
 }
+
+/** A file that changed on disk after this tab loaded it. Writes to it are held until the user chooses. */
+interface StaleEntry {
+  /** The file is gone from the disk. */
+  deleted: boolean
+  /** The newest edit that was refused, so "Keep my version" can still write it. */
+  held: Payload | null
+  /** A delete of a file this tab never loaded was refused; "Keep my version" performs it. */
+  wantsDelete: boolean
+}
+
+type DiskStatus = 'same' | 'changed' | 'deleted'
 
 interface PendingWrite {
   timer: ReturnType<typeof setTimeout>
@@ -46,6 +69,8 @@ const isJsonPath = (path: string): boolean => path.toLowerCase().endsWith('.json
  * backup-eligible behave as before: a bad read falls back and the next write replaces it.
  */
 const isGuardedPath = (path: string): boolean => isJsonPath(path) && isBackupEligible(path)
+
+const encode = (value: string): Uint8Array => new TextEncoder().encode(value)
 
 const bytesEqual = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((v, i) => v === b[i])
 
@@ -93,6 +118,12 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
   /** Paths the user resolved while the bytes on disk may still be unreadable; not flagged again until rewritten. */
   private acknowledged = new Set<string>()
   private resolving = new Map<string, Promise<BackupEntry | null>>()
+  /** What each watched file looked like when this tab last read or wrote it. */
+  private baselines = new Map<string, Fingerprint>()
+  /** Files that changed on disk since this tab loaded them. */
+  private stale = new Map<string, StaleEntry>()
+  /** Bumped by every write so a read that overlapped one does not record an out-of-date baseline. */
+  private writeSeq = 0
 
   async init(handle: FileSystemDirectoryHandle): Promise<void> {
     this.root = handle
@@ -102,6 +133,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     this.backupsHealthy = true
     this.backupManager = null
     this.resetCorruptState()
+    this.resetExternalState()
     this.refreshSafetySnapshot()
     this.setupChannel()
   }
@@ -154,7 +186,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
   async readCSV(path: string): Promise<string[][]> {
     const cached = this.cache.get(path)
     if (Array.isArray(cached)) return cached as string[][]
-    const text = await this.readText(path)
+    const text = this.safetyEnabled ? (await this.readTextAndBytes(path)).text : await this.readText(path)
     if (text === null) return []
     const rows = parseCSV(text)
     this.cache.set(path, rows)
@@ -213,6 +245,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
   }
 
   async delete(path: string): Promise<void> {
+    await this.assertDeletable(path)
     this.cache.delete(path)
     if (this.failed.delete(path)) this.refreshSafetySnapshot()
     const queued = this.pending.get(path)
@@ -232,6 +265,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
         // Always copy before a delete: a snapshot taken earlier this session may already be out of date.
         await this.snapshotBeforeWrite(dir, name, path, true)
         await dir.removeEntry(name)
+        this.baselines.delete(path)
         if (unreadable) {
           this.clearCorrupt(path)
           this.refreshSafetySnapshot()
@@ -239,6 +273,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
       })
     } catch (error) {
       if (!isNotFound(error)) throw error
+      this.baselines.delete(path)
     }
     this.announce(path)
   }
@@ -263,6 +298,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     if (opts.enabled) return
     this.failed.clear()
     this.resetCorruptState()
+    this.resetExternalState()
     this.permissionLost = false
     this.backupsHealthy = true
     this.refreshSafetySnapshot()
@@ -280,7 +316,13 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
   }
 
   hasUnsavedWork(): boolean {
-    return this.pending.size > 0 || this.inFlight.size > 0 || this.failed.size > 0 || this.held.size > 0
+    return (
+      this.pending.size > 0 ||
+      this.inFlight.size > 0 ||
+      this.failed.size > 0 ||
+      this.held.size > 0 ||
+      [...this.stale.values()].some(entry => entry.held !== null)
+    )
   }
 
   /** Re-queues every failed payload immediately; resolves once each attempt has settled. */
@@ -340,13 +382,19 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
       this.pending.delete(path)
     }
     // A write that already failed lives only in `failed`, so it needs the same protection as a queued one.
-    const unsaved = queued?.payload ?? this.failed.get(path)?.payload ?? this.held.get(path)
+    const unsaved =
+      queued?.payload ??
+      this.failed.get(path)?.payload ??
+      this.held.get(path) ??
+      this.stale.get(path)?.held ??
+      undefined
     try {
       await withLock(`filestore:${path}`, async () => {
         if (unsaved?.kind === 'text') {
           await backups.snapshot(path, new TextEncoder().encode(unsaved.value), { tag: 'unsaved', force: true })
         }
         await backups.restore(entry)
+        await this.rebaselineAfterWrite(path, null)
       })
     } catch (error) {
       if (queued) this.requeue(path, queued)
@@ -358,7 +406,9 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     const hadHold = this.corrupt.has(path)
     this.clearCorrupt(path)
     this.acknowledged.add(path)
-    if (this.failed.delete(path) || hadHold) this.refreshSafetySnapshot()
+    // Same for a changed-on-disk hold: the user chose the file's content, so nothing is left to decide.
+    const hadStale = this.stale.delete(path)
+    if (this.failed.delete(path) || hadHold || hadStale) this.refreshSafetySnapshot()
     this.setBackupsHealthy(true)
     this.announce(path)
   }
@@ -392,12 +442,14 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
           await backups.snapshot(path, new TextEncoder().encode(held.value), { tag: 'unsaved', force: true })
         }
         await backups.restore(latest, { snapshotCurrent: false })
+        await this.rebaselineAfterWrite(path, null)
         restoredFrom = latest
       } else if (held) {
         const { dirs, name } = splitPath(path)
         const dir = await this.resolveDir(dirs, true)
         if (!dir) throw new Error(`Cannot open the folder for ${path}.`)
         await this.writePayload(dir, name, held)
+        await this.rebaselineAfterWrite(path, held.kind === 'text' ? encode(held.value) : null)
       }
       this.clearCorrupt(path)
       this.acknowledged.add(path)
@@ -407,6 +459,225 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     this.refreshSafetySnapshot()
     this.announce(path)
     return restoredFrom
+  }
+
+  /* ── External changes ─────────────────────────────────────── */
+
+  /**
+   * Looks at every file this tab holds loaded data for (those with a baseline and a cache entry) and flags the
+   * ones whose bytes on disk changed or vanished. Metadata only, plus one read when just the modified time moved.
+   */
+  async checkExternalChanges(): Promise<void> {
+    if (!this.safetyEnabled || !this.root) return
+    const queue = [...this.baselines.keys()].filter(path => this.cache.has(path) && !this.stale.has(path))
+    const worker = async (): Promise<void> => {
+      for (let path = queue.shift(); path !== undefined; path = queue.shift()) await this.checkPath(path)
+    }
+    await Promise.all(Array.from({ length: Math.min(STAT_CONCURRENCY, queue.length) }, worker))
+  }
+
+  /** Never rejects: one unreadable file must not hide a change in another. */
+  private async checkPath(path: string): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const work = withLock(`filestore:${path}`, async () => {
+      const baseline = this.baselines.get(path)
+      if (!this.safetyEnabled || !baseline || !this.cache.has(path) || this.stale.has(path)) return
+      const status = await this.diskStatus(path, baseline)
+      if (this.safetyEnabled && status !== 'same') this.markStale(path, status === 'deleted')
+    }).catch(error => {
+      if (errorKind(error) === 'permission') this.setPermissionLost(true)
+      else console.error(`FileStore external change check of "${path}" failed:`, error)
+    })
+    const timeout = new Promise<void>(resolve => {
+      timer = setTimeout(resolve, STAT_TIMEOUT_MS)
+    })
+    await Promise.race([work, timeout])
+    clearTimeout(timer)
+  }
+
+  /**
+   * Discards this tab's version of every externally changed file. A queued, failed or held edit is kept as an
+   * `-unsaved` copy first, and a file stays flagged if that copy cannot be made.
+   */
+  async reloadFromDisk(): Promise<void> {
+    if (!this.safetyEnabled) return
+    for (const path of [...this.stale.keys()]) await this.resolveStale(path, 'reload')
+  }
+
+  /**
+   * Overwrites every externally changed file with this tab's version. The bytes on disk are copied to
+   * `_backups/` first, and a file is left alone if that copy cannot be made.
+   */
+  async keepLocal(): Promise<void> {
+    if (!this.safetyEnabled) return
+    for (const path of [...this.stale.keys()]) await this.resolveStale(path, 'keep')
+  }
+
+  private async resolveStale(path: string, action: 'reload' | 'keep'): Promise<void> {
+    // Taken before the lock so a debounced write cannot land between the decision and its effect.
+    const queued = this.pending.get(path)
+    if (queued) {
+      clearTimeout(queued.timer)
+      this.pending.delete(path)
+    }
+    try {
+      await withLock(`filestore:${path}`, async () => {
+        if (!this.stale.has(path)) return
+        await (action === 'reload' ? this.reloadPath(path, queued) : this.keepPath(path, queued))
+      })
+    } catch (error) {
+      if (queued) this.requeue(path, queued)
+      throw error
+    }
+    queued?.waiters.forEach(w => w.resolve())
+    this.refreshSafetySnapshot()
+    if (action === 'reload') this.notify(path)
+    else this.announce(path)
+  }
+
+  private async reloadPath(path: string, queued: PendingWrite | undefined): Promise<void> {
+    const unsaved =
+      queued?.payload ??
+      this.stale.get(path)?.held ??
+      this.held.get(path) ??
+      this.failed.get(path)?.payload ??
+      undefined
+    if (unsaved?.kind === 'text') {
+      await this.requireBackups().snapshot(path, encode(unsaved.value), { tag: 'unsaved', force: true })
+    }
+    this.stale.delete(path)
+    this.failed.delete(path)
+    this.clearCorrupt(path)
+    this.cache.delete(path)
+    this.baselines.delete(path)
+    this.verified.delete(path)
+    this.acknowledged.delete(path)
+  }
+
+  private async keepPath(path: string, queued: PendingWrite | undefined): Promise<void> {
+    const entry = this.stale.get(path)
+    const root = this.root
+    if (!entry || !root) return
+    const backups = this.requireBackups()
+    const unreadable = this.corrupt.get(path)
+    if (unreadable) await this.preserveCorruptBytes(path, unreadable)
+    const onDisk = await createHandleIO(root).read(path)
+    if (onDisk && onDisk.length > 0) await backups.snapshot(path, onDisk, { force: true })
+
+    const payload = queued?.payload ?? entry.held ?? this.held.get(path) ?? this.payloadFromCache(path)
+    const { dirs, name } = splitPath(path)
+    if (payload) {
+      const dir = await this.resolveDir(dirs, true)
+      if (!dir) throw new Error(`Cannot open the folder for ${path}.`)
+      await this.writePayload(dir, name, payload)
+      await this.rebaselineAfterWrite(path, payload.kind === 'text' ? encode(payload.value) : null)
+      if (isJsonPath(path)) this.markReadable(path)
+    } else if (entry.wantsDelete) {
+      const dir = await this.resolveDir(dirs, false)
+      try {
+        await dir?.removeEntry(name)
+      } catch (error) {
+        if (!isNotFound(error)) throw error
+      }
+      this.cache.delete(path)
+      this.baselines.delete(path)
+    } else {
+      await this.rebaselineAfterWrite(path, null)
+    }
+    this.stale.delete(path)
+    this.failed.delete(path)
+    this.clearCorrupt(path)
+  }
+
+  /** The tab's own version of a file as it would be saved, for a file nobody has edited since it loaded. */
+  private payloadFromCache(path: string): Payload | null {
+    const data = this.cache.get(path)
+    if (data === undefined) return null
+    const value = path.toLowerCase().endsWith('.csv') ? serializeCSV(data as string[][]) : JSON.stringify(data, null, 2)
+    return { kind: 'text', value }
+  }
+
+  private markStale(path: string, deleted: boolean, wantsDelete = false): void {
+    const existing = this.stale.get(path)
+    if (existing) {
+      if (wantsDelete) existing.wantsDelete = true
+      return
+    }
+    this.stale.set(path, { deleted, held: null, wantsDelete })
+    this.refreshSafetySnapshot()
+  }
+
+  /** Compares the file on disk with a baseline; a touch that left the content alone re-baselines silently. */
+  private async diskStatus(path: string, baseline: Fingerprint): Promise<DiskStatus> {
+    const file = await this.readFile(path)
+    if (file === null) return 'deleted'
+    const comparison = compareFingerprint(baseline, file)
+    if (comparison === 'same') return 'same'
+    if (comparison === 'size-changed') return 'changed'
+    const current = fingerprintBytes(new Uint8Array(await file.arrayBuffer()), file.lastModified)
+    if (current.hash !== baseline.hash) return 'changed'
+    this.baselines.set(path, current)
+    return 'same'
+  }
+
+  /** Holds a write back when the file changed on disk after this tab last saw it. */
+  private async assertNotStale(path: string, payload: Payload): Promise<void> {
+    if (!this.safetyEnabled || payload.kind !== 'text' || !isBackupEligible(path)) return
+    if (!this.stale.has(path)) {
+      // Never read by this tab: nothing to compare with, and the snapshot policy covers what is on disk.
+      const baseline = this.baselines.get(path)
+      if (!baseline) return
+      const status = await this.diskStatus(path, baseline)
+      if (status === 'same') return
+      this.markStale(path, status === 'deleted')
+    }
+    throw new FileStoreError('stale-blocked', `${path} changed on disk, so the write was held.`)
+  }
+
+  /** Refuses to delete a file that changed on disk, or that this tab never loaded and so never saw. */
+  private async assertDeletable(path: string): Promise<void> {
+    if (!this.safetyEnabled || !this.root || !isBackupEligible(path)) return
+    await withLock(`filestore:${path}`, async () => {
+      const baseline = this.baselines.get(path)
+      if (baseline) {
+        if ((await this.diskStatus(path, baseline)) === 'changed') {
+          this.markStale(path, false)
+          throw new FileStoreError('stale-blocked', `${path} changed on disk, so it was not deleted.`)
+        }
+        return
+      }
+      // An empty file (a sync placeholder, or a create whose write failed) holds nothing to lose.
+      const file = await this.readFile(path)
+      if (file === null || file.size === 0) return
+      this.markStale(path, false, true)
+      throw new FileStoreError('unseen-file', `${path} was never loaded by this tab, so it was not deleted.`)
+    })
+  }
+
+  /**
+   * Records what the file looks like now, right after this tab wrote it. `bytes` is what was written; when it
+   * is unknown the file is read back. A failure only drops the baseline, which makes the next write snapshot first.
+   */
+  private async rebaselineAfterWrite(path: string, bytes: Uint8Array | null): Promise<void> {
+    this.writeSeq += 1
+    if (!this.safetyEnabled || !isBackupEligible(path)) return
+    try {
+      const file = await this.readFile(path)
+      if (file === null) {
+        this.baselines.delete(path)
+        return
+      }
+      const content = bytes ?? new Uint8Array(await file.arrayBuffer())
+      this.baselines.set(path, fingerprintBytes(content, file.lastModified))
+    } catch (error) {
+      console.error(`FileStore baseline of "${path}" failed:`, error)
+      this.baselines.delete(path)
+    }
+  }
+
+  private resetExternalState(): void {
+    this.baselines.clear()
+    this.stale.clear()
   }
 
   /** Makes sure what is on disk right now is saved somewhere else before the file is replaced or removed. */
@@ -569,12 +840,17 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
       corrupt: [...this.corrupt]
         .filter(([, entry]) => entry.ready)
         .map(([path, { copyPath, hasBackup }]) => ({ path, copyPath, hasBackup })),
+      stale: [...this.stale].map(([path, { deleted }]) => ({ path, deleted })),
       permissionLost: this.permissionLost,
       backupsHealthy: this.backupsHealthy,
     }
     if (snapshotsEqual(next, this.safetySnapshot)) return
     this.safetySnapshot =
-      next.failed.length === 0 && next.corrupt.length === 0 && !next.permissionLost && next.backupsHealthy
+      next.failed.length === 0 &&
+      next.corrupt.length === 0 &&
+      next.stale.length === 0 &&
+      !next.permissionLost &&
+      next.backupsHealthy
         ? EMPTY_SAFETY_SNAPSHOT
         : next
     for (const cb of this.safetySubscribers) {
@@ -655,9 +931,17 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
 
   /** Reads the raw bytes once so a file that fails to parse can be copied exactly as it was. */
   private async readTextAndBytes(path: string): Promise<{ text: string | null; bytes: Uint8Array | null }> {
+    const seq = this.writeSeq
     const file = await this.readFile(path)
-    if (file === null) return { text: null, bytes: null }
+    if (file === null) {
+      this.baselines.delete(path)
+      return { text: null, bytes: null }
+    }
     const bytes = new Uint8Array(await file.arrayBuffer())
+    // A write that finished meanwhile recorded the newer baseline; this read may have seen the older bytes.
+    if (this.safetyEnabled && isBackupEligible(path) && seq === this.writeSeq) {
+      this.baselines.set(path, fingerprintBytes(bytes, file.lastModified))
+    }
     return { text: new TextDecoder().decode(bytes), bytes }
   }
 
@@ -692,11 +976,8 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
       await this.persist(path, entry.payload)
     } catch (error) {
       this.releaseInFlight(path)
-      if (error instanceof FileStoreError) {
-        this.held.set(path, entry.payload)
-        // A path is held or failed, never both: otherwise the write-failed banner would outrank the corrupt one.
-        if (this.failed.delete(path)) this.refreshSafetySnapshot()
-      } else this.recordFailure(path, entry.payload, error)
+      if (error instanceof FileStoreError) this.holdWrite(path, entry.payload, error)
+      else this.recordFailure(path, entry.payload, error)
       entry.waiters.forEach(w => w.reject(error))
       return
     }
@@ -704,6 +985,19 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     this.clearFailure(path)
     this.announce(path)
     entry.waiters.forEach(w => w.resolve())
+  }
+
+  /** Keeps a refused write so the user can still choose what happens to it. */
+  private holdWrite(path: string, payload: Payload, error: FileStoreError): void {
+    if (error.code === 'corrupt-blocked') this.held.set(path, payload)
+    else {
+      const entry = this.stale.get(path)
+      // The hold was resolved while this write was failing; keep the edit visible as a failure instead of losing it.
+      if (!entry) return this.recordFailure(path, payload, error)
+      entry.held = payload
+    }
+    // A path is held or failed, never both: otherwise the write-failed banner would outrank the hold's own banner.
+    if (this.failed.delete(path)) this.refreshSafetySnapshot()
   }
 
   private releaseInFlight(path: string): void {
@@ -718,10 +1012,14 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     await withLock(`filestore:${path}`, async () => {
       const dir = await this.resolveDir(dirs, true)
       if (!dir) return
+      await this.assertNotStale(path, payload)
       await this.assertNotCorrupt(dir, name, path, payload)
       await this.snapshotBeforeWrite(dir, name, path)
       await this.writePayload(dir, name, payload)
-      if (this.safetyEnabled && payload.kind === 'text' && isJsonPath(path)) this.markReadable(path)
+      if (this.safetyEnabled && payload.kind === 'text') {
+        if (isJsonPath(path)) this.markReadable(path)
+        await this.rebaselineAfterWrite(path, encode(payload.value))
+      }
     })
   }
 

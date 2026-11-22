@@ -1,7 +1,7 @@
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSafetyNet } from '../contexts/SafetyNetContext'
 import { deriveIssues, moreIssuesText, stampToDate } from '../utils/safetyNet'
-import type { CorruptAction, SafetyIssue } from '../utils/safetyNet'
+import type { CorruptAction, ExternalAction, SafetyIssue } from '../utils/safetyNet'
 import '../styles/DataSafetyNet.css'
 
 const SAVED_STATUS = 'All changes saved.'
@@ -12,6 +12,7 @@ const DATE_FORMAT = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', time
 
 type CorruptIssue = Extract<SafetyIssue, { type: 'corrupt' }>
 type WriteFailedIssue = Extract<SafetyIssue, { type: 'write-failed' }>
+type ExternalIssue = Extract<SafetyIssue, { type: 'external-change' }>
 
 const baseName = (path: string): string => path.split('/').pop() ?? path
 
@@ -66,6 +67,19 @@ const corruptCopy = (issue: CorruptIssue, failed: boolean): BannerCopy => ({
       : "The file isn't valid JSON and a copy couldn't be saved, so the app left it untouched. Changes to it won't be saved until you choose how to continue.",
 })
 
+const externalCopy = (issue: ExternalIssue, failed: boolean): BannerCopy => {
+  const single = issue.paths.length === 1
+  const file = issue.paths[0]
+  const body = failed
+    ? RESOLVE_FAILED
+    : issue.deleted
+      ? `${file} was deleted outside this tab. Saving to it is paused. Reload to see what's on disk, or keep your version to create it again.`
+      : single
+        ? 'It was changed outside this tab, maybe on another computer or by a sync tool. Saving to it is paused so nothing gets overwritten.'
+        : 'They were changed outside this tab, maybe on another computer or by a sync tool. Saving to them is paused so nothing gets overwritten.'
+  return { title: single ? `${file} changed on disk.` : 'Files changed on disk.', body }
+}
+
 const resolvedText = (path: string, action: CorruptAction, restoredStamp: string | null): string =>
   action === 'restore-latest' && restoredStamp
     ? `${path} restored from the backup of ${DATE_FORMAT.format(stampToDate(restoredStamp))}.`
@@ -76,8 +90,17 @@ const resolvedText = (path: string, action: CorruptAction, restoredStamp: string
  * issue. It never steals focus; it is announced by its live regions.
  */
 const DataSafetyBanner: FC = () => {
-  const { enabled, snapshot, reconnectDenied, retryFailed, reconnect, chooseFolderAgain, resolveCorrupt } =
-    useSafetyNet()
+  const {
+    enabled,
+    snapshot,
+    reconnectDenied,
+    retryFailed,
+    reconnect,
+    chooseFolderAgain,
+    resolveCorrupt,
+    resolveExternal,
+    notice,
+  } = useSafetyNet()
   const issues = useMemo(() => deriveIssues(snapshot), [snapshot])
   const [retrying, setRetrying] = useState(false)
   const [retried, setRetried] = useState(false)
@@ -129,12 +152,18 @@ const DataSafetyBanner: FC = () => {
     }
   }, [retrying, retryFailed])
 
+  // The app shell (and this banner) remounts after a Reload, so the status text arrives from the provider.
+  useEffect(() => {
+    if (notice) setSavedMessage(notice)
+  }, [notice])
+
   const top = issues[0]
-  const topCorruptPath = top?.type === 'corrupt' ? top.path : null
+  const topResolveKey =
+    top?.type === 'corrupt' ? top.path : top?.type === 'external-change' ? top.paths.join('|') : null
 
   useEffect(() => {
     setResolveFailed(false)
-  }, [topCorruptPath])
+  }, [topResolveKey])
 
   const handleResolve = useCallback(
     async (issue: CorruptIssue, action: CorruptAction) => {
@@ -156,6 +185,25 @@ const DataSafetyBanner: FC = () => {
     [resolveCorrupt],
   )
 
+  const handleExternal = useCallback(
+    async (action: ExternalAction) => {
+      if (resolvingRef.current) return
+      resolvingRef.current = true
+      setResolving(true)
+      setResolveFailed(false)
+      try {
+        await resolveExternal(action)
+      } catch (error) {
+        console.error('Resolving the changed files failed:', error)
+        setResolveFailed(true)
+      } finally {
+        resolvingRef.current = false
+        setResolving(false)
+      }
+    },
+    [resolveExternal],
+  )
+
   if (!enabled) return null
 
   const copy = !top
@@ -164,8 +212,11 @@ const DataSafetyBanner: FC = () => {
       ? permissionCopy(reconnectDenied)
       : top.type === 'corrupt'
         ? corruptCopy(top, resolveFailed)
-        : writeFailedCopy(top, retried)
+        : top.type === 'external-change'
+          ? externalCopy(top, resolveFailed)
+          : writeFailedCopy(top, retried)
 
+  const isExternal = top?.type === 'external-change'
   const visible = hasIssues || savedMessage !== ''
 
   return (
@@ -176,7 +227,12 @@ const DataSafetyBanner: FC = () => {
       ref={regionRef}
     >
       {top && copy && (
-        <section className="dsn-banner dsn-banner--error" role="alert" aria-busy={retrying || resolving || undefined}>
+        <section
+          key={isExternal ? 'status' : 'alert'}
+          className={`dsn-banner ${isExternal ? 'dsn-banner--warning' : 'dsn-banner--error'}`}
+          role={isExternal ? 'status' : 'alert'}
+          aria-busy={retrying || resolving || undefined}
+        >
           <WarningIcon />
           <div className="dsn-banner__text">
             <p className="dsn-banner__title">{copy.title}</p>
@@ -188,6 +244,25 @@ const DataSafetyBanner: FC = () => {
               <button type="button" className="dsn-btn dsn-btn--primary" aria-disabled={retrying} onClick={handleRetry}>
                 {retrying ? 'Trying again...' : 'Try again'}
               </button>
+            ) : top.type === 'external-change' ? (
+              <>
+                <button
+                  type="button"
+                  className="dsn-btn dsn-btn--primary"
+                  aria-disabled={resolving}
+                  onClick={() => void handleExternal('reload')}
+                >
+                  Reload
+                </button>
+                <button
+                  type="button"
+                  className="dsn-btn"
+                  aria-disabled={resolving}
+                  onClick={() => void handleExternal('keep')}
+                >
+                  Keep my version
+                </button>
+              </>
             ) : top.type === 'corrupt' ? (
               <>
                 {top.hasBackup && (

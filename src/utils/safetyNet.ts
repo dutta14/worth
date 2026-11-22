@@ -5,11 +5,13 @@
 
 export type WriteFailureKind = 'permission' | 'disk-full' | 'other'
 
-/** Thrown to callers whose write was held instead of reaching the disk. */
-export class FileStoreError extends Error {
-  code: 'corrupt-blocked'
+export type FileStoreErrorCode = 'corrupt-blocked' | 'stale-blocked' | 'unseen-file'
 
-  constructor(code: 'corrupt-blocked', message: string) {
+/** Thrown to callers whose write or delete was held instead of reaching the disk. */
+export class FileStoreError extends Error {
+  code: FileStoreErrorCode
+
+  constructor(code: FileStoreErrorCode, message: string) {
     super(message)
     this.name = 'FileStoreError'
     this.code = code
@@ -30,11 +32,22 @@ export interface CorruptFile {
   hasBackup: boolean
 }
 
+/** A file whose bytes on disk no longer match what this tab last read or wrote. */
+export interface StaleFile {
+  path: string
+  /** True when the file is gone from the disk. */
+  deleted: boolean
+}
+
 export type CorruptAction = 'restore-latest' | 'start-fresh'
+
+/** How the user ends the hold on externally changed files. */
+export type ExternalAction = 'reload' | 'keep'
 
 export interface SafetySnapshot {
   failed: FailedWrite[]
   corrupt: CorruptFile[]
+  stale: StaleFile[]
   permissionLost: boolean
   /** False after a backup copy could not be saved; cleared by the next successful copy. */
   backupsHealthy: boolean
@@ -44,6 +57,7 @@ export interface SafetySnapshot {
 export const EMPTY_SAFETY_SNAPSHOT: SafetySnapshot = {
   failed: [],
   corrupt: [],
+  stale: [],
   permissionLost: false,
   backupsHealthy: true,
 }
@@ -70,16 +84,19 @@ export const snapshotsEqual = (a: SafetySnapshot, b: SafetySnapshot): boolean =>
       entry.path === b.corrupt[i].path &&
       entry.copyPath === b.corrupt[i].copyPath &&
       entry.hasBackup === b.corrupt[i].hasBackup,
-  )
+  ) &&
+  a.stale.length === b.stale.length &&
+  a.stale.every((entry, i) => entry.path === b.stale[i].path && entry.deleted === b.stale[i].deleted)
 
 export type SafetyIssue =
   | { type: 'permission' }
   | { type: 'write-failed'; paths: string[]; diskFull: boolean }
   | ({ type: 'corrupt' } & CorruptFile)
+  | { type: 'external-change'; paths: string[]; deleted: boolean }
 
 /**
  * Turns a snapshot into the issues the banner can show, highest priority first
- * (permission, write failure, then one issue per corrupt file). When permission is lost, failures caused by
+ * (permission, write failure, one issue per corrupt file, then a single issue for every externally changed file). When permission is lost, failures caused by
  * it are folded into the permission issue so the user sees one clear next step.
  */
 export const deriveIssues = (snapshot: SafetySnapshot): SafetyIssue[] => {
@@ -96,6 +113,13 @@ export const deriveIssues = (snapshot: SafetySnapshot): SafetyIssue[] => {
     })
   }
   for (const file of snapshot.corrupt) issues.push({ type: 'corrupt', ...file })
+  if (snapshot.stale.length > 0) {
+    issues.push({
+      type: 'external-change',
+      paths: snapshot.stale.map(entry => entry.path),
+      deleted: snapshot.stale.length === 1 && snapshot.stale[0].deleted,
+    })
+  }
   return issues
 }
 
@@ -107,6 +131,48 @@ export const corruptPathFor = (path: string, stamp: string): string => `${path}.
 
 /** The unreadable bytes of a corrupt file, as saved next to it. */
 export const isCorruptCopyOf = (name: string, original: string): boolean => name.startsWith(`${original}.corrupt-`)
+
+/* ── External changes ─────────────────────────────────────── */
+
+/** What a file looked like when this tab last read or wrote it. */
+export interface Fingerprint {
+  lastModified: number
+  size: number
+  hash: string
+}
+
+/**
+ * 53-bit non-cryptographic hash (cyrb53). It detects change; it is not a security control, and it avoids
+ * `crypto.subtle`, which is missing in some environments.
+ */
+export const hashBytes = (bytes: Uint8Array): string => {
+  let h1 = 0xdeadbeef
+  let h2 = 0x41c6ce57
+  for (let i = 0; i < bytes.length; i++) {
+    h1 = Math.imul(h1 ^ bytes[i], 2654435761)
+    h2 = Math.imul(h2 ^ bytes[i], 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16)
+}
+
+export const fingerprintBytes = (bytes: Uint8Array, lastModified: number): Fingerprint => ({
+  lastModified,
+  size: bytes.length,
+  hash: hashBytes(bytes),
+})
+
+export type FingerprintComparison = 'same' | 'size-changed' | 'mtime-only'
+
+/** Cheap check from file metadata alone; `mtime-only` means the content must be hashed to know. */
+export const compareFingerprint = (
+  base: Fingerprint,
+  current: { lastModified: number; size: number },
+): FingerprintComparison => {
+  if (current.size !== base.size) return 'size-changed'
+  return current.lastModified === base.lastModified ? 'same' : 'mtime-only'
+}
 
 /* ── Backups ──────────────────────────────────────────────── */
 

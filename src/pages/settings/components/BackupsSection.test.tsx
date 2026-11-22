@@ -38,6 +38,8 @@ const renderSection = (overrides: Partial<SafetyNetContextValue> = {}) => {
     listBackups: vi.fn(async () => ENTRIES),
     restoreBackup: vi.fn(async () => {}),
     resolveCorrupt: vi.fn(async () => null),
+    resolveExternal: vi.fn(async () => {}),
+    notice: '',
     ...overrides,
   }
   render(
@@ -266,6 +268,8 @@ describe('BackupsSection', () => {
       listBackups: () => new Promise<BackupEntry[]>(r => (resolve = r)),
       restoreBackup: vi.fn(async () => {}),
       resolveCorrupt: vi.fn(async () => null),
+      resolveExternal: vi.fn(async () => {}),
+      notice: '',
     }
     const { unmount } = render(
       <SafetyNetContext.Provider value={value}>

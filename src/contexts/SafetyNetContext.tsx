@@ -1,6 +1,7 @@
 import {
   createContext,
   FC,
+  Fragment,
   ReactNode,
   useCallback,
   useContext,
@@ -16,9 +17,14 @@ import { useFlag } from '../flags/useFlag'
 import { usePageHideFlush } from '../hooks/usePageHideFlush'
 import { isSafetyNetStore } from '../utils/fileStoreTypes'
 import { EMPTY_SAFETY_SNAPSHOT } from '../utils/safetyNet'
-import type { BackupEntry, CorruptAction, SafetySnapshot } from '../utils/safetyNet'
+import type { BackupEntry, CorruptAction, ExternalAction, SafetySnapshot } from '../utils/safetyNet'
 
 const FOCUS_CHECK_MIN_INTERVAL_MS = 5000
+const NOTICE_MS = 1000
+const NOTICES: Record<ExternalAction, string> = {
+  reload: 'Reloaded from disk. Any unsaved edits were kept in _backups.',
+  keep: 'Saved your version. The previous version is in _backups.',
+}
 
 export interface SafetyNetContextValue {
   /** True only for a real folder with the `data-safety-net` flag on. */
@@ -40,6 +46,14 @@ export interface SafetyNetContextValue {
    * restored (`null` for `start-fresh`). Rejects with the file untouched.
    */
   resolveCorrupt: (path: string, action: CorruptAction) => Promise<BackupEntry | null>
+  /**
+   * Ends the hold on files that changed on disk. `reload` discards this tab's version and remounts the app
+   * shell so every page re-reads; `keep` overwrites the disk. Both keep what they replace in `_backups/`.
+   * Rejects with the files untouched.
+   */
+  resolveExternal: (action: ExternalAction) => Promise<void>
+  /** Status text for the banner's live region after a resolution; the banner may remount, so it lives here. */
+  notice: string
 }
 
 const noop = async (): Promise<void> => {}
@@ -57,6 +71,8 @@ const defaultValue: SafetyNetContextValue = {
   listBackups: noBackups,
   restoreBackup: noop,
   resolveCorrupt: noResolution,
+  resolveExternal: noop,
+  notice: '',
 }
 
 export const SafetyNetContext = createContext<SafetyNetContextValue>(defaultValue)
@@ -72,6 +88,9 @@ export const SafetyNetProvider: FC<{ children: ReactNode }> = ({ children }) => 
   const { fileStore, pickFolder } = useFileStore()
   const [reconnectDenied, setReconnectDenied] = useState(false)
   const lastCheckRef = useRef(0)
+  // Remounts the app shell after Reload so pages that read once on mount pick up the disk version.
+  const [epoch, setEpoch] = useState(0)
+  const [notice, setNotice] = useState('')
 
   const store = useMemo(
     () =>
@@ -95,6 +114,7 @@ export const SafetyNetProvider: FC<{ children: ReactNode }> = ({ children }) => 
       if (now - lastCheckRef.current < FOCUS_CHECK_MIN_INTERVAL_MS) return
       lastCheckRef.current = now
       store.checkPermission().catch(error => console.error('Permission check failed:', error))
+      store.checkExternalChanges().catch(error => console.error('External change check failed:', error))
     }
     window.addEventListener('focus', check)
     document.addEventListener('visibilitychange', check)
@@ -159,6 +179,40 @@ export const SafetyNetProvider: FC<{ children: ReactNode }> = ({ children }) => 
     [store],
   )
 
+  const resolveExternal = useCallback(
+    async (action: ExternalAction) => {
+      if (!store) return
+      if (action === 'keep') {
+        await store.keepLocal()
+        setNotice(NOTICES.keep)
+        return
+      }
+      try {
+        await store.reloadFromDisk()
+      } finally {
+        // Files reloaded before a failure still changed; balances only refresh on this event.
+        window.dispatchEvent(new Event('data-changed'))
+      }
+      setNotice(NOTICES.reload)
+      setEpoch(current => current + 1)
+    },
+    [store],
+  )
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = setTimeout(() => setNotice(''), NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [notice])
+
+  const focusedEpochRef = useRef(0)
+  useEffect(() => {
+    if (epoch === focusedEpochRef.current) return
+    focusedEpochRef.current = epoch
+    // The button that was pressed went away with the old shell; hand focus to the page instead of <body>.
+    document.getElementById('main-content')?.focus()
+  }, [epoch])
+
   const value = useMemo<SafetyNetContextValue>(
     () => ({
       enabled: store !== null,
@@ -170,6 +224,8 @@ export const SafetyNetProvider: FC<{ children: ReactNode }> = ({ children }) => 
       listBackups,
       restoreBackup,
       resolveCorrupt,
+      resolveExternal,
+      notice,
     }),
     [
       store,
@@ -181,10 +237,16 @@ export const SafetyNetProvider: FC<{ children: ReactNode }> = ({ children }) => 
       listBackups,
       restoreBackup,
       resolveCorrupt,
+      resolveExternal,
+      notice,
     ],
   )
 
-  return <SafetyNetContext.Provider value={value}>{children}</SafetyNetContext.Provider>
+  return (
+    <SafetyNetContext.Provider value={value}>
+      <Fragment key={epoch}>{children}</Fragment>
+    </SafetyNetContext.Provider>
+  )
 }
 
 export default SafetyNetContext

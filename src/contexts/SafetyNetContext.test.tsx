@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, renderHook, screen } from '@testing-library/react'
+import { useEffect } from 'react'
 import type { FC, ReactNode } from 'react'
 import { SafetyNetProvider, useSafetyNet } from './SafetyNetContext'
 import { FileStoreContext } from './FileStoreContext'
@@ -27,6 +28,9 @@ const makeFakeStore = (hasHandle = true) => {
     hasUnsavedWork: vi.fn(() => false),
     retryFailed: vi.fn(async () => {}),
     checkPermission: vi.fn(async () => {}),
+    checkExternalChanges: vi.fn(async () => {}),
+    reloadFromDisk: vi.fn(async () => {}),
+    keepLocal: vi.fn(async () => {}),
     requestReconnect: vi.fn<() => Promise<PermissionState>>(async () => 'granted'),
     listBackups: vi.fn<() => Promise<BackupEntry[]>>(async () => []),
     restoreBackup: vi.fn<(entry: BackupEntry) => Promise<void>>(async () => {}),
@@ -138,6 +142,7 @@ describe('SafetyNetProvider', () => {
       const failed: SafetySnapshot = {
         failed: [{ path: 'a.json', kind: 'other' }],
         corrupt: [],
+        stale: [],
         permissionLost: false,
         backupsHealthy: true,
       }
@@ -178,6 +183,7 @@ describe('SafetyNetProvider', () => {
         setSnapshot({
           failed: [{ path: 'a.json', kind: 'other' }],
           corrupt: [],
+          stale: [],
           permissionLost: false,
           backupsHealthy: true,
         }),
@@ -361,6 +367,20 @@ describe('SafetyNetProvider', () => {
       expect(store.checkPermission).toHaveBeenCalledTimes(2)
     })
 
+    it('checks for external changes together with permission', () => {
+      const { store } = setup()
+      window.dispatchEvent(new Event('focus'))
+      expect(store.checkExternalChanges).toHaveBeenCalledTimes(1)
+    })
+
+    it('logs a failed external change check instead of throwing', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { store } = setup()
+      store.checkExternalChanges.mockRejectedValueOnce(new Error('nope'))
+      window.dispatchEvent(new Event('focus'))
+      await vi.waitFor(() => expect(errorSpy).toHaveBeenCalledWith('External change check failed:', expect.any(Error)))
+    })
+
     it('logs a failed check instead of throwing', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       const { store } = setup()
@@ -378,7 +398,13 @@ describe('SafetyNetProvider', () => {
   })
 
   describe('reconnect', () => {
-    const permissionLost: SafetySnapshot = { failed: [], corrupt: [], permissionLost: true, backupsHealthy: true }
+    const permissionLost: SafetySnapshot = {
+      failed: [],
+      corrupt: [],
+      stale: [],
+      permissionLost: true,
+      backupsHealthy: true,
+    }
 
     it('requests permission and stays not-denied when granted', async () => {
       const { store, setSnapshot } = makeFakeStore()
@@ -446,6 +472,104 @@ describe('SafetyNetProvider', () => {
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await act(() => result.current.chooseFolderAgain())
       expect(errorSpy).toHaveBeenCalledWith('Choose folder failed:', expect.any(Error))
+    })
+  })
+
+  describe('resolveExternal', () => {
+    const Probe: FC = () => {
+      const { notice } = useSafetyNet()
+      return <p data-testid="notice">{notice}</p>
+    }
+
+    it('keeps this version without remounting and posts a status notice', async () => {
+      const { store } = makeFakeStore()
+      const { Wrapper } = makeWrapper(store, true)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      await act(() => result.current.resolveExternal('keep'))
+      expect(store.keepLocal).toHaveBeenCalledTimes(1)
+      expect(store.reloadFromDisk).not.toHaveBeenCalled()
+      expect(result.current.notice).toBe('Saved your version. The previous version is in _backups.')
+    })
+
+    it('rejects and posts no notice when keeping fails', async () => {
+      const { store } = makeFakeStore()
+      store.keepLocal.mockRejectedValue(new Error('disk gone'))
+      const { Wrapper } = makeWrapper(store, true)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      await expect(act(() => result.current.resolveExternal('keep'))).rejects.toThrow('disk gone')
+      expect(result.current.notice).toBe('')
+    })
+
+    it('reloads from disk, refreshes balances, remounts the children and moves focus to the page', async () => {
+      const { store } = makeFakeStore()
+      const { Wrapper } = makeWrapper(store, true)
+      let mounts = 0
+      const Counter: FC = () => {
+        const { resolveExternal } = useSafetyNet()
+        useEffect(() => {
+          mounts += 1
+        }, [])
+        return (
+          <button type="button" onClick={() => void resolveExternal('reload')}>
+            go
+          </button>
+        )
+      }
+      const changed = vi.fn()
+      window.addEventListener('data-changed', changed)
+      render(
+        <Wrapper>
+          <main id="main-content" tabIndex={-1}>
+            <Counter />
+            <Probe />
+          </main>
+        </Wrapper>,
+      )
+      expect(mounts).toBe(1)
+      await act(async () => {
+        screen.getByRole('button', { name: 'go' }).click()
+      })
+      window.removeEventListener('data-changed', changed)
+      expect(store.reloadFromDisk).toHaveBeenCalledTimes(1)
+      expect(changed).toHaveBeenCalledTimes(1)
+      expect(mounts).toBe(2)
+      expect(screen.getByTestId('notice')).toHaveTextContent(
+        'Reloaded from disk. Any unsaved edits were kept in _backups.',
+      )
+      expect(document.getElementById('main-content')).toHaveFocus()
+    })
+
+    it('refreshes balances but does not remount when the reload fails', async () => {
+      const { store } = makeFakeStore()
+      store.reloadFromDisk.mockRejectedValue(new Error('no backup'))
+      const { Wrapper } = makeWrapper(store, true)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      const changed = vi.fn()
+      window.addEventListener('data-changed', changed)
+      await expect(act(() => result.current.resolveExternal('reload'))).rejects.toThrow('no backup')
+      window.removeEventListener('data-changed', changed)
+      expect(changed).toHaveBeenCalledTimes(1)
+      expect(result.current.notice).toBe('')
+    })
+
+    it('clears the notice after a second', async () => {
+      vi.useFakeTimers()
+      const { store } = makeFakeStore()
+      const { Wrapper } = makeWrapper(store, true)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      await act(() => result.current.resolveExternal('keep'))
+      expect(result.current.notice).not.toBe('')
+      act(() => {
+        vi.advanceTimersByTime(1000)
+      })
+      expect(result.current.notice).toBe('')
+    })
+
+    it('does nothing when inert', async () => {
+      const { Wrapper } = makeWrapper(new MemoryFileStore(), true)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      await act(() => result.current.resolveExternal('reload'))
+      expect(result.current.notice).toBe('')
     })
   })
 })

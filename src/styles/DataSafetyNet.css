@@ -16,10 +16,19 @@
   animation: dsn-fade-in 150ms ease;
 }
 
+.dsn-banner--warning {
+  border-bottom-color: var(--color-warning);
+  background: var(--color-warning-light);
+}
+
 .dsn-banner__icon {
   flex-shrink: 0;
   margin-top: 1px;
   color: var(--color-negative);
+}
+
+.dsn-banner--warning .dsn-banner__icon {
+  color: var(--color-warning-text);
 }
 
 .dsn-banner__text {
