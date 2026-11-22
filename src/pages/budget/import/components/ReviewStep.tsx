@@ -56,7 +56,7 @@ const ReviewStep: FC<ReviewStepProps> = ({ plan, onOptions }) => {
 
   const { totals, options } = plan
   const monthKeys = Object.keys(plan.months)
-  const replacedMonths = monthKeys.filter(month => plan.months[month].existingCount > 0)
+  const replacedMonths = monthKeys.filter(month => plan.months[month].hasExistingFile)
   const nothingNew = totals.newRows === 0
 
   const chooseFilter = (next: ReviewFilter) => {

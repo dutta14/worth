@@ -127,6 +127,16 @@ describe('buildImportPlan', () => {
     expect(plan.months['2026-10'].duplicateRows.length).toBeGreaterThan(0)
   })
 
+  it('flags months that have a file even when its rows cannot be read', () => {
+    const existing = {
+      '2026-10': 'Transaction Date,Memo,Amount\n2026-10-02,Old,-1.00',
+      '2026-11': '  \n',
+    }
+    const plan = planFromTexts([{ name: 'f05.csv', text: f05 }], { existing })
+    expect(plan.months['2026-10']).toMatchObject({ existingCount: 0, hasExistingFile: true })
+    expect(plan.months['2026-11']).toMatchObject({ existingCount: 0, hasExistingFile: false })
+  })
+
   it('ignores stored rows when replacing months', () => {
     const existing = { '2026-10': 'Date,Category,Amount,Description\n2026-10-02,X,-4.25,Coffee Shop' }
     const plan = planFromTexts([{ name: 'f13.csv', text: f13 }], {

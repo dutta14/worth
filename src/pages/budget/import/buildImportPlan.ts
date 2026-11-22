@@ -63,7 +63,12 @@ export function buildImportPlan({ files, existingCsvs, categoryGroups, options }
     if (plan) return plan
     const existing = readExistingRows(existingCsvs[month] ?? null)
     known.set(month, options.replaceMonths ? new Map() : countKeys(existing))
-    plan = { added: [], duplicateRows: [], existingCount: existing.length }
+    plan = {
+      added: [],
+      duplicateRows: [],
+      existingCount: existing.length,
+      hasExistingFile: (existingCsvs[month] ?? '').trim() !== '',
+    }
     monthPlans.set(month, plan)
     return plan
   }

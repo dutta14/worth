@@ -1,7 +1,6 @@
 import { FC, useId } from 'react'
 import type { CommitResult } from '../commitImport'
-import { failureMessage } from '../messages'
-import { countLabel } from '../reviewRows'
+import { failureMessage, importedMessage, UNDONE_MESSAGE } from '../messages'
 
 interface ResultStepProps {
   result: CommitResult
@@ -28,18 +27,15 @@ const ResultStep: FC<ResultStepProps> = ({ result, undone, undoFailed, canUndo, 
   }
 
   return (
-    <section className="iw-result" role="status" aria-labelledby={`${id}-title`}>
+    <section className="iw-result" aria-labelledby={`${id}-title`}>
       <h3 id={`${id}-title`} className="iw-step-title" tabIndex={-1} data-iw-step-heading>
         {undone ? 'Import undone' : 'Import complete'}
       </h3>
       {undone ? (
-        <p>Import undone. Your budget is back to how it was.</p>
+        <p>{UNDONE_MESSAGE}</p>
       ) : (
         <>
-          <p>
-            Imported {countLabel(result.imported, 'transaction', 'transactions')} into{' '}
-            {countLabel(result.months.length, 'month', 'months')}.
-          </p>
+          <p>{importedMessage(result)}</p>
           {result.snapshotFailed && (
             <p className="iw-warning">A backup could not be made before importing. Your import still went through.</p>
           )}

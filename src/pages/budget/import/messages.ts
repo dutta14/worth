@@ -1,6 +1,12 @@
-import type { CommitFailure } from './commitImport'
+import type { CommitFailure, CommitSuccess } from './commitImport'
 import { formatMonthList } from './format'
 import type { MappingProblem } from './mapping'
+import { countLabel } from './reviewRows'
+
+export const UNDONE_MESSAGE = 'Import undone. Your budget is back to how it was.'
+
+export const importedMessage = (result: CommitSuccess): string =>
+  `Imported ${countLabel(result.imported, 'transaction', 'transactions')} into ${countLabel(result.months.length, 'month', 'months')}.`
 
 export const failureMessage = (result: CommitFailure): string => {
   if (result.reason === 'unmergeable') {

@@ -281,4 +281,86 @@ describe('Import wizard', () => {
     await user.click(screen.getByRole('checkbox', { name: 'Skip duplicates' }))
     expect(screen.getByText('Turning this off will count matching transactions twice.')).toBeInTheDocument()
   })
+
+  describe('replacing a month whose file cannot be read', () => {
+    const MEMO_CSV = 'Transaction Date,Memo,Amount\n2026-10-02,Old row,-1.00'
+    const seeded = async () => {
+      const fileStore = new MemoryFileStore()
+      await fileStore.writeJSON('budget/categories.json', { version: 1, years: [2026], categoryGroups: [] })
+      await fileStore.writeCSV(
+        'transactions/2026/2026-10.csv',
+        MEMO_CSV.split('\n').map(line => line.split(',')),
+      )
+      return fileStore
+    }
+    const openLegacy = async (fileStore: MemoryFileStore) => {
+      const ui = setup({ request: { files: [asFile('legacy.csv', f11)] } }, fileStore)
+      await waitFor(() => expect(screen.getByTestId('months')).toHaveTextContent('2026-10'))
+      await ui.user.click(screen.getByRole('button', { name: 'Import' }))
+      await screen.findByRole('heading', { name: 'Review before importing' })
+      return ui
+    }
+    const warning = 'Existing transactions in Oct 2026 will be replaced. You can undo this after importing.'
+
+    it('names the month in the replace warning only after the user chooses to replace', async () => {
+      const { user } = await openLegacy(await seeded())
+      expect(screen.queryByText(warning)).not.toBeInTheDocument()
+      await user.click(screen.getByRole('checkbox', { name: 'Replace existing months' }))
+      expect(screen.getByText(warning)).toBeInTheDocument()
+    })
+
+    it('leaves the file alone and reports it when replace is off', async () => {
+      const fileStore = await seeded()
+      const { user } = await openLegacy(fileStore)
+      await user.click(screen.getByRole('button', { name: /^Import \d+ transactions?$/ }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('Oct 2026 already has data Worth cannot add to.')
+      expect((await fileStore.readCSV('transactions/2026/2026-10.csv')).map(r => r.join(','))).toEqual(
+        MEMO_CSV.split('\n'),
+      )
+    })
+
+    it('replaces the file once the user has chosen to', async () => {
+      const fileStore = await seeded()
+      const { user } = await openLegacy(fileStore)
+      await user.click(screen.getByRole('checkbox', { name: 'Replace existing months' }))
+      await user.click(screen.getByRole('button', { name: /^Import \d+ transactions?$/ }))
+      await screen.findByRole('heading', { name: 'Import complete' })
+      const rows = await fileStore.readCSV('transactions/2026/2026-10.csv')
+      expect(rows[0]).toEqual(['Date', 'Category', 'Amount', 'Description'])
+      expect(rows.flat()).not.toContain('Old row')
+    })
+  })
+
+  describe('screen reader announcements', () => {
+    const liveRegionsWith = (text: string) =>
+      Array.from(document.querySelectorAll('[role="alert"], [role="status"], [aria-live]')).filter(el =>
+        el.textContent?.includes(text),
+      )
+
+    it('announces a parse error once', async () => {
+      await openWith([['blank.csv', '\n\n']])
+      await screen.findByRole('alert')
+      expect(liveRegionsWith('We found no transactions in blank.csv.')).toHaveLength(1)
+    })
+
+    it('announces a failed commit once', async () => {
+      const fileStore = new MemoryFileStore()
+      vi.spyOn(fileStore, 'writeCSV').mockRejectedValue(new Error('disk full'))
+      const { user } = setup({ request: { files: [asFile('legacy.csv', f11)] } }, fileStore)
+      await user.click(screen.getByRole('button', { name: 'Import' }))
+      await user.click(await screen.findByRole('button', { name: /^Import \d+ transactions?$/ }))
+      await screen.findByRole('alert')
+      expect(liveRegionsWith('Import did not finish.')).toHaveLength(1)
+    })
+
+    it('announces a successful import and an undo once each', async () => {
+      const { user } = await openWith([['legacy.csv', f11]])
+      await user.click(await screen.findByRole('button', { name: /^Import \d+ transactions?$/ }))
+      await screen.findByRole('heading', { name: 'Import complete' })
+      expect(liveRegionsWith('Imported 3 transactions into 1 month.')).toHaveLength(1)
+      await user.click(screen.getByRole('button', { name: 'Undo import' }))
+      await screen.findByRole('heading', { name: 'Import undone' })
+      expect(liveRegionsWith('Import undone. Your budget is back to how it was.')).toHaveLength(1)
+    })
+  })
 })

@@ -1,7 +1,7 @@
 import { Dispatch, FC, useEffect, useMemo, useRef } from 'react'
 import { useFocusTrap } from '../../../../hooks/useFocusTrap'
 import { resolveMapping } from '../mapping'
-import { columnsBlockReason, failureMessage } from '../messages'
+import { columnsBlockReason, importedMessage, UNDONE_MESSAGE } from '../messages'
 import { countLabel } from '../reviewRows'
 import type { ImportPlan } from '../types'
 import { canGoBack, hasColumnsStep, type WizardAction, type WizardState } from '../wizardState'
@@ -68,23 +68,19 @@ const ImportWizard: FC<ImportWizardProps> = ({
   const hasLaterPending = files.some((f, i) => i > fileIndex && f.mapping === null)
   const stepper = stepLabel(state)
 
+  // Errors are announced by their own role="alert" in the step body, so they are left out of the live region.
   const announcement = (() => {
     if (phase === 'loading') return `Reading ${state.loadingNames.join(', ')}...`
-    if (phase === 'error') return state.failure?.message ?? ''
     if (phase === 'columns') return stepper ?? ''
     if ((phase === 'review' || committing) && plan) {
+      if (committing) return 'Importing...'
       const summary =
         plan.totals.newRows === 0
           ? 'Nothing new to import.'
           : `${countLabel(plan.totals.newRows, 'new transaction', 'new transactions')}.`
-      return committing ? 'Importing...' : `${stepper}. ${summary}`
+      return `${stepper}. ${summary}`
     }
-    if (phase === 'result' && commit) {
-      if (!commit.ok) return failureMessage(commit)
-      return state.undone
-        ? 'Import undone. Your budget is back to how it was.'
-        : `Imported ${countLabel(commit.imported, 'transaction', 'transactions')}.`
-    }
+    if (phase === 'result' && commit?.ok) return state.undone ? UNDONE_MESSAGE : importedMessage(commit)
     return ''
   })()
 

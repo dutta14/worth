@@ -78,6 +78,8 @@ export interface MonthPlan {
   /** Rows recognized as duplicates; they are in `added` only when duplicates are not skipped. */
   duplicateRows: PlannedRow[]
   existingCount: number
+  /** True when the month already has a non-empty file, even one whose rows could not be read. */
+  hasExistingFile: boolean
 }
 
 export interface PlanSkippedRow extends SkippedRow {
