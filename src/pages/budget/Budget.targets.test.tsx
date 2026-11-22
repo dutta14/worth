@@ -140,7 +140,7 @@ describe('Budget with the category-budget-targets flag on', () => {
     renderBudget(true)
 
     const row = await screen.findByRole('row', { name: /^Dining/ })
-    expect(within(row).getByRole('button', { name: 'Dining monthly target $500, edit' })).toBeInTheDocument()
+    expect(await within(row).findByRole('button', { name: 'Dining monthly target $500, edit' })).toBeInTheDocument()
     expect(within(row).getAllByText('$120 over')).toHaveLength(2) // June period cell and Vs target
   })
 
