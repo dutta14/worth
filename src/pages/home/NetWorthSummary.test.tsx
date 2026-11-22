@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import NetWorthSummary from './NetWorthSummary'
 import { makeAccount, makeBalanceEntry } from '../../test/factories'
@@ -130,5 +130,82 @@ describe('NetWorthSummary', () => {
     expect(screen.getByText('Liquid')).toBeInTheDocument()
     expect(screen.getByText('Illiquid')).toBeInTheDocument()
     expect(screen.getAllByText('(10.0%)')).toHaveLength(6)
+  })
+})
+
+describe('NetWorthSummary partial month', () => {
+  const partial = { month: '2024-03', missingCount: 2 }
+  const changeCells = () => document.querySelectorAll('.nw-change, .nw-trend-val, .nw-trend-pct')
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2024, 3, 8, 12))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('shows the Partial month badge with the missing count description', () => {
+    render(<NetWorthSummary {...defaultProps} partial={partial} />)
+
+    expect(screen.getByText('Partial month')).toHaveAccessibleDescription(
+      '2 accounts have no balance for March. Net worth leaves them out.',
+    )
+  })
+
+  it('keeps the net worth amount and drops every change figure', () => {
+    render(<NetWorthSummary {...defaultProps} partial={partial} />)
+
+    expect(screen.getByText('$11,000')).toBeInTheDocument()
+    expect(changeCells()).toHaveLength(0)
+    expect(screen.queryByText(/↗|↘/)).not.toBeInTheDocument()
+  })
+
+  it('replaces the change text with the hidden-change message', () => {
+    render(<NetWorthSummary {...defaultProps} partial={partial} />)
+
+    expect(screen.getByText('Change hidden until March is complete.')).toBeInTheDocument()
+  })
+
+  it('still shows FI and GW amounts without trends', () => {
+    render(<NetWorthSummary {...defaultProps} partial={partial} />)
+
+    expect(screen.getByText('Financial Independence (FI)')).toBeInTheDocument()
+    expect(screen.getByText('Generational Wealth (GW)')).toBeInTheDocument()
+    expect([...document.querySelectorAll('.nw-goal-amount')].map(el => el.textContent)).toEqual(['$3,300', '$7,700'])
+  })
+
+  it('adds the year to the month when it is not the current year', () => {
+    vi.setSystemTime(new Date(2026, 3, 8, 12))
+    render(<NetWorthSummary {...defaultProps} partial={partial} />)
+
+    expect(screen.getByText('Change hidden until March 2024 is complete.')).toBeInTheDocument()
+  })
+
+  it('restores the change figures when the user views an older month', async () => {
+    const user = userEvent.setup()
+    render(<NetWorthSummary {...defaultProps} partial={partial} />)
+
+    await user.click(screen.getByRole('button', { name: 'Switch to February 2024' }))
+
+    expect(screen.queryByText('Partial month')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Change hidden until/)).not.toBeInTheDocument()
+    expect(changeCells().length).toBeGreaterThan(0)
+  })
+
+  it('shows no badge when the partial month is not the one on screen', () => {
+    render(<NetWorthSummary {...defaultProps} partial={{ month: '2024-04', missingCount: 1 }} />)
+
+    expect(screen.queryByText('Partial month')).not.toBeInTheDocument()
+    expect(changeCells().length).toBeGreaterThan(0)
+  })
+
+  it.each([undefined, null])('renders the existing change figures when partial is %s', value => {
+    render(<NetWorthSummary {...defaultProps} partial={value} />)
+
+    expect(screen.queryByText('Partial month')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Change hidden until/)).not.toBeInTheDocument()
+    expect(within(document.body).getAllByText(/\$1,000/).length).toBeGreaterThan(0)
   })
 })

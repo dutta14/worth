@@ -1,6 +1,8 @@
 import React, { FC, useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { Account, BalanceEntry, formatCurrency, ACCOUNT_TYPE_LABELS } from '../data/types'
 import MonthPicker from '../../components/MonthPicker'
+import PartialMonthBadge from '../data/components/PartialMonthBadge'
+import { monthLabel as longMonthLabel, type PartialMonth } from '../data/monthStatus'
 
 type ComparisonPeriod = '1m' | '3m' | '6m' | 'ytd' | '1y' | 'all'
 const COMPARISON_OPTIONS: { value: ComparisonPeriod; label: string }[] = [
@@ -17,12 +19,13 @@ interface NetWorthSummaryProps {
   balances: BalanceEntry[]
   allMonths: string[] // sorted desc (newest first)
   onNavigate: () => void
+  partial?: PartialMonth | null
 }
 
 const sumAccountBalances = (accounts: Account[], balanceMap: Map<number, number>) =>
   accounts.reduce((sum, account) => sum + (balanceMap.get(account.id) ?? 0), 0)
 
-const NetWorthSummary: FC<NetWorthSummaryProps> = ({ accounts, balances, allMonths, onNavigate }) => {
+const NetWorthSummary: FC<NetWorthSummaryProps> = ({ accounts, balances, allMonths, onNavigate, partial }) => {
   const [monthIdx, setMonthIdx] = useState(0) // 0 = latest
   const [compPeriod, setCompPeriod] = useState<ComparisonPeriod>('1m')
   const [periodOpen, setPeriodOpen] = useState(false)
@@ -114,6 +117,7 @@ const NetWorthSummary: FC<NetWorthSummaryProps> = ({ accounts, balances, allMont
   )
 
   const selectedMonth = allMonths[monthIdx] || ''
+  const selectedPartial = partial && partial.month === selectedMonth ? partial : null
 
   const balanceMapsByMonth = useMemo(() => {
     const monthMaps = new Map<string, Map<number, number>>()
@@ -424,7 +428,14 @@ const NetWorthSummary: FC<NetWorthSummaryProps> = ({ accounts, balances, allMont
       <div className="nw-headline">
         <div className="nw-headline-left">
           <span className="nw-amount">{formatCurrency(netWorth)}</span>
-          {compNw !== null &&
+          {selectedPartial && (
+            <PartialMonthBadge
+              monthLabel={longMonthLabel(selectedPartial.month, new Date())}
+              missingCount={selectedPartial.missingCount}
+            />
+          )}
+          {!selectedPartial &&
+            compNw !== null &&
             (() => {
               const diff = netWorth - compNw
               const pct = compNw !== 0 ? ((diff / compNw) * 100).toFixed(1) : '0.0'
@@ -480,6 +491,11 @@ const NetWorthSummary: FC<NetWorthSummaryProps> = ({ accounts, balances, allMont
           )}
         </div>
       </div>
+      {selectedPartial && (
+        <p className="nw-partial-note">
+          Change hidden until {longMonthLabel(selectedPartial.month, new Date())} is complete.
+        </p>
+      )}
       <MonthPicker allMonths={allMonths} selectedMonth={selectedMonth} onMonthChange={handleMonthChange} />
       <div className="nw-goal-grid">
         {proseParts.clauses.map((clause, clauseIdx) => (
@@ -491,7 +507,7 @@ const NetWorthSummary: FC<NetWorthSummaryProps> = ({ accounts, balances, allMont
             <strong className="nw-goal-amount">{formatCurrency(clause.total)}</strong>
             {(() => {
               const cls = `nw-goal-trend ${clause.diff !== null && clause.diff >= 0 ? 'nw-up' : 'nw-down'}`
-              if (clause.diff === null) return <span className={cls} />
+              if (clause.diff === null || selectedPartial) return <span className={cls} />
               const base = clause.shortLabel === 'FI' ? compFi : compGw
               const pct = base && base !== 0 ? ((clause.diff / Math.abs(base)) * 100).toFixed(1) : null
               return (
@@ -505,7 +521,7 @@ const NetWorthSummary: FC<NetWorthSummaryProps> = ({ accounts, balances, allMont
             })()}
             {clause.children.map(child => {
               const cls = `nw-goal-subtrend ${child.diff !== null && child.diff >= 0 ? 'nw-up' : 'nw-down'}`
-              if (child.diff === null)
+              if (child.diff === null || selectedPartial)
                 return (
                   <React.Fragment key={`${clause.label}-${child.label}`}>
                     <span className="nw-goal-sublabel">{child.label}</span>

@@ -40,13 +40,21 @@ vi.mock('../../hooks/useTouchDrag', () => ({
 }))
 
 let netWorthRenders = 0
+let netWorthProps: { partial?: unknown } = {}
+let chartsProps: { omitMonth?: unknown } = {}
 vi.mock('./NetWorthSummary', () => ({
-  default: () => {
+  default: (props: { partial?: unknown }) => {
     netWorthRenders++
+    netWorthProps = props
     return <div>Net Worth Card</div>
   },
 }))
-vi.mock('./MiniCharts', () => ({ default: () => <div>Charts Card</div> }))
+vi.mock('./MiniCharts', () => ({
+  default: (props: { omitMonth?: unknown }) => {
+    chartsProps = props
+    return <div>Charts Card</div>
+  },
+}))
 vi.mock('./GoalsPeek', () => ({ default: () => <div>Goals Card</div> }))
 vi.mock('./AllocationBreakdown', () => ({ default: () => <div>Allocation Card</div> }))
 vi.mock('./SpendingPeek', () => ({ default: () => <div>Spending Card</div> }))
@@ -72,6 +80,8 @@ beforeEach(() => {
   mockNavigate.mockClear()
   mockFlag = true
   netWorthRenders = 0
+  netWorthProps = {}
+  chartsProps = {}
   mockData = { accounts: nine, balances: entries('2026-10', 7) }
   vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date'] })
   vi.setSystemTime(TODAY)
@@ -304,5 +314,53 @@ describe('Home check-in strip, flag off', () => {
   it('leaves the page heading as a normal, non-focusable heading', () => {
     renderHome()
     expect(screen.getByRole('heading', { level: 1 })).not.toHaveAttribute('tabindex')
+  })
+})
+
+describe('Home partial month', () => {
+  it('passes the partial month to the Net Worth card and omits it from the charts', async () => {
+    renderHome()
+    await stripHeading()
+
+    expect(netWorthProps.partial).toEqual({ month: '2026-10', missingCount: 2 })
+    expect(chartsProps.omitMonth).toBe('2026-10')
+  })
+
+  it('passes no partial month once the latest month is complete', async () => {
+    mockData = { accounts: nine, balances: entries('2026-10', 9) }
+    renderHome()
+    await waitFor(() => expect(screen.getByText('Net Worth Card')).toBeInTheDocument())
+
+    expect(netWorthProps.partial).toBeNull()
+    expect(chartsProps.omitMonth).toBeUndefined()
+  })
+
+  it('keeps passing the partial month while the strip is snoozed', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await stripHeading()
+
+    await user.click(screen.getByRole('button', { name: 'Snooze for 7 days' }))
+
+    expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument()
+    expect(netWorthProps.partial).toEqual({ month: '2026-10', missingCount: 2 })
+    expect(chartsProps.omitMonth).toBe('2026-10')
+  })
+
+  it('evaluates only the latest month, not older gaps', async () => {
+    mockData = { accounts: nine, balances: [...entries('2026-09', 5), ...entries('2026-10', 9)] }
+    renderHome()
+    await waitFor(() => expect(screen.getByText('Net Worth Card')).toBeInTheDocument())
+
+    expect(netWorthProps.partial).toBeNull()
+  })
+
+  it('passes nothing with the flag off, even when the latest month is partial', async () => {
+    mockFlag = false
+    renderHome()
+    await waitFor(() => expect(screen.getByText('Net Worth Card')).toBeInTheDocument())
+
+    expect(netWorthProps.partial).toBeNull()
+    expect(chartsProps.omitMonth).toBeUndefined()
   })
 })

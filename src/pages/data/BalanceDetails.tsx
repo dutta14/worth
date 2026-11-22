@@ -5,7 +5,8 @@ import { Profile } from '../../hooks/useProfile'
 import { FLAGS } from '../../flags/flagDefinitions'
 import { useFlag } from '../../flags/useFlag'
 import { plural } from '../../utils/plural'
-import { currentMonthKey, getMonthStatus, isMonthKey, type MonthKey } from './monthStatus'
+import { currentMonthKey, getMonthStatus, getPartialMonth, isMonthKey, monthLabel, type MonthKey } from './monthStatus'
+import PartialMonthBadge from './components/PartialMonthBadge'
 import {
   Account,
   AccountOwner,
@@ -543,10 +544,20 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
     [accounts, balanceMap, editMode, getEditedBalance, selectedMonth],
   )
 
+  const partialMonth = useMemo(
+    () =>
+      checkInEnabled && !editMode && selectedMonth !== '' && selectedMonth === latestMonth
+        ? getPartialMonth(accounts, balances, latestMonth)
+        : null,
+    [accounts, balances, checkInEnabled, editMode, latestMonth, selectedMonth],
+  )
+
   const selectedSortLookup = editMode && latestMonth ? { month: latestMonth, balanceMap } : selectedBalanceLookup
 
   const getChangeDisplay = (currentBalance: number | undefined, previousBalance: number | undefined) => {
     if (editMode || !previousMonth || previousBalance === undefined) return null
+    // With check-in on, no balance this month means nothing to compare, not a drop to zero.
+    if (checkInEnabled && currentBalance === undefined) return null
 
     const change = (currentBalance ?? 0) - previousBalance
 
@@ -863,6 +874,12 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
         <div className="data-details-summary-title">
           <p className="data-details-summary-label">Net worth</p>
           <p className="data-details-summary-value">{formatCurrency(netWorthTotal)}</p>
+          {partialMonth && (
+            <PartialMonthBadge
+              monthLabel={monthLabel(partialMonth.month, new Date())}
+              missingCount={partialMonth.missingCount}
+            />
+          )}
         </div>
         {editMode ? (
           <div className="data-details-entry-banner" aria-live="polite">

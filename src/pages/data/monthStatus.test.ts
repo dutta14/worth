@@ -6,6 +6,7 @@ import {
   daysSinceMonthEnd,
   getCheckInState,
   getMonthStatus,
+  getPartialMonth,
   isMonthKey,
   monthLabel,
   toDayKey,
@@ -473,5 +474,33 @@ describe('monthLabel', () => {
   it('adds the year for other years', () => {
     expect(monthLabel('2025-10', today)).toBe('October 2025')
     expect(monthLabel('2027-01', today)).toBe('January 2027')
+  })
+})
+
+describe('getPartialMonth', () => {
+  const accounts = [makeAccount(1), makeAccount(2), makeAccount(3)]
+
+  it('returns null when there is no latest month', () => {
+    expect(getPartialMonth(accounts, [], undefined)).toBeNull()
+  })
+
+  it('returns the month and missing count when the latest month lacks balances', () => {
+    const balances = [entry(1, '2026-09'), entry(2, '2026-09'), entry(3, '2026-09'), entry(1, '2026-10')]
+    expect(getPartialMonth(accounts, balances, '2026-10')).toEqual({ month: '2026-10', missingCount: 2 })
+  })
+
+  it('returns null when the latest month is complete', () => {
+    const balances = [entry(1, '2026-10'), entry(2, '2026-10'), entry(3, '2026-10')]
+    expect(getPartialMonth(accounts, balances, '2026-10')).toBeNull()
+  })
+
+  it('does not count inactive accounts as missing', () => {
+    const withInactive = [makeAccount(1), makeAccount(2, 'inactive')]
+    const balances = [entry(1, '2026-09'), entry(2, '2026-09'), entry(1, '2026-10')]
+    expect(getPartialMonth(withInactive, balances, '2026-10')).toBeNull()
+  })
+
+  it('returns null for a month key that is not valid', () => {
+    expect(getPartialMonth(accounts, [entry(1, 'bad')], 'bad')).toBeNull()
   })
 })

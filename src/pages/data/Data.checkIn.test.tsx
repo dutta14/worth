@@ -196,3 +196,30 @@ describe('Data page with the monthly-check-in flag off', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })
+
+describe('Data page Charts tab with a partial month', () => {
+  const CHARTS = '/net-worth/dashboard'
+  const caption = 'October is not plotted until all accounts have a balance.'
+
+  it('captions the omitted partial latest month', () => {
+    mockBalances = partialOctober
+    renderData(CHARTS)
+
+    expect(screen.getByText(caption)).toBeVisible()
+  })
+
+  it('shows no caption when the latest month is complete', () => {
+    mockBalances = [...partialOctober, makeBalanceEntry({ id: 4, accountId: 2, month: '2026-10', balance: 50100 })]
+    renderData(CHARTS)
+
+    expect(screen.queryByText(caption)).not.toBeInTheDocument()
+  })
+
+  it('shows no caption with the flag off', () => {
+    mockCheckInFlag = false
+    mockBalances = partialOctober
+    renderData(CHARTS)
+
+    expect(screen.queryByText(caption)).not.toBeInTheDocument()
+  })
+})

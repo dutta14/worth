@@ -88,6 +88,25 @@ export function getMonthStatus(
   return { month, expected, present, missing, isPartial: missing.length > 0 }
 }
 
+export interface PartialMonth {
+  month: MonthKey
+  missingCount: number
+}
+
+/**
+ * The latest month shown, when some of its expected accounts have no balance; otherwise null.
+ * Only that month is evaluated, so an account abandoned long ago but left active never marks history partial.
+ */
+export const getPartialMonth = (
+  accounts: Account[],
+  balances: BalanceEntry[],
+  latestMonth: string | undefined,
+): PartialMonth | null => {
+  if (latestMonth === undefined) return null
+  const status = getMonthStatus(accounts, balances, latestMonth, latestMonth)
+  return status.isPartial ? { month: latestMonth, missingCount: status.missing.length } : null
+}
+
 export type CheckInKind = 'hidden' | 'future-only' | 'partial' | 'due' | 'up-to-date'
 
 export interface CheckInState {
