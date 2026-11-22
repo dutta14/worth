@@ -21,6 +21,7 @@ import { emptyRulesFile, type CategoryRule } from '../rules'
 import { normalizeRows } from '../normalizeRows'
 import type { ImportPlan } from '../types'
 import type { ReadableFile } from '../readFile'
+import { STORE_UNREADABLE_HEADING, STORE_UNREADABLE_MESSAGE } from '../messages'
 import { DEFAULT_TEXT_NAME, loadWizardFiles, type TextSource } from '../wizardFiles'
 import { cleanFormatName, defaultFormatName, formatContent, type FormatUpdate } from '../savedFormats'
 import type { WizardFile } from '../wizardFiles'
@@ -31,6 +32,10 @@ export interface ImportBudgetApi {
   store: BudgetStore
   commitImport: (plan: ImportPlan, snapshot?: PreImportSnapshot) => Promise<CommitResult>
   undoImport: (record: UndoRecord) => Promise<UndoResult>
+  /** True when the budget files could not be read; the wizard then refuses to open rather than write over them. */
+  blocked?: boolean
+  /** Asks the host to read the budget files again; called when the wizard is opened while blocked. */
+  reload?: () => void
 }
 
 export interface OpenRequest {
@@ -99,10 +104,23 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
   const [rulesLoad, setRulesLoad] = useState<RulesLoad>({ state: 'ready', file: emptyRulesFile() })
   const [rulesOpen, setRulesOpen] = useState(false)
   const { phase, files, options: importOptions } = state
-  const { store } = budget
+  const { store, blocked = false, reload } = budget
+
+  const showBlocked = useCallback(() => {
+    loadToken.current++
+    reload?.()
+    dispatch({
+      type: 'load-failed',
+      failure: { message: STORE_UNREADABLE_MESSAGE, canPickAgain: false, heading: STORE_UNREADABLE_HEADING },
+    })
+  }, [reload])
 
   const start = useCallback(
     async (sources: { files?: ReadableFile[]; texts?: TextSource[] }) => {
+      if (blocked) {
+        showBlocked()
+        return
+      }
       const token = ++loadToken.current
       const names = [...(sources.files ?? []).map(f => f.name), ...(sources.texts ?? []).map(t => t.name)]
       dispatch({ type: 'loading', names })
@@ -115,7 +133,7 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
         dispatch({ type: 'loaded', files: result.files, formats })
       } else dispatch({ type: 'load-failed', failure: { message: result.message, canPickAgain: result.canPickAgain } })
     },
-    [fileStore],
+    [fileStore, blocked, showBlocked],
   )
 
   const pickFiles = useCallback((multiple: boolean) => {
@@ -128,12 +146,13 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
   const open = useCallback(
     (request: OpenRequest = {}) => {
       openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-      if (request.files && request.files.length > 0) void start({ files: request.files })
+      if (blocked) showBlocked()
+      else if (request.files && request.files.length > 0) void start({ files: request.files })
       else if (request.text !== undefined)
         void start({ texts: [{ name: request.name ?? DEFAULT_TEXT_NAME, text: request.text }] })
       else pickFiles(request.multiple ?? false)
     },
-    [pickFiles, start],
+    [pickFiles, start, blocked, showBlocked],
   )
 
   const onInputChange = (e: ChangeEvent<HTMLInputElement>) => {

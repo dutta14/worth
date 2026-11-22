@@ -1,9 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { FC, ReactNode } from 'react'
 import { FileStoreTestProvider } from '../../../test/fileStoreTestUtils'
 import { planFromTexts } from '../../../test/importHelpers'
 import { MemoryFileStore } from '../../../utils/memoryFileStore'
+import { FlagContext } from '../../../flags/FlagContext'
+import { makeFlagContextValue } from '../../../test/flagTestUtils'
+import { parseCSV } from '../../../utils/csvUtils'
 import { useBudget } from './useBudget'
 
 const TEXT = 'Date,Category,Amount,Description\n2026-10-01,Salary,3200.00,Payroll\n2026-10-02,Dining,-6.75,Starbucks'
@@ -50,5 +53,58 @@ describe('useBudget commitImport and undoImport', () => {
       expect(outcome.ok).toBe(false)
     })
     expect(result.current.store.csvs).toEqual({})
+  })
+})
+
+describe('useBudget commitImport when the budget files cannot be read (import wizard on)', () => {
+  const setupFlagged = () => {
+    const fileStore = new MemoryFileStore()
+    const wrapper: FC<{ children: ReactNode }> = ({ children }) => (
+      <FlagContext.Provider value={makeFlagContextValue({ 'import-wizard': true })}>
+        <FileStoreTestProvider store={fileStore}>{children}</FileStoreTestProvider>
+      </FlagContext.Provider>
+    )
+    return { fileStore, ...renderHook(() => useBudget(), { wrapper }) }
+  }
+
+  it('reports importBlocked, refuses to commit and writes nothing', async () => {
+    const { fileStore, result } = setupFlagged()
+    await waitFor(() => expect(result.current.loaded).toBe(true))
+    await fileStore.writeCSV('transactions/2026/2026-10.csv', parseCSV(TEXT))
+    const listFiles = fileStore.listFiles.bind(fileStore)
+    fileStore.listFiles = async path => {
+      if (path === 'transactions') throw new Error('permission denied')
+      return listFiles(path)
+    }
+    await act(async () => {
+      await fileStore.writeJSON('budget/categories.json', { version: 1, years: [2026], categoryGroups: [] })
+    })
+    await waitFor(() => expect(result.current.importBlocked).toBe(true))
+
+    const writeCSV = vi.spyOn(fileStore, 'writeCSV')
+    const plan = planFromTexts([{ name: 'a.csv', text: TEXT }])
+    let outcome: Awaited<ReturnType<typeof result.current.commitImport>> | undefined
+    await act(async () => {
+      outcome = await result.current.commitImport(plan)
+    })
+    expect(outcome).toMatchObject({ ok: false, reason: 'unreadable' })
+    expect(writeCSV).not.toHaveBeenCalled()
+  })
+
+  it('leaves loaded false when the first read fails, so no year is created over unreadable files', async () => {
+    const fileStore = new MemoryFileStore()
+    fileStore.listFiles = async () => {
+      throw new Error('permission denied')
+    }
+    const writeCSV = vi.spyOn(fileStore, 'writeCSV')
+    const wrapper: FC<{ children: ReactNode }> = ({ children }) => (
+      <FlagContext.Provider value={makeFlagContextValue({ 'import-wizard': true })}>
+        <FileStoreTestProvider store={fileStore}>{children}</FileStoreTestProvider>
+      </FlagContext.Provider>
+    )
+    const { result } = renderHook(() => useBudget(), { wrapper })
+    await waitFor(() => expect(result.current.importBlocked).toBe(true))
+    expect(result.current.loaded).toBe(false)
+    expect(writeCSV).not.toHaveBeenCalled()
   })
 })

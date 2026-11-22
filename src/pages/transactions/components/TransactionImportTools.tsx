@@ -2,7 +2,7 @@ import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useFileStore } from '../../../contexts/FileStoreContext'
 import type { BudgetStore } from '../../budget/types'
-import { loadBudgetStore } from '../../budget/utils/budgetStorage'
+import { loadBudgetStoreStrict } from '../../budget/utils/budgetStorage'
 import ApplyRulesDialog from '../../budget/import/components/ApplyRulesDialog'
 import CreateRuleDialog, { type CreateRuleOutcome } from '../../budget/import/components/CreateRuleDialog'
 import RulesDialog from '../../budget/import/components/RulesDialog'
@@ -22,6 +22,7 @@ import {
   MANAGE_RULES_LABEL,
   rulesSaveFailure,
 } from '../../budget/import/ruleMessages'
+import { STORE_UNREADABLE_MESSAGE as IMPORT_PAUSED_MESSAGE } from '../../budget/import/messages'
 import { addRule, categoryResolver, type RuleDraft } from '../../budget/import/rules'
 
 /** The transaction a rule is being made from. */
@@ -56,6 +57,8 @@ const TransactionImportTools: FC<TransactionImportToolsProps> = ({
   const { fileStore } = useFileStore()
   const [store, setStore] = useState<BudgetStore>(EMPTY_STORE)
   const [loaded, setLoaded] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [reloadTick, setReloadTick] = useState(0)
   const storeRef = useRef(store)
   const [panel, setPanel] = useState<Panel>(null)
   const [applyPlan, setApplyPlan] = useState<RecategorizePlan | null>(null)
@@ -66,14 +69,21 @@ const TransactionImportTools: FC<TransactionImportToolsProps> = ({
   useEffect(() => {
     let cancelled = false
     const refresh = () => {
-      loadBudgetStore(fileStore)
+      // Strict: an unreadable folder must not look like an empty one, or an import would write over real months.
+      loadBudgetStoreStrict(fileStore)
         .then(next => {
           if (cancelled) return
           storeRef.current = next
           setStore(next)
+          setLoadFailed(false)
           setLoaded(true)
         })
-        .catch(console.error)
+        .catch(error => {
+          console.error(error)
+          if (cancelled) return
+          setLoadFailed(true)
+          setLoaded(false)
+        })
     }
     refresh()
     const unsubscribe = fileStore.subscribe('budget/categories.json', refresh)
@@ -83,7 +93,7 @@ const TransactionImportTools: FC<TransactionImportToolsProps> = ({
       unsubscribe()
       window.removeEventListener('budget-changed', refresh)
     }
-  }, [fileStore])
+  }, [fileStore, reloadTick])
 
   const adopt = useCallback(
     (next: BudgetStore | null) => {
@@ -101,6 +111,7 @@ const TransactionImportTools: FC<TransactionImportToolsProps> = ({
   const budget = useMemo<ImportBudgetApi>(
     () => ({
       store,
+      blocked: !loaded,
       commitImport: async (plan, snapshot) => {
         onInvalidate()
         const { result, store: next } = await executeImport({ fileStore, store: storeRef.current, plan, snapshot })
@@ -114,7 +125,7 @@ const TransactionImportTools: FC<TransactionImportToolsProps> = ({
         return result
       },
     }),
-    [store, fileStore, onInvalidate, adopt],
+    [store, loaded, fileStore, onInvalidate, adopt],
   )
   const wizard = useImportWizard(budget)
 
@@ -254,6 +265,16 @@ const TransactionImportTools: FC<TransactionImportToolsProps> = ({
       <button type="button" className="txn-filter-btn" onClick={() => void openRules()}>
         <span className="txn-filter-btn-key">{MANAGE_RULES_LABEL}</span>
       </button>
+      {loadFailed && (
+        <>
+          <span className="txn-import-error" role="alert">
+            {IMPORT_PAUSED_MESSAGE}
+          </span>
+          <button type="button" className="txn-filter-btn" onClick={() => setReloadTick(tick => tick + 1)}>
+            <span className="txn-filter-btn-key">Try again</span>
+          </button>
+        </>
+      )}
       {createPortal(dialogs, document.body)}
     </>
   )

@@ -60,4 +60,17 @@ describe('useDriveUpload with the import-wizard flag', () => {
     expect(screen.queryByRole('heading', { name: 'Review before importing' })).not.toBeInTheDocument()
     expect(screen.queryByTestId('picker')).toBeInTheDocument()
   })
+
+  it('pauses the import instead of writing when the budget files cannot be read', async () => {
+    const store = new MemoryFileStore()
+    store.listFiles = async () => {
+      throw new Error('permission denied')
+    }
+    const writeCSV = vi.spyOn(store, 'writeCSV')
+    const { user } = setup(true, store)
+    await upload(user)
+    expect(await screen.findByRole('heading', { name: 'Import is paused' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Review before importing' })).not.toBeInTheDocument()
+    expect(writeCSV).not.toHaveBeenCalled()
+  })
 })

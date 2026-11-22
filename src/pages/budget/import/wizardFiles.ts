@@ -33,6 +33,8 @@ export interface LoadFailure {
   message: string
   /** Offer "Choose another file" next to the message. */
   canPickAgain: boolean
+  /** Replaces the default "Could not open the file" heading. */
+  heading?: string
 }
 
 export const noRowsMessage = (name: string): string =>

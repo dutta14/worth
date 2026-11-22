@@ -821,6 +821,12 @@
   font-weight: var(--fw-semibold);
 }
 
+.txn-import-error {
+  flex-basis: 100%;
+  color: var(--color-negative);
+  font-size: var(--fs-sm);
+}
+
 .txn-category-editor-rule {
   display: block;
   width: 100%;

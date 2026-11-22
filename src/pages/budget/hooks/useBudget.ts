@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { BudgetStore, Transaction, CategoryGroup, BudgetViewMode, BudgetConfigData, SpreadsheetMode } from '../types'
 import {
   loadBudgetStore,
+  loadBudgetStoreStrict,
   saveBudgetStore,
   createYear,
   getGlobalCategoryGroups,
@@ -50,6 +51,10 @@ export function useBudget() {
   const importWizardOn = useFlag(FLAGS.IMPORT_WIZARD)
   const [store, setStore] = useState<BudgetStore>(EMPTY_STORE)
   const [loaded, setLoaded] = useState(false)
+  // Only tracked with the import wizard on: it must not write over month files that could not be read.
+  const [readFailed, setReadFailed] = useState(false)
+  const readFailedRef = useRef(false)
+  const [reloadTick, setReloadTick] = useState(0)
   const storeRef = useRef(store)
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear())
   const [viewMode, setViewMode] = useState<BudgetViewMode>('spreadsheet')
@@ -58,15 +63,23 @@ export function useBudget() {
   useEffect(() => {
     let cancelled = false
     const refresh = () => {
-      loadBudgetStore(fileStore)
+      const load = importWizardOn ? loadBudgetStoreStrict : loadBudgetStore
+      load(fileStore)
         .then(next => {
           if (!cancelled) {
+            readFailedRef.current = false
+            setReadFailed(false)
             storeRef.current = next
             setStore(next)
             setLoaded(true)
           }
         })
-        .catch(console.error)
+        .catch(error => {
+          console.error(error)
+          if (cancelled) return
+          readFailedRef.current = true
+          setReadFailed(true)
+        })
     }
     refresh()
     const unsubscribe = fileStore.subscribe('budget/categories.json', refresh)
@@ -74,7 +87,9 @@ export function useBudget() {
       cancelled = true
       unsubscribe()
     }
-  }, [fileStore])
+  }, [fileStore, importWizardOn, reloadTick])
+
+  const reload = useCallback(() => setReloadTick(tick => tick + 1), [])
 
   const persist = useCallback(
     (next: BudgetStore) => {
@@ -134,6 +149,9 @@ export function useBudget() {
    */
   const commitImport = useCallback(
     async (plan: ImportPlan, snapshot?: PreImportSnapshot): Promise<CommitResult> => {
+      if (readFailedRef.current) {
+        return { ok: false, reason: 'unreadable', failedMonths: [], categoriesFailed: false, restored: true }
+      }
       const { result, store: next } = await executeImport({ fileStore, store: storeRef.current, plan, snapshot })
       if (next) {
         storeRef.current = next
@@ -586,5 +604,7 @@ export function useBudget() {
     summary,
     monthsWithData,
     loaded,
+    importBlocked: readFailed,
+    reload,
   }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { RulesLoad } from '../importStorage'
 import type { RecategorizeResult } from '../recategorize'
@@ -127,5 +127,24 @@ describe('ApplyRulesDialog', () => {
     expect(onClose).not.toHaveBeenCalled()
     finish(okResult)
     await screen.findByRole('heading', { name: 'Rules applied' })
+  })
+
+  it('announces every failed undo again, not only the first', async () => {
+    const { user, onUndo } = setup()
+    onUndo.mockResolvedValue(false)
+    await user.click(screen.getByRole('button', { name: 'Apply rules' }))
+    await user.click(await screen.findByRole('button', { name: 'Undo' }))
+    const first = await screen.findByText(/could not be undone/)
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(screen.getByText(/could not be undone/)).not.toBe(first))
+    expect(onUndo).toHaveBeenCalledTimes(2)
+  })
+
+  it('moves focus into the dialog when a successful undo removes the Undo button', async () => {
+    const { user } = setup()
+    await user.click(screen.getByRole('button', { name: 'Apply rules' }))
+    await user.click(await screen.findByRole('button', { name: 'Undo' }))
+    expect(await screen.findByRole('heading', { name: 'Undone' })).toHaveFocus()
   })
 })

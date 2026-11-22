@@ -15,10 +15,12 @@ interface DriveUploadOptions {
 }
 
 export function useDriveUpload(refreshTree: () => void, { onViewTransactions }: DriveUploadOptions = {}) {
-  const { uploadCSV, store, commitImport, undoImport } = useBudget()
+  const { uploadCSV, store, commitImport, undoImport, importBlocked, reload } = useBudget()
   const importWizardOn = useFlag(FLAGS.IMPORT_WIZARD)
   const wizardBudget: ImportBudgetApi = {
     store,
+    blocked: importBlocked,
+    reload,
     commitImport: async (plan, snapshot) => {
       const result = await commitImport(plan, snapshot)
       refreshTree()

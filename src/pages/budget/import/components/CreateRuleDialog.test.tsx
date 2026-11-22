@@ -194,4 +194,29 @@ describe('CreateRuleDialog', () => {
     finish({ ok: true, applied: null, canUndo: false })
     await screen.findAllByText('Rule saved.')
   })
+
+  it('announces every failed undo again, not only the first', async () => {
+    const { user, onCreate, onUndo } = setup()
+    onCreate.mockResolvedValue({ ok: true, applied: 2, canUndo: true })
+    onUndo.mockResolvedValue(false)
+    await user.selectOptions(screen.getByLabelText('Category'), 'Dining')
+    await user.click(await screen.findByRole('button', { name: 'Create rule and apply to 2' }))
+    await user.click(await screen.findByRole('button', { name: 'Undo' }))
+    const first = await screen.findByText(/could not be undone/)
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(screen.getByText(/could not be undone/)).not.toBe(first))
+    expect(onUndo).toHaveBeenCalledTimes(2)
+  })
+
+  it('moves focus into the dialog when a successful undo removes the Undo button', async () => {
+    const { user, onCreate } = setup()
+    onCreate.mockResolvedValue({ ok: true, applied: 2, canUndo: true })
+    await user.selectOptions(screen.getByLabelText('Category'), 'Dining')
+    await user.click(await screen.findByRole('button', { name: 'Create rule and apply to 2' }))
+    const undo = await screen.findByRole('button', { name: 'Undo' })
+    await user.click(undo)
+    await waitFor(() => expect(undo).not.toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: 'Create a rule' })).toHaveFocus()
+  })
 })

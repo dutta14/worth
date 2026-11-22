@@ -190,7 +190,7 @@ const ImportWizard: FC<ImportWizardProps> = ({
           {phase === 'error' && state.failure && (
             <section>
               <h3 className="iw-step-title" tabIndex={-1} data-iw-step-heading>
-                Could not open the file
+                {state.failure.heading ?? 'Could not open the file'}
               </h3>
               <p className="iw-error" role="alert">
                 {state.failure.message}

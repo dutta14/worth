@@ -245,4 +245,64 @@ describe('TransactionImportTools', () => {
       expect(await screen.findByText(/could not be saved/)).toBeInTheDocument()
     })
   })
+
+  describe('when the budget files cannot be read', () => {
+    const failReads = (fileStore: MemoryFileStore) => {
+      const listFiles = fileStore.listFiles.bind(fileStore)
+      let failing = true
+      fileStore.listFiles = async path => {
+        if (failing && path === 'transactions') throw new Error('permission denied')
+        return listFiles(path)
+      }
+      return () => {
+        failing = false
+      }
+    }
+
+    it('keeps Import and Apply disabled, says why, and writes nothing', async () => {
+      const fileStore = await seed()
+      failReads(fileStore)
+      const writes = vi.spyOn(fileStore, 'writeCSV')
+      const user = userEvent.setup()
+      render(
+        <FileStoreTestProvider store={fileStore}>
+          <TransactionImportTools
+            transactions={transactions}
+            ruleSource={null}
+            onRuleSourceClose={() => {}}
+            onInvalidate={() => {}}
+          />
+        </FileStoreTestProvider>,
+      )
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/could not read your budget files/)
+      expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Apply rules to uncategorized' })).toBeDisabled()
+      await user.click(screen.getByRole('button', { name: 'Import' }))
+      expect(writes).not.toHaveBeenCalled()
+      expect(await categoriesIn(fileStore)).toEqual(['Uncategorized', 'Uncategorized', 'Dining'])
+    })
+
+    it('enables Import and Apply and clears the message after a successful retry', async () => {
+      const fileStore = await seed()
+      const recover = failReads(fileStore)
+      const user = userEvent.setup()
+      render(
+        <FileStoreTestProvider store={fileStore}>
+          <TransactionImportTools
+            transactions={transactions}
+            ruleSource={null}
+            onRuleSourceClose={() => {}}
+            onInvalidate={() => {}}
+          />
+        </FileStoreTestProvider>,
+      )
+      await screen.findByRole('alert')
+      recover()
+      await user.click(screen.getByRole('button', { name: 'Try again' }))
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Import' })).toBeEnabled())
+      expect(screen.getByRole('button', { name: 'Apply rules to uncategorized' })).toBeEnabled()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+  })
 })

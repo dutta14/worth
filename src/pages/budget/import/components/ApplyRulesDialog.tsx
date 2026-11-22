@@ -53,9 +53,10 @@ const ApplyRulesDialog: FC<ApplyRulesDialogProps> = ({
   useFocusTrap(dialogRef, true)
 
   // Declared after the focus trap so the step heading wins over the trap's "first focusable" default.
+  const undone = phase.kind === 'done' && phase.undone
   useEffect(() => {
     dialogRef.current?.querySelector<HTMLElement>('[data-iw-step-heading]')?.focus()
-  }, [phase.kind])
+  }, [phase.kind, undone])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -77,6 +78,7 @@ const ApplyRulesDialog: FC<ApplyRulesDialogProps> = ({
   const undo = async () => {
     if (busy.current || phase.kind !== 'done') return
     busy.current = true
+    setUndoFailed(false)
     const ok = await onUndo(phase.result)
     busy.current = false
     setUndoFailed(!ok)
