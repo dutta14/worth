@@ -345,8 +345,8 @@ test.describe('Monthly check-in: privacy', () => {
   }) => {
     const external: string[] = []
     page.on('request', request => {
-      const { origin, pathname } = new URL(request.url())
-      if (origin === 'http://localhost:5192' || request.url().startsWith('data:')) return
+      const { origin, hostname, pathname } = new URL(request.url())
+      if (hostname === 'localhost' || request.url().startsWith('data:')) return
       // The Inter stylesheet and font files are loaded by index.html in every build, with or without this feature.
       if (origin === 'https://fonts.googleapis.com' || origin === 'https://fonts.gstatic.com') return
       if (origin === 'https://api.github.com' && pathname.endsWith('/feature-flags.json')) return
