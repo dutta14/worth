@@ -127,7 +127,7 @@ The chosen folder handle is persisted in IndexedDB via `src/utils/handlePersiste
 
 **UI preferences in `localStorage` (not financial data):**
 
-`darkMode`, `accentTheme`, `allowCsvImport`, `goal-view-mode`, `home-card-order`, `onboarding-dismissed`, `lab-pdf-to-csv`, and the feature-flag keys (`flag-rollout-cache`, `flag-overrides`, `flag-user-seed`).
+`darkMode`, `accentTheme`, `allowCsvImport`, `goal-view-mode`, `home-card-order`, `onboarding-dismissed`, `checkin-snooze`, `lab-pdf-to-csv`, and the feature-flag keys (`flag-rollout-cache`, `flag-overrides`, `flag-user-seed`).
 
 ### Styling
 

@@ -116,6 +116,29 @@ describe('getStorageItem (JSON keys)', () => {
     expect(warn).toHaveBeenCalled()
   })
 
+  it('returns the checkin-snooze fallback when the key is missing', () => {
+    expect(getStorageItem('checkin-snooze', null)).toBeNull()
+  })
+
+  it('returns a valid checkin-snooze value', () => {
+    localStorage.setItem('checkin-snooze', JSON.stringify({ month: '2026-10', until: '2026-11-15' }))
+    expect(getStorageItem('checkin-snooze', null)).toEqual({ month: '2026-10', until: '2026-11-15' })
+  })
+
+  it.each([
+    ['corrupt JSON', '{not json'],
+    ['an array', '[]'],
+    ['null', 'null'],
+    ['a missing field', '{"month":"2026-10"}'],
+    ['an invalid month', '{"month":"2026-13","until":"2026-11-15"}'],
+    ['an invalid until', '{"month":"2026-10","until":"2026-11-5"}'],
+  ])('returns the checkin-snooze fallback for %s', (_label, raw) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    localStorage.setItem('checkin-snooze', raw)
+    expect(getStorageItem('checkin-snooze', null)).toBeNull()
+    expect(warn).toHaveBeenCalled()
+  })
+
   it('validates flag-overrides as record', () => {
     const overrides = { 'test-flag': true }
     localStorage.setItem('flag-overrides', JSON.stringify(overrides))
@@ -146,6 +169,17 @@ describe('setStorageItem', () => {
   it('serializes JSON keys', () => {
     setStorageItem('home-card-order', [3, 2, 1, 0])
     expect(localStorage.getItem('home-card-order')).toBe('[3,2,1,0]')
+  })
+
+  it('serializes checkin-snooze as JSON', () => {
+    setStorageItem('checkin-snooze', { month: '2026-10', until: '2026-11-15' })
+    expect(localStorage.getItem('checkin-snooze')).toBe('{"month":"2026-10","until":"2026-11-15"}')
+  })
+
+  it('removes checkin-snooze', () => {
+    setStorageItem('checkin-snooze', { month: '2026-10', until: '2026-11-15' })
+    removeStorageItem('checkin-snooze')
+    expect(localStorage.getItem('checkin-snooze')).toBeNull()
   })
 })
 

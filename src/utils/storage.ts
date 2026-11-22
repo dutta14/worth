@@ -41,6 +41,7 @@ interface StorageSchema {
   'goal-view-mode': string // 'grid' | 'list'
   'home-card-order': number[]
   'onboarding-dismissed': string // '0' | '1'
+  'checkin-snooze': { month: string; until: string } | null // month 'YYYY-MM', until local 'YYYY-MM-DD'
   'lab-pdf-to-csv': string // '0' | '1'
   'flag-client-id': string
   'flag-overrides': Record<string, unknown>
@@ -63,6 +64,17 @@ function isCardOrder(v: unknown): boolean {
   return Array.isArray(v) && v.length === 5 && v.every((n: unknown) => typeof n === 'number' && n >= 0 && n <= 4)
 }
 
+function isCheckInSnooze(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null) return false
+  const obj = v as Record<string, unknown>
+  return (
+    typeof obj.month === 'string' &&
+    /^\d{4}-(0[1-9]|1[0-2])$/.test(obj.month) &&
+    typeof obj.until === 'string' &&
+    /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(obj.until)
+  )
+}
+
 function isRecord(v: unknown): boolean {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
@@ -82,6 +94,7 @@ const validators: Partial<Record<keyof StorageSchema, Validator>> = {
   accentTheme: isNonEmptyString,
   fiTheme: isNonEmptyString,
   'home-card-order': isCardOrder,
+  'checkin-snooze': isCheckInSnooze,
   'flag-client-id': isNonEmptyString,
   'flag-overrides': isRecord,
   'flag-rollout-cache': isFlagCache,
@@ -89,9 +102,9 @@ const validators: Partial<Record<keyof StorageSchema, Validator>> = {
 
 // ── Which keys store JSON vs raw strings ──────────────────────
 
-type JsonKey = 'home-card-order' | 'flag-overrides' | 'flag-rollout-cache'
+type JsonKey = 'home-card-order' | 'checkin-snooze' | 'flag-overrides' | 'flag-rollout-cache'
 
-const JSON_KEYS = new Set<string>(['home-card-order', 'flag-overrides', 'flag-rollout-cache'])
+const JSON_KEYS = new Set<string>(['home-card-order', 'checkin-snooze', 'flag-overrides', 'flag-rollout-cache'])
 
 function isJsonKey(key: string): key is JsonKey {
   return JSON_KEYS.has(key)
