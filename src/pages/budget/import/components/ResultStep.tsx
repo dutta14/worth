@@ -1,16 +1,18 @@
 import { FC, useId } from 'react'
 import type { CommitResult } from '../commitImport'
-import { failureMessage, importedMessage, UNDONE_MESSAGE } from '../messages'
+import type { FormatNote } from '../wizardState'
+import { failureMessage, formatNoteMessage, importedMessage, UNDONE_MESSAGE } from '../messages'
 
 interface ResultStepProps {
   result: CommitResult
   undone: boolean
   undoFailed: boolean
+  formatNote: FormatNote | null
   canUndo: boolean
   onUndo: () => void
 }
 
-const ResultStep: FC<ResultStepProps> = ({ result, undone, undoFailed, canUndo, onUndo }) => {
+const ResultStep: FC<ResultStepProps> = ({ result, undone, undoFailed, formatNote, canUndo, onUndo }) => {
   const id = useId()
 
   if (!result.ok) {
@@ -38,6 +40,9 @@ const ResultStep: FC<ResultStepProps> = ({ result, undone, undoFailed, canUndo, 
           <p>{importedMessage(result)}</p>
           {result.snapshotFailed && (
             <p className="iw-warning">A backup could not be made before importing. Your import still went through.</p>
+          )}
+          {formatNote && (
+            <p className={formatNote.kind === 'saved' ? 'iw-muted' : 'iw-warning'}>{formatNoteMessage(formatNote)}</p>
           )}
           <button type="button" className="iw-btn" aria-disabled={!canUndo} onClick={() => canUndo && onUndo()}>
             Undo import

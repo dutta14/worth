@@ -8,6 +8,7 @@ import type { CommitFailure } from '../commitImport'
 import { columnsBlockReason, failureMessage } from '../messages'
 import type { MappingProblem } from '../mapping'
 import { createWizardFile, reparseWizardFile, type WizardFile } from '../wizardFiles'
+import { emptyFormatsFile } from '../savedFormats'
 import ColumnsStep from './ColumnsStep'
 import ResultStep from './ResultStep'
 import ReviewStep from './ReviewStep'
@@ -27,6 +28,8 @@ const Controlled = ({ text, fileCount = 1 }: { text: string; fileCount?: number 
       file={file}
       fileIndex={0}
       fileCount={fileCount}
+      formats={{ state: 'ready', file: emptyFormatsFile() }}
+      onRemember={remember => setFile(current => ({ ...current, remember: { ...current.remember, ...remember } }))}
       onDraft={draft => setFile(current => ({ ...current, draft }))}
       onReparse={settings => setFile(current => reparseWizardFile(current, settings))}
     />
@@ -122,7 +125,7 @@ describe('ReviewStep', () => {
   it('pages through long imports and filters to skipped rows', async () => {
     const user = userEvent.setup()
     const plan = planFromTexts([{ name: 'big.csv', text: csv }])
-    render(<ReviewStep plan={plan} onOptions={vi.fn()} />)
+    render(<ReviewStep plan={plan} savedFormats={[]} onChangeFormat={vi.fn()} onOptions={vi.fn()} />)
     expect(screen.getByText('Rows 1 to 100 of 131')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Next page' }))
@@ -142,7 +145,7 @@ describe('ReviewStep', () => {
       { name: 'b.csv', text: 'Date,Description,Amount\n2026-10-01,A,-1.00' },
     ])
     plan.notices.push('Row 9 has an unterminated quote. It was skipped.')
-    render(<ReviewStep plan={plan} onOptions={vi.fn()} />)
+    render(<ReviewStep plan={plan} savedFormats={[]} onChangeFormat={vi.fn()} onOptions={vi.fn()} />)
     const list = screen.getByRole('list', { name: 'Transactions by file' })
     expect(within(list).getByText('a.csv: 1 new, 0 duplicates, 0 could not be read')).toBeInTheDocument()
     expect(within(list).getByText('b.csv: 0 new, 1 duplicate, 0 could not be read')).toBeInTheDocument()
@@ -156,7 +159,7 @@ describe('ReviewStep', () => {
       existing: { '2026-10': 'Date,Category,Amount,Description\n2026-10-09,X,-2.00,Y' },
       options: { skipDuplicates: true, replaceMonths: true },
     })
-    render(<ReviewStep plan={plan} onOptions={onOptions} />)
+    render(<ReviewStep plan={plan} savedFormats={[]} onChangeFormat={vi.fn()} onOptions={onOptions} />)
     expect(
       screen.getByText('Existing transactions in Oct 2026 will be replaced. You can undo this after importing.'),
     ).toBeInTheDocument()
@@ -171,7 +174,7 @@ describe('ReviewStep', () => {
       categoryGroups: [],
       options: { skipDuplicates: true, replaceMonths: false },
     })
-    render(<ReviewStep plan={plan} onOptions={vi.fn()} />)
+    render(<ReviewStep plan={plan} savedFormats={[]} onChangeFormat={vi.fn()} onOptions={vi.fn()} />)
     expect(
       screen.getByText('None of the rows could be read. Go back and check the column choices.'),
     ).toBeInTheDocument()
@@ -191,7 +194,7 @@ describe('ResultStep', () => {
   it('says how much was imported, warns about a missing backup and offers undo', async () => {
     const user = userEvent.setup()
     const onUndo = vi.fn()
-    render(<ResultStep result={success} undone={false} undoFailed={false} canUndo onUndo={onUndo} />)
+    render(<ResultStep formatNote={null} result={success} undone={false} undoFailed={false} canUndo onUndo={onUndo} />)
     expect(screen.getByText('Imported 1 transaction into 1 month.')).toBeInTheDocument()
     expect(screen.getByText(/A backup could not be made/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Undo import' }))
@@ -201,19 +204,28 @@ describe('ResultStep', () => {
   it('explains why undo is unavailable and does not run it', async () => {
     const user = userEvent.setup()
     const onUndo = vi.fn()
-    render(<ResultStep result={success} undone={false} undoFailed={false} canUndo={false} onUndo={onUndo} />)
+    render(
+      <ResultStep
+        formatNote={null}
+        result={success}
+        undone={false}
+        undoFailed={false}
+        canUndo={false}
+        onUndo={onUndo}
+      />,
+    )
     expect(screen.getByText('Undo is not available because these months changed after the import.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Undo import' }))
     expect(onUndo).not.toHaveBeenCalled()
   })
 
   it('reports a failed undo', () => {
-    render(<ResultStep result={success} undone={false} undoFailed canUndo onUndo={vi.fn()} />)
+    render(<ResultStep formatNote={null} result={success} undone={false} undoFailed canUndo onUndo={vi.fn()} />)
     expect(screen.getByRole('alert')).toHaveTextContent('The import could not be undone.')
   })
 
   it('confirms an undo', () => {
-    render(<ResultStep result={success} undone undoFailed={false} canUndo={false} onUndo={vi.fn()} />)
+    render(<ResultStep formatNote={null} result={success} undone undoFailed={false} canUndo={false} onUndo={vi.fn()} />)
     expect(screen.getByRole('heading', { name: 'Import undone' })).toBeInTheDocument()
   })
 
@@ -225,7 +237,16 @@ describe('ResultStep', () => {
       categoriesFailed: false,
       restored: true,
     }
-    render(<ResultStep result={failure} undone={false} undoFailed={false} canUndo={false} onUndo={vi.fn()} />)
+    render(
+      <ResultStep
+        formatNote={null}
+        result={failure}
+        undone={false}
+        undoFailed={false}
+        canUndo={false}
+        onUndo={vi.fn()}
+      />,
+    )
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Import did not finish. Oct 2026 could not be saved. Check that the worth folder is still available, then try again.',
     )

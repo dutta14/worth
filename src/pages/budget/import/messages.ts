@@ -1,7 +1,9 @@
 import type { CommitFailure, CommitSuccess } from './commitImport'
 import { formatMonthList } from './format'
 import type { MappingProblem } from './mapping'
+import type { FormatsLoad } from './importStorage'
 import { countLabel } from './reviewRows'
+import type { FormatNote } from './wizardState'
 
 export const UNDONE_MESSAGE = 'Import undone. Your budget is back to how it was.'
 
@@ -35,4 +37,22 @@ export const columnsBlockReason = (problem: MappingProblem): string => {
     case 'date-format':
       return 'Choose a date format to continue.'
   }
+}
+
+export const COLUMNS_INTRO = 'Choose which column holds each value.'
+export const COLUMNS_INTRO_FIRST_TIME = `${COLUMNS_INTRO} Worth remembers your choices.`
+
+/** Shown in the Columns step when the saved formats file cannot be used; the file is never changed. */
+export const formatsWarning = (reason: Extract<FormatsLoad, { state: 'unreadable' }>['reason']): string =>
+  reason === 'newer'
+    ? 'Your saved formats file was saved by a newer version of Worth. It is left as it is.'
+    : 'Your saved formats file could not be read. You can still map columns by hand. The file has not been changed.'
+
+export const savedFormatLabel = (name: string): string => `Using saved format: ${name}`
+
+export const formatNoteMessage = (note: FormatNote): string => {
+  if (note.kind === 'saved') return `Saved format: ${note.names.join(', ')}.`
+  return note.reason === 'unreadable'
+    ? 'Your import went through. The format was not saved because your saved formats file could not be read. The file has not been changed.'
+    : 'Your import went through, but the format could not be saved. Check that the worth folder is still available.'
 }

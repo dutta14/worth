@@ -1,5 +1,6 @@
 import { FC, useId, useMemo, useState } from 'react'
 import { plural } from '../../../../utils/plural'
+import { savedFormatLabel } from '../messages'
 import { formatMoney, formatMonth, formatMonthList, formatSignedMoney } from '../format'
 import { UNCATEGORIZED_EXPENSE } from '../constants'
 import {
@@ -13,8 +14,17 @@ import {
 import type { ImportOptions, ImportPlan } from '../types'
 import PreviewTable, { type PreviewRow } from './PreviewTable'
 
+export interface SavedFormatUse {
+  index: number
+  fileName: string
+  name: string
+}
+
 interface ReviewStepProps {
   plan: ImportPlan
+  /** Files whose columns came from a saved format, so the Columns step was skipped. */
+  savedFormats: SavedFormatUse[]
+  onChangeFormat: (fileIndex: number) => void
   onOptions: (options: Partial<ImportOptions>) => void
 }
 
@@ -41,7 +51,7 @@ const toRow = (entry: ReviewEntry, showFile: boolean): PreviewRow => ({
   ],
 })
 
-const ReviewStep: FC<ReviewStepProps> = ({ plan, onOptions }) => {
+const ReviewStep: FC<ReviewStepProps> = ({ plan, savedFormats, onChangeFormat, onOptions }) => {
   const id = useId()
   const [filter, setFilter] = useState<ReviewFilter>('all')
   const [page, setPage] = useState(0)
@@ -69,6 +79,27 @@ const ReviewStep: FC<ReviewStepProps> = ({ plan, onOptions }) => {
       <h3 id={`${id}-title`} className="iw-step-title" tabIndex={-1} data-iw-step-heading>
         Review before importing
       </h3>
+
+      {savedFormats.length > 0 && (
+        <ul className="iw-formats" aria-label="Saved formats in use">
+          {savedFormats.map(saved => (
+            <li key={saved.index}>
+              <span className="iw-chip">
+                {savedFormatLabel(saved.name)}
+                {showFile && <span className="iw-muted"> ({saved.fileName})</span>}
+              </span>
+              <button
+                type="button"
+                className="iw-link"
+                aria-label={showFile ? `Change saved format for ${saved.fileName}` : undefined}
+                onClick={() => onChangeFormat(saved.index)}
+              >
+                Change
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {nothingNew ? (
         <p className="iw-muted">

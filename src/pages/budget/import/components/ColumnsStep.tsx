@@ -1,5 +1,8 @@
 import { FC, useId, useMemo } from 'react'
 import { columnLabels } from '../columnLabels'
+import type { FormatsLoad } from '../importStorage'
+import { COLUMNS_INTRO, COLUMNS_INTRO_FIRST_TIME, formatsWarning } from '../messages'
+import { defaultFormatName, MAX_FORMAT_NAME } from '../savedFormats'
 import { dateInfo, readableDate, sameSignWarning, type MappingDraft } from '../mapping'
 import type { ParseSettings } from '../parseFile'
 import type { Delimiter, DateFormat, DecimalSeparator } from '../types'
@@ -11,6 +14,8 @@ interface ColumnsStepProps {
   file: WizardFile
   fileIndex: number
   fileCount: number
+  formats: FormatsLoad
+  onRemember: (remember: Partial<WizardFile['remember']>) => void
   onDraft: (draft: MappingDraft) => void
   onReparse: (settings: ParseSettings) => void
 }
@@ -29,7 +34,7 @@ const DECIMAL_OPTIONS: { value: DecimalSeparator; label: string }[] = [
 
 const PREVIEW_ROWS = 5
 
-const ColumnsStep: FC<ColumnsStepProps> = ({ file, fileIndex, fileCount, onDraft, onReparse }) => {
+const ColumnsStep: FC<ColumnsStepProps> = ({ file, fileIndex, fileCount, formats, onRemember, onDraft, onReparse }) => {
   const id = useId()
   const { draft, parsed } = file
   const { detection } = parsed
@@ -53,7 +58,10 @@ const ColumnsStep: FC<ColumnsStepProps> = ({ file, fileIndex, fileCount, onDraft
           File {fileIndex + 1} of {fileCount}: {file.name}
         </p>
       )}
-      <p className="iw-muted">Choose which column holds each value.</p>
+      <p className="iw-muted">
+        {formats.state === 'ready' && formats.file.mappings.length === 0 ? COLUMNS_INTRO_FIRST_TIME : COLUMNS_INTRO}
+      </p>
+      {formats.state === 'unreadable' && <p className="iw-warning">{formatsWarning(formats.reason)}</p>}
 
       <div className="iw-grid">
         <div className="iw-field">
@@ -264,6 +272,29 @@ const ColumnsStep: FC<ColumnsStepProps> = ({ file, fileIndex, fileCount, onDraft
           cells: labels.map((_, c) => record[c] ?? ''),
         }))}
       />
+
+      {formats.state === 'ready' && (
+        <div className="iw-remember">
+          <label className="iw-check">
+            <input
+              type="checkbox"
+              checked={file.remember.enabled}
+              onChange={e => onRemember({ enabled: e.target.checked })}
+            />
+            Remember this format as
+          </label>
+          <input
+            className="iw-input"
+            type="text"
+            aria-label="Format name"
+            maxLength={MAX_FORMAT_NAME}
+            placeholder={defaultFormatName(file.name)}
+            disabled={!file.remember.enabled}
+            value={file.remember.name}
+            onChange={e => onRemember({ name: e.target.value })}
+          />
+        </div>
+      )}
     </section>
   )
 }

@@ -197,6 +197,43 @@
   margin: 0 0 4px;
 }
 
+.iw-formats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.iw-formats li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.iw-chip {
+  padding: 4px 12px;
+  color: var(--color-text);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+}
+
+.iw-remember {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.iw-remember .iw-check {
+  margin-bottom: 0;
+}
+
 .iw-months,
 .iw-notices {
   margin: 0 0 16px;
@@ -340,6 +377,11 @@ body.dark .iw-btn--primary {
   .iw-check,
   .iw-radio {
     min-height: 44px;
+  }
+
+  .iw-formats .iw-link {
+    min-height: 44px;
+    padding: 0 8px;
   }
 
   .iw-actions {
