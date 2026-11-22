@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useGoals } from '../../contexts/GoalsContext'
 import { useData } from '../../contexts/DataContext'
 import { useTouchDrag } from '../../hooks/useTouchDrag'
-import { useNow } from '../../hooks/useNow'
 import { useFlag } from '../../flags/useFlag'
 import { FLAGS } from '../../flags/flagDefinitions'
 import ErrorBoundary from '../../components/ErrorBoundary'
@@ -12,13 +11,11 @@ import MiniCharts from './MiniCharts'
 import GoalsPeek from './GoalsPeek'
 import AllocationBreakdown from './AllocationBreakdown'
 import SetupProgress from './SetupProgress'
-import CheckInCard from './CheckInCard'
+import CheckInStrip from './CheckInStrip'
 import SpendingPeek from './SpendingPeek'
 import { loadBudgetStore } from '../budget/utils/budgetStorage'
 import { useFileStore } from '../../contexts/FileStoreContext'
 import { getStorageItem, setStorageItem, removeStorageItem } from '../../utils/storage'
-import { getCheckInState, toDayKey, type MonthKey } from '../data/monthStatus'
-import { isSnoozed, loadSnooze, saveSnooze, snoozeFor, SNOOZE_DAYS } from './checkInSnooze'
 import '../../styles/Home.css'
 
 const DEFAULT_ORDER = [0, 1, 2, 3, 4]
@@ -36,11 +33,6 @@ function loadOrder(): number[] {
   if (uniqueEntries.length === DEFAULT_ORDER.length - 1 && !uniqueEntries.includes(4)) return [...uniqueEntries, 4]
 
   return DEFAULT_ORDER
-}
-
-const dayKeyToDate = (dayKey: string): Date => {
-  const [year, month, day] = dayKey.split('-').map(Number)
-  return new Date(year, month - 1, day)
 }
 
 const CARD_NAMES = ['Net Worth', 'Charts', 'Goals', 'Allocation', 'Spending']
@@ -71,33 +63,12 @@ const Home: FC = () => {
   const [setupDismissed, setSetupDismissed] = useState(() => getStorageItem('onboarding-dismissed', '0') === '1')
 
   const checkInEnabled = useFlag(FLAGS.MONTHLY_CHECK_IN)
-  const now = useNow()
-  const todayKey = toDayKey(now)
-  const today = useMemo(() => dayKeyToDate(todayKey), [todayKey])
-  const checkIn = useMemo(
-    () => (checkInEnabled ? getCheckInState(accounts, balances, today) : null),
-    [checkInEnabled, accounts, balances, today],
-  )
-  const [snooze, setSnooze] = useState(loadSnooze)
-  const checkInSnoozed =
-    checkIn !== null &&
-    (checkIn.kind === 'partial' || checkIn.kind === 'due') &&
-    isSnoozed(snooze, checkIn.reportingMonth, todayKey)
 
-  const handleCheckInStart = useCallback(
-    (month: MonthKey) => navigate('/net-worth/dashboard/details', { state: { checkIn: { month } } }),
-    [navigate],
-  )
-
-  const handleCheckInSnooze = useCallback(() => {
-    if (!checkIn?.reportingMonth) return
-    const next = snoozeFor(checkIn.reportingMonth, today)
-    saveSnooze(next)
-    setSnooze(next)
-    setAnnouncement(`Check-in snoozed for ${SNOOZE_DAYS} days.`)
+  const handleCheckInSnoozed = useCallback((message: string) => {
+    setAnnouncement(message)
     // The strip unmounts with the focused button, so hand focus to the page heading first.
     headingRef.current?.focus()
-  }, [checkIn, today])
+  }, [])
 
   const allMonths = useMemo(
     () => [...new Set(balances.map(b => b.month))].sort((a, b) => b.localeCompare(a)),
@@ -277,16 +248,13 @@ const Home: FC = () => {
           }}
         />
       )}
-      {checkIn && dataLoaded && checkIn.kind !== 'hidden' && !checkInSnoozed && (
-        <ErrorBoundary variant="card">
-          <CheckInCard
-            state={checkIn}
-            today={today}
-            onStart={handleCheckInStart}
-            onNavigate={path => navigate(path)}
-            onSnooze={handleCheckInSnooze}
-          />
-        </ErrorBoundary>
+      {checkInEnabled && (
+        <CheckInStrip
+          accounts={accounts}
+          balances={balances}
+          dataLoaded={dataLoaded}
+          onSnoozed={handleCheckInSnoozed}
+        />
       )}
       <div className="home-grid" ref={gridRef}>
         {order.map((cardIdx, pos) => {

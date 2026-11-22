@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Home from './Home'
@@ -39,7 +39,13 @@ vi.mock('../../hooks/useTouchDrag', () => ({
   }),
 }))
 
-vi.mock('./NetWorthSummary', () => ({ default: () => <div>Net Worth Card</div> }))
+let netWorthRenders = 0
+vi.mock('./NetWorthSummary', () => ({
+  default: () => {
+    netWorthRenders++
+    return <div>Net Worth Card</div>
+  },
+}))
 vi.mock('./MiniCharts', () => ({ default: () => <div>Charts Card</div> }))
 vi.mock('./GoalsPeek', () => ({ default: () => <div>Goals Card</div> }))
 vi.mock('./AllocationBreakdown', () => ({ default: () => <div>Allocation Card</div> }))
@@ -65,6 +71,7 @@ beforeEach(() => {
   localStorage.clear()
   mockNavigate.mockClear()
   mockFlag = true
+  netWorthRenders = 0
   mockData = { accounts: nine, balances: entries('2026-10', 7) }
   vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date'] })
   vi.setSystemTime(TODAY)
@@ -218,10 +225,54 @@ describe('Home check-in strip, snooze', () => {
     expect(await screen.findByRole('heading', { level: 2, name: 'October is complete' })).toBeInTheDocument()
   })
 
+  it('still hides, announces, and moves focus when the snooze cannot be persisted', async () => {
+    const user = userEvent.setup()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    renderHome()
+    await stripHeading()
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError')
+    })
+    await user.click(screen.getByRole('button', { name: 'Snooze for 7 days' }))
+
+    expect(screen.queryByRole('heading', { level: 2, name: /missing for October/ })).not.toBeInTheDocument()
+    expect(screen.getByText('Check-in snoozed for 7 days.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveFocus()
+    expect(warn).toHaveBeenCalled()
+    vi.restoreAllMocks()
+    expect(localStorage.getItem('checkin-snooze')).toBeNull()
+  })
+
   it('ignores an invalid stored snooze', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     localStorage.setItem('checkin-snooze', '{"month":5}')
     renderHome()
+    await stripHeading()
+  })
+})
+
+describe('Home check-in strip, day rollover and re-renders', () => {
+  it('does not re-render Home on window focus or visibility change when the day is unchanged', async () => {
+    renderHome()
+    await stripHeading()
+    const before = netWorthRenders
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(netWorthRenders).toBe(before)
+  })
+
+  it('shows an ended snooze again when the tab regains focus on a new day', async () => {
+    localStorage.setItem('checkin-snooze', JSON.stringify({ month: '2026-10', until: '2026-11-09' }))
+    renderHome()
+    await waitFor(() => expect(screen.getByTestId('drag-slot-0')).toBeInTheDocument())
+    expect(screen.queryByRole('heading', { level: 2, name: /missing for October/ })).not.toBeInTheDocument()
+
+    act(() => {
+      vi.setSystemTime(new Date(2026, 10, 9, 0, 5))
+      window.dispatchEvent(new Event('focus'))
+    })
     await stripHeading()
   })
 })
@@ -237,6 +288,17 @@ describe('Home check-in strip, flag off', () => {
     expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(screen.queryByText(/missing for October/)).not.toBeInTheDocument()
+  })
+
+  it('does not re-render Home on window focus or visibility change', async () => {
+    renderHome()
+    await waitFor(() => expect(screen.getByTestId('drag-slot-0')).toBeInTheDocument())
+    const before = netWorthRenders
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(netWorthRenders).toBe(before)
   })
 
   it('leaves the page heading as a normal, non-focusable heading', () => {
