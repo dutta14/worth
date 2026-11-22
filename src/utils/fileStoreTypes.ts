@@ -1,3 +1,5 @@
+import type { SafetySnapshot } from './safetyNet'
+
 /**
  * FileStore — the storage abstraction the whole app writes through.
  *
@@ -24,3 +26,25 @@ export interface FileStore {
   getHandle(): FileSystemDirectoryHandle | null
   subscribe(path: string, cb: () => void): () => void
 }
+
+/**
+ * Optional capability implemented by `FileSystemFileStore` only. It stays inert
+ * until `configureSafety({ enabled: true })`, and `MemoryFileStore` never has it,
+ * so demo and e2e modes cannot touch a real folder.
+ */
+export interface SafetyNetStore {
+  configureSafety(opts: { enabled: boolean }): void
+  /** Referentially stable until something changes. */
+  getSafetySnapshot(): SafetySnapshot
+  subscribeSafety(cb: () => void): () => void
+  flush(): Promise<void>
+  /** True while a write is pending, in flight, or failed and not yet re-saved. */
+  hasUnsavedWork(): boolean
+  retryFailed(): Promise<void>
+  /** Re-checks folder permission; no-op when disabled. Safe to call on focus. */
+  checkPermission(): Promise<void>
+  /** Must run inside a user gesture. */
+  requestReconnect(): Promise<PermissionState>
+}
+
+export const isSafetyNetStore = (store: FileStore): store is FileStore & SafetyNetStore => 'getSafetySnapshot' in store

@@ -19,4 +19,11 @@ export const FLAGS = {
     description: 'Monthly targets per expense group on the Budget aggregated view and Home.',
     temporary: true,
   }),
+  DATA_SAFETY_NET: defineFlag('data-safety-net', {
+    type: 'boolean',
+    default: false,
+    description:
+      'Protects data files: flush on page hide, visible save errors, corrupt-file quarantine, external-change detection, and _backups snapshots',
+    temporary: true,
+  }),
 } as const

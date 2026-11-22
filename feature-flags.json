@@ -10,6 +10,9 @@
     },
     "category-budget-targets": {
       "percentage": 0
+    },
+    "data-safety-net": {
+      "percentage": 0
     }
   }
 }

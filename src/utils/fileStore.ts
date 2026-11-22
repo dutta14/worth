@@ -1,10 +1,19 @@
-import type { FileStore } from './fileStoreTypes'
+import type { FileStore, SafetyNetStore } from './fileStoreTypes'
 import { parseCSV, serializeCSV } from './csvUtils'
+import { EMPTY_SAFETY_SNAPSHOT, errorKind, snapshotsEqual } from './safetyNet'
+import type { SafetySnapshot, WriteFailureKind } from './safetyNet'
 
 const CHANNEL_NAME = 'filestore-sync'
 const WRITE_DEBOUNCE_MS = 300
+/** Used only once the safety net is enabled; shrinks the window for a write lost on tab close. */
+const SAFE_WRITE_DEBOUNCE_MS = 120
 
 type Payload = { kind: 'text'; value: string } | { kind: 'binary'; value: ArrayBuffer }
+
+interface FailedWrite {
+  payload: Payload
+  kind: WriteFailureKind
+}
 
 interface PendingWrite {
   timer: ReturnType<typeof setTimeout>
@@ -35,17 +44,29 @@ async function withLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
  * Reads are cached in memory; writes are debounced per path (300ms), guarded
  * by a `navigator.locks` lock so concurrent tabs never interleave, and
  * announced on a BroadcastChannel so other tabs drop their stale cache.
+ *
+ * The data safety net (`SafetyNetStore`) is inert until `configureSafety` is
+ * called with `enabled: true`: legacy timing and behavior are unchanged until then.
  */
-export class FileSystemFileStore implements FileStore {
+export class FileSystemFileStore implements FileStore, SafetyNetStore {
   private root: FileSystemDirectoryHandle | null = null
   private cache = new Map<string, unknown>()
   private pending = new Map<string, PendingWrite>()
   private subscribers = new Map<string, Set<() => void>>()
   private channel: BroadcastChannel | null = null
+  private safetyEnabled = false
+  private failed = new Map<string, FailedWrite>()
+  private inFlight = new Map<string, number>()
+  private permissionLost = false
+  private safetySnapshot: SafetySnapshot = EMPTY_SAFETY_SNAPSHOT
+  private safetySubscribers = new Set<() => void>()
 
   async init(handle: FileSystemDirectoryHandle): Promise<void> {
     this.root = handle
     this.cache.clear()
+    this.failed.clear()
+    this.permissionLost = false
+    this.refreshSafetySnapshot()
     this.setupChannel()
   }
 
@@ -151,6 +172,7 @@ export class FileSystemFileStore implements FileStore {
 
   async delete(path: string): Promise<void> {
     this.cache.delete(path)
+    if (this.failed.delete(path)) this.refreshSafetySnapshot()
     const queued = this.pending.get(path)
     if (queued) {
       clearTimeout(queued.timer)
@@ -180,6 +202,104 @@ export class FileSystemFileStore implements FileStore {
         return this.flushPath(path)
       }),
     )
+  }
+
+  /* ── Safety net ───────────────────────────────────────────── */
+
+  configureSafety(opts: { enabled: boolean }): void {
+    this.safetyEnabled = opts.enabled
+    if (opts.enabled) return
+    this.failed.clear()
+    this.permissionLost = false
+    this.refreshSafetySnapshot()
+  }
+
+  getSafetySnapshot(): SafetySnapshot {
+    return this.safetySnapshot
+  }
+
+  subscribeSafety(cb: () => void): () => void {
+    this.safetySubscribers.add(cb)
+    return () => {
+      this.safetySubscribers.delete(cb)
+    }
+  }
+
+  hasUnsavedWork(): boolean {
+    return this.pending.size > 0 || this.inFlight.size > 0 || this.failed.size > 0
+  }
+
+  /** Re-queues every failed payload immediately; resolves once each attempt has settled. */
+  async retryFailed(): Promise<void> {
+    if (!this.safetyEnabled) return
+    const retries = [...this.failed].filter(([path]) => !this.pending.has(path))
+    await Promise.allSettled(retries.map(([path, { payload }]) => this.queueWrite(path, payload, 0)))
+  }
+
+  async checkPermission(): Promise<void> {
+    const root = this.root
+    if (!this.safetyEnabled || !root?.queryPermission) return
+    let state: PermissionState
+    try {
+      state = await root.queryPermission({ mode: 'readwrite' })
+    } catch (error) {
+      console.error('FileStore permission check failed:', error)
+      return
+    }
+    if (!this.safetyEnabled) return
+    if (state !== 'granted') {
+      this.setPermissionLost(true)
+      return
+    }
+    this.setPermissionLost(false)
+    if (this.failed.size > 0) await this.retryFailed()
+  }
+
+  async requestReconnect(): Promise<PermissionState> {
+    const root = this.root
+    if (!root) return 'denied'
+    const state = (await root.requestPermission?.({ mode: 'readwrite' })) ?? 'granted'
+    if (state === 'granted') {
+      this.setPermissionLost(false)
+      await this.retryFailed()
+    }
+    return state
+  }
+
+  private setPermissionLost(value: boolean): void {
+    if (this.permissionLost === value) return
+    this.permissionLost = value
+    this.refreshSafetySnapshot()
+  }
+
+  private recordFailure(path: string, payload: Payload, error: unknown): void {
+    if (!this.safetyEnabled) return
+    const kind = errorKind(error)
+    // A newer edit queued while this write was in flight supersedes it.
+    this.failed.set(path, { payload: this.pending.get(path)?.payload ?? payload, kind })
+    if (kind === 'permission') this.permissionLost = true
+    this.refreshSafetySnapshot()
+  }
+
+  private clearFailure(path: string): void {
+    if (this.pending.has(path) || !this.failed.delete(path)) return
+    this.refreshSafetySnapshot()
+  }
+
+  private refreshSafetySnapshot(): void {
+    const next: SafetySnapshot = {
+      failed: [...this.failed].map(([path, { kind }]) => ({ path, kind })),
+      permissionLost: this.permissionLost,
+    }
+    if (snapshotsEqual(next, this.safetySnapshot)) return
+    this.safetySnapshot = next.failed.length === 0 && !next.permissionLost ? EMPTY_SAFETY_SNAPSHOT : next
+    for (const cb of this.safetySubscribers) {
+      try {
+        cb()
+      } catch (error) {
+        console.error('FileStore safety subscriber error:', error)
+      }
+    }
   }
 
   /* ── Internals ─────────────────────────────────────────────── */
@@ -249,20 +369,24 @@ export class FileSystemFileStore implements FileStore {
     return file === null ? null : file.text()
   }
 
-  private queueWrite(path: string, payload: Payload): Promise<void> {
+  private queueWrite(path: string, payload: Payload, delay?: number): Promise<void> {
+    const debounce = delay ?? (this.safetyEnabled ? SAFE_WRITE_DEBOUNCE_MS : WRITE_DEBOUNCE_MS)
+    const failedEntry = this.failed.get(path)
+    // The newest edit replaces the failed payload so an older value is never retried over it.
+    if (failedEntry) failedEntry.payload = payload
     return new Promise<void>((resolve, reject) => {
       const existing = this.pending.get(path)
       if (existing) {
         clearTimeout(existing.timer)
         existing.payload = payload
         existing.waiters.push({ resolve, reject })
-        existing.timer = setTimeout(() => void this.flushPath(path), WRITE_DEBOUNCE_MS)
+        existing.timer = setTimeout(() => void this.flushPath(path), debounce)
         return
       }
       this.pending.set(path, {
         payload,
         waiters: [{ resolve, reject }],
-        timer: setTimeout(() => void this.flushPath(path), WRITE_DEBOUNCE_MS),
+        timer: setTimeout(() => void this.flushPath(path), debounce),
       })
     })
   }
@@ -271,13 +395,25 @@ export class FileSystemFileStore implements FileStore {
     const entry = this.pending.get(path)
     if (!entry) return
     this.pending.delete(path)
+    this.inFlight.set(path, (this.inFlight.get(path) ?? 0) + 1)
     try {
       await this.persist(path, entry.payload)
-      this.announce(path)
-      entry.waiters.forEach(w => w.resolve())
     } catch (error) {
+      this.releaseInFlight(path)
+      this.recordFailure(path, entry.payload, error)
       entry.waiters.forEach(w => w.reject(error))
+      return
     }
+    this.releaseInFlight(path)
+    this.clearFailure(path)
+    this.announce(path)
+    entry.waiters.forEach(w => w.resolve())
+  }
+
+  private releaseInFlight(path: string): void {
+    const remaining = (this.inFlight.get(path) ?? 1) - 1
+    if (remaining > 0) this.inFlight.set(path, remaining)
+    else this.inFlight.delete(path)
   }
 
   private async persist(path: string, payload: Payload): Promise<void> {

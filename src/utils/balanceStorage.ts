@@ -45,18 +45,25 @@ export async function loadBalances(fileStore: FileStore): Promise<BalanceEntry[]
 /**
  * Writes one CSV per year. Years that no longer have any entries are deleted
  * so stale files never resurrect removed data.
+ *
+ * Every write is queued before any I/O is awaited, so a page-hide flush sees
+ * all of them instead of only the first year.
  */
 export async function saveBalances(fileStore: FileStore, balances: BalanceEntry[]): Promise<void> {
   const byYear = groupBalancesByYear(balances)
-  const existing = (await fileStore.listFiles(BALANCES_DIR)).filter(name => YEAR_FILE.test(name))
 
-  for (const [year, entries] of byYear) {
+  const writes = [...byYear].map(([year, entries]) => {
     const rows = [HEADER, ...entries.map(e => [e.month, String(e.accountId), String(e.balance)])]
-    await fileStore.writeCSV(balanceFilePath(year), rows)
+    return fileStore.writeCSV(balanceFilePath(year), rows)
+  })
+
+  const removeStaleYears = async (): Promise<void> => {
+    const existing = (await fileStore.listFiles(BALANCES_DIR)).filter(name => YEAR_FILE.test(name))
+    for (const name of existing) {
+      const year = name.replace('.csv', '')
+      if (!byYear.has(year)) await fileStore.delete(`${BALANCES_DIR}/${name}`)
+    }
   }
 
-  for (const name of existing) {
-    const year = name.replace('.csv', '')
-    if (!byYear.has(year)) await fileStore.delete(`${BALANCES_DIR}/${name}`)
-  }
+  await Promise.all([...writes, removeStaleYears()])
 }
