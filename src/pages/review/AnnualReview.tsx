@@ -1,4 +1,4 @@
-import { FC, useEffect, useRef, useState } from 'react'
+import { FC, useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useGoals } from '../../contexts/GoalsContext'
 import ReviewCashflow from './components/ReviewCashflow'
@@ -17,6 +17,8 @@ import '../../styles/AnnualReview.css'
 
 const REVIEW_PATH = '/net-worth/review'
 const YEAR_PARAM = /^\d{4}$/
+// Long enough for a screen reader to see the live region empty before the same text returns.
+const REANNOUNCE_DELAY_MS = 100
 
 const AnnualReview: FC = () => {
   const { year: param } = useParams<{ year?: string }>()
@@ -27,12 +29,28 @@ const AnnualReview: FC = () => {
   const { status, review, years, defaultYear, retry } = useAnnualReview(year)
   const [announcement, setAnnouncement] = useState('')
   const announcedYear = useRef<number | null>(null)
+  const lastAnnouncement = useRef('')
+  const reannounceTimer = useRef<number | undefined>(undefined)
+
+  // Live regions stay silent when the text does not change, so a repeat is cleared first and set again shortly after.
+  const announce = useCallback((text: string) => {
+    window.clearTimeout(reannounceTimer.current)
+    if (text !== lastAnnouncement.current) {
+      lastAnnouncement.current = text
+      setAnnouncement(text)
+      return
+    }
+    setAnnouncement('')
+    reannounceTimer.current = window.setTimeout(() => setAnnouncement(text), REANNOUNCE_DELAY_MS)
+  }, [])
+
+  useEffect(() => () => window.clearTimeout(reannounceTimer.current), [])
 
   useEffect(() => {
     if (status !== 'ready' || year === null || announcedYear.current === year) return
-    setAnnouncement(announcedYear.current === null ? `Review for ${year} is ready.` : `Showing the review for ${year}.`)
+    announce(announcedYear.current === null ? `Review for ${year} is ready.` : `Showing the review for ${year}.`)
     announcedYear.current = year
-  }, [status, year])
+  }, [status, year, announce])
 
   useEffect(() => {
     if (year === null) return
@@ -53,9 +71,9 @@ const AnnualReview: FC = () => {
     if (!exportable) return
     try {
       downloadReviewCsv(buildReviewCsv(review, formatIsoDate(new Date())), review.year)
-      setAnnouncement(`Downloaded ${reviewCsvFilename(review.year)}.`)
+      announce(`Downloaded ${reviewCsvFilename(review.year)}.`)
     } catch {
-      setAnnouncement('The CSV file could not be created. Your files were not changed.')
+      announce('The CSV file could not be created. Your files were not changed.')
     }
   }
 

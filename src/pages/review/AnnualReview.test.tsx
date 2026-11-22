@@ -500,6 +500,53 @@ describe('AnnualReview print and CSV', () => {
     expect(screen.getByRole('button', { name: 'Download CSV' })).toBeEnabled()
   })
 
+  it('re-announces the download on every click by clearing the live region before the same text returns', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    stubDownload()
+    renderPage('/net-worth/review/2025')
+    const button = await screen.findByRole('button', { name: 'Download CSV' })
+
+    await user.click(button)
+    expect(liveRegion()).toHaveTextContent('Downloaded worth-annual-review-2025.csv.')
+    await user.click(button)
+
+    expect(liveRegion()).toBeEmptyDOMElement()
+    await waitFor(() => expect(liveRegion()).toHaveTextContent('Downloaded worth-annual-review-2025.csv.'))
+  })
+
+  it('re-announces a repeated failure the same way', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    Object.assign(URL, {
+      createObjectURL: () => {
+        throw new Error('no blob')
+      },
+      revokeObjectURL: vi.fn(),
+    })
+    renderPage('/net-worth/review/2025')
+    const button = await screen.findByRole('button', { name: 'Download CSV' })
+
+    await user.click(button)
+    await user.click(button)
+
+    expect(liveRegion()).toBeEmptyDOMElement()
+    await waitFor(() => expect(liveRegion()).toHaveTextContent('The CSV file could not be created.'))
+  })
+
+  it('does not touch the live region after unmount while a repeat is pending', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    stubDownload()
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { unmount } = renderPage('/net-worth/review/2025')
+    const button = await screen.findByRole('button', { name: 'Download CSV' })
+    await user.click(button)
+    await user.click(button)
+
+    unmount()
+    await new Promise(resolve => setTimeout(resolve, 150))
+
+    expect(error).not.toHaveBeenCalled()
+  })
+
   it('renders the print-only footer with today and the privacy line', async () => {
     renderPage('/net-worth/review/2025')
 
