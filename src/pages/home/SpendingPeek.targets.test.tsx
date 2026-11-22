@@ -194,6 +194,51 @@ describe('SpendingPeek targets line, flag on', () => {
     expect(await screen.findByText('October: Dining is within target')).toBeInTheDocument()
   })
 
+  describe('classifies categories like the Budget table, by sign over the anchor month year', () => {
+    const rewardsStore = (extra: BudgetStore['csvs'] = {}): BudgetStore =>
+      makeStore({
+        csvs: {
+          '2026-10': {
+            month: '2026-10',
+            csv: csv([
+              ['2026-10-02', 'Restaurants', -400],
+              ['2026-10-03', 'Dining Rewards', 100],
+            ]),
+            uploadedAt: '',
+          },
+          ...extra,
+        },
+        categoryGroups: [
+          { id: 'dining', name: 'Dining', categories: ['Restaurants', 'Dining Rewards'] },
+          { id: 'others', name: 'Others', categories: [] },
+          { id: 'removed', name: 'Remove from Budget', categories: [] },
+        ],
+      })
+
+    it('ignores a category that is positive all year', async () => {
+      mockedLoadBudgetStore.mockResolvedValue(rewardsStore())
+      await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 350 }))
+      renderPeek(true)
+      expect(await screen.findByText('October: Dining is over target')).toBeInTheDocument()
+    })
+
+    it('counts it once another month of the same year makes it a negative category', async () => {
+      const march = { month: '2026-03', csv: csv([['2026-03-02', 'Dining Rewards', -5]]), uploadedAt: '' }
+      mockedLoadBudgetStore.mockResolvedValue(rewardsStore({ '2026-03': march }))
+      await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 350 }))
+      renderPeek(true)
+      expect(await screen.findByText('October: Dining is within target')).toBeInTheDocument()
+    })
+
+    it('does not let a negative month of a previous year change the classification', async () => {
+      const last = { month: '2025-03', csv: csv([['2025-03-02', 'Dining Rewards', -5]]), uploadedAt: '' }
+      mockedLoadBudgetStore.mockResolvedValue(rewardsStore({ '2025-03': last }))
+      await fileStore.writeJSON(TARGETS_PATH, targetsFile({ dining: 350 }))
+      renderPeek(true)
+      expect(await screen.findByText('October: Dining is over target')).toBeInTheDocument()
+    })
+  })
+
   it('shows nothing when a target only starts after the anchor month', async () => {
     const targets: BudgetTargetsFile = {
       version: 1,

@@ -40,11 +40,17 @@ export function useSpendingTargetsLine(
     if (!enabled || !targets || !store) return null
     const [anchorMonth] = Object.keys(store.csvs ?? {}).sort((a, b) => b.localeCompare(a))
     if (!anchorMonth) return null
+    const year = anchorMonth.slice(0, 4)
+    const transactionsByMonth = Object.fromEntries(
+      Object.entries(store.csvs)
+        .filter(([month]) => month.startsWith(`${year}-`))
+        .map(([month, { csv }]) => [month, parseCSV(csv)]),
+    )
     return buildSpendingTargetsLine({
       groups: store.categoryGroups ?? [],
       targets,
       anchorMonth,
-      transactions: parseCSV(store.csvs[anchorMonth].csv),
+      transactionsByMonth,
       nowMonth: currentMonthKey(),
     })
   }, [enabled, targets, store])

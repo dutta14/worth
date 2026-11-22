@@ -1,5 +1,5 @@
 import type { CategoryGroup } from '../budget/types'
-import { evaluatePeriod, sumByCategory, summarizeGroups } from '../budget/utils/budgetTargets'
+import { evaluatePeriod, isExpenseCategory, sumByCategory, summarizeGroups } from '../budget/utils/budgetTargets'
 import type { BudgetTargetsFile, MonthKey, TargetResult } from '../budget/utils/budgetTargets'
 
 export interface SpendingTargetsLine {
@@ -23,22 +23,39 @@ export const currentMonthKey = (now: Date = new Date()): MonthKey =>
 const isExpenseGroup = (group: CategoryGroup): boolean =>
   group.type !== 'income' && group.id !== 'income-others' && group.id !== 'removed'
 
+type Transaction = { category: string; amount: number }
+
+/** Signed net per category and month, like Budget's `categorySums`, with the removed categories left out. */
+function buildCategorySums(
+  transactionsByMonth: Readonly<Record<MonthKey, ReadonlyArray<Transaction>>>,
+  excluded: ReadonlySet<string>,
+): Record<string, Record<MonthKey, number>> {
+  const sums: Record<string, Record<MonthKey, number>> = {}
+  for (const [month, transactions] of Object.entries(transactionsByMonth)) {
+    for (const [category, total] of Object.entries(sumByCategory(transactions, excluded))) {
+      sums[category] = { ...sums[category], [month]: total }
+    }
+  }
+  return sums
+}
+
 /**
- * One calm sentence about the anchor month. Follows the Budget page's semantics (refunds net against spend),
- * not the Home chart's, which counts every non-income transaction as spend.
+ * One calm sentence about the anchor month. Matches the Budget table: refunds net against spend and a category
+ * counts only if it has a negative month in the anchor month's year, so `transactionsByMonth` must hold every
+ * month of that year. The Home chart still counts every non-income transaction as spend.
  * Returns null when no expense group has a target in effect for the month.
  */
 export function buildSpendingTargetsLine(args: {
   groups: readonly CategoryGroup[]
   targets: BudgetTargetsFile
   anchorMonth: MonthKey
-  transactions: ReadonlyArray<{ category: string; amount: number }>
+  transactionsByMonth: Readonly<Record<MonthKey, ReadonlyArray<Transaction>>>
   nowMonth: MonthKey
 }): SpendingTargetsLine | null {
-  const { groups, targets, anchorMonth, transactions, nowMonth } = args
+  const { groups, targets, anchorMonth, transactionsByMonth, nowMonth } = args
 
   const removed = new Set(groups.find(group => group.id === 'removed')?.categories ?? [])
-  const sums = sumByCategory(transactions, removed)
+  const sums = buildCategorySums(transactionsByMonth, removed)
   const monthsWithData = new Set([anchorMonth])
 
   const evaluated = groups.filter(isExpenseGroup).flatMap((group): Array<{ name: string; result: TargetResult }> => {
@@ -46,7 +63,10 @@ export function buildSpendingTargetsLine(args: {
       record: targets.groups[group.id],
       monthKeys: [anchorMonth],
       monthsWithData,
-      signedNetFor: () => group.categories.reduce((sum, category) => sum + (sums[category] ?? 0), 0),
+      signedNetFor: month =>
+        group.categories
+          .filter(category => isExpenseCategory(sums[category]))
+          .reduce((sum, category) => sum + (sums[category]?.[month] ?? 0), 0),
       nowMonth,
     })
     return result ? [{ name: group.name, result }] : []

@@ -22,16 +22,23 @@ const targetsFor = (monthly: Record<string, number>): BudgetTargetsFile => ({
 const build = (
   monthly: Record<string, number>,
   transactions: Array<{ category: string; amount: number }>,
-  overrides: Partial<{ anchorMonth: string; nowMonth: string; groups: CategoryGroup[] }> = {},
-) =>
-  buildSpendingTargetsLine({
+  overrides: Partial<{
+    anchorMonth: string
+    nowMonth: string
+    groups: CategoryGroup[]
+    otherMonths: Record<string, Array<{ category: string; amount: number }>>
+  }> = {},
+) => {
+  const { otherMonths = {}, anchorMonth = '2026-10', ...rest } = overrides
+  return buildSpendingTargetsLine({
     groups,
     targets: targetsFor(monthly),
-    anchorMonth: '2026-10',
-    transactions,
+    anchorMonth,
+    transactionsByMonth: { ...otherMonths, [anchorMonth]: transactions },
     nowMonth: '2026-11',
-    ...overrides,
+    ...rest,
   })
+}
 
 describe('currentMonthKey', () => {
   it('uses the local calendar month, zero padded', () => {
@@ -112,6 +119,29 @@ describe('buildSpendingTargetsLine', () => {
     expect(build({ dining: 500 }, transactions)?.text).toBe('October: Dining is over target')
   })
 
+  it('ignores a category that is positive all year, as the Budget table does', () => {
+    // Restaurants -400 plus a +100 reward in the same group: only the expense category counts, so $400 vs $350.
+    const transactions = [
+      { category: 'Restaurants', amount: -400 },
+      { category: 'Dining Rewards', amount: 100 },
+    ]
+    const withRewards = [{ ...groups[0], categories: ['Restaurants', 'Dining Rewards'] }, ...groups.slice(1)]
+    expect(build({ dining: 350 }, transactions, { groups: withRewards })?.text).toBe('October: Dining is over target')
+  })
+
+  it('still counts a refund category that has a negative month elsewhere in the year', () => {
+    const withRewards = [{ ...groups[0], categories: ['Restaurants', 'Dining Rewards'] }, ...groups.slice(1)]
+    const line = build(
+      { dining: 350 },
+      [
+        { category: 'Restaurants', amount: -400 },
+        { category: 'Dining Rewards', amount: 100 },
+      ],
+      { groups: withRewards, otherMonths: { '2026-03': [{ category: 'Dining Rewards', amount: -5 }] } },
+    )
+    expect(line?.text).toBe('October: Dining is within target')
+  })
+
   it('compares a zero target against any spend', () => {
     expect(build({ travel: 0 }, [{ category: 'Flights', amount: -25 }])?.text).toBe('October: Travel is over target')
   })
@@ -157,7 +187,7 @@ describe('buildSpendingTargetsLine', () => {
         groups,
         targets,
         anchorMonth: '2026-10',
-        transactions: [],
+        transactionsByMonth: { '2026-10': [] },
         nowMonth: '2026-11',
       }),
     ).toBeNull()
@@ -179,7 +209,7 @@ describe('buildSpendingTargetsLine', () => {
       groups,
       targets,
       anchorMonth: '2026-10',
-      transactions: [{ category: 'Restaurants', amount: -700 }],
+      transactionsByMonth: { '2026-10': [{ category: 'Restaurants', amount: -700 }] },
       nowMonth: '2026-11',
     })
     expect(line?.text).toBe('October: Dining is over target')
