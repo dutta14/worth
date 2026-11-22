@@ -2,8 +2,9 @@ import type { FileStore, SafetyNetStore } from './fileStoreTypes'
 import { parseCSV, serializeCSV } from './csvUtils'
 import { createBackupManager, createHandleIO } from './backupManager'
 import type { BackupManager } from './backupManager'
-import { EMPTY_SAFETY_SNAPSHOT, errorKind, isBackupEligible, snapshotsEqual } from './safetyNet'
-import type { BackupEntry, SafetySnapshot, WriteFailureKind } from './safetyNet'
+import { saveCorruptCopy } from './corruptCopy'
+import { EMPTY_SAFETY_SNAPSHOT, FileStoreError, errorKind, isBackupEligible, snapshotsEqual } from './safetyNet'
+import type { BackupEntry, CorruptAction, SafetySnapshot, WriteFailureKind } from './safetyNet'
 
 const CHANNEL_NAME = 'filestore-sync'
 const WRITE_DEBOUNCE_MS = 300
@@ -17,6 +18,16 @@ interface FailedWrite {
   kind: WriteFailureKind
 }
 
+/** A JSON file that did not parse. Its bytes are kept in memory until the user resolves it. */
+interface CorruptEntry {
+  bytes: Uint8Array
+  copyPath: string | null
+  hasBackup: boolean
+  /** False until the copy and the backup lookup have finished, so the banner never shows a half-known state. */
+  ready: boolean
+  settled: Promise<void>
+}
+
 interface PendingWrite {
   timer: ReturnType<typeof setTimeout>
   payload: Payload
@@ -27,6 +38,10 @@ const isNotFound = (error: unknown): boolean =>
   error instanceof DOMException
     ? error.name === 'NotFoundError'
     : (error as { name?: string })?.name === 'NotFoundError'
+
+const isJsonPath = (path: string): boolean => path.toLowerCase().endsWith('.json')
+
+const bytesEqual = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((v, i) => v === b[i])
 
 const splitPath = (path: string): { dirs: string[]; name: string } => {
   const segments = path.split('/').filter(Boolean)
@@ -64,6 +79,14 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
   private backupManager: BackupManager | null = null
   private safetySnapshot: SafetySnapshot = EMPTY_SAFETY_SNAPSHOT
   private safetySubscribers = new Set<() => void>()
+  private corrupt = new Map<string, CorruptEntry>()
+  /** Latest payload for each path whose write was refused because the file on disk is corrupt. */
+  private held = new Map<string, Payload>()
+  /** JSON paths whose bytes on disk are known to parse, so a write needs no check first. */
+  private verified = new Set<string>()
+  /** Paths the user resolved while the bytes on disk may still be unreadable; not flagged again until rewritten. */
+  private acknowledged = new Set<string>()
+  private resolving = new Map<string, Promise<BackupEntry | null>>()
 
   async init(handle: FileSystemDirectoryHandle): Promise<void> {
     this.root = handle
@@ -72,6 +95,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     this.permissionLost = false
     this.backupsHealthy = true
     this.backupManager = null
+    this.resetCorruptState()
     this.refreshSafetySnapshot()
     this.setupChannel()
   }
@@ -94,13 +118,19 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
 
   async readJSON<T>(path: string, fallback: T): Promise<T> {
     if (this.cache.has(path)) return this.cache.get(path) as T
-    const text = await this.readText(path)
-    if (text === null) return fallback
+    const guarded = this.safetyEnabled
+    const read = guarded ? await this.readTextAndBytes(path) : { text: await this.readText(path), bytes: null }
+    if (read.text === null) return fallback
     try {
-      const parsed = JSON.parse(text) as T
+      const parsed = JSON.parse(read.text) as T
       this.cache.set(path, parsed)
+      if (guarded) this.markReadable(path)
       return parsed
     } catch {
+      // Zero-byte and whitespace-only files count as missing: a sync client may have left a placeholder.
+      if (guarded && read.bytes && read.text.trim() !== '' && !this.acknowledged.has(path)) {
+        this.markCorrupt(path, read.bytes)
+      }
       return fallback
     }
   }
@@ -191,9 +221,15 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     if (!dir) return
     try {
       await withLock(`filestore:${path}`, async () => {
+        const unreadable = this.corrupt.get(path)
+        if (unreadable) await this.preserveCorruptBytes(path, unreadable)
         // Always copy before a delete: a snapshot taken earlier this session may already be out of date.
         await this.snapshotBeforeWrite(dir, name, path, true)
         await dir.removeEntry(name)
+        if (unreadable) {
+          this.clearCorrupt(path)
+          this.refreshSafetySnapshot()
+        }
       })
     } catch (error) {
       if (!isNotFound(error)) throw error
@@ -220,6 +256,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     this.safetyEnabled = opts.enabled
     if (opts.enabled) return
     this.failed.clear()
+    this.resetCorruptState()
     this.permissionLost = false
     this.backupsHealthy = true
     this.refreshSafetySnapshot()
@@ -237,7 +274,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
   }
 
   hasUnsavedWork(): boolean {
-    return this.pending.size > 0 || this.inFlight.size > 0 || this.failed.size > 0
+    return this.pending.size > 0 || this.inFlight.size > 0 || this.failed.size > 0 || this.held.size > 0
   }
 
   /** Re-queues every failed payload immediately; resolves once each attempt has settled. */
@@ -297,7 +334,7 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
       this.pending.delete(path)
     }
     // A write that already failed lives only in `failed`, so it needs the same protection as a queued one.
-    const unsaved = queued?.payload ?? this.failed.get(path)?.payload
+    const unsaved = queued?.payload ?? this.failed.get(path)?.payload ?? this.held.get(path)
     try {
       await withLock(`filestore:${path}`, async () => {
         if (unsaved?.kind === 'text') {
@@ -311,9 +348,132 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     }
     queued?.waiters.forEach(w => w.resolve())
     this.cache.delete(path)
-    if (this.failed.delete(path)) this.refreshSafetySnapshot()
+    // A restore replaces whatever was wrong with the file, so a corrupt hold on it ends here.
+    const hadHold = this.corrupt.has(path)
+    this.clearCorrupt(path)
+    this.acknowledged.add(path)
+    if (this.failed.delete(path) || hadHold) this.refreshSafetySnapshot()
     this.setBackupsHealthy(true)
     this.announce(path)
+  }
+
+  /**
+   * Ends the hold on a corrupt JSON file. The unreadable bytes are copied aside first (to a `.corrupt-` file,
+   * or to `_backups/` when that fails) and the file is left alone if neither copy can be made.
+   */
+  resolveCorrupt(path: string, action: CorruptAction): Promise<BackupEntry | null> {
+    const running = this.resolving.get(path)
+    if (running) return running
+    const attempt = this.runResolveCorrupt(path, action).finally(() => this.resolving.delete(path))
+    this.resolving.set(path, attempt)
+    return attempt
+  }
+
+  private async runResolveCorrupt(path: string, action: CorruptAction): Promise<BackupEntry | null> {
+    const entry = this.corrupt.get(path)
+    if (!entry || !this.safetyEnabled || !this.root) return null
+    await entry.settled
+    let restoredFrom: BackupEntry | null = null
+    await withLock(`filestore:${path}`, async () => {
+      if (this.corrupt.get(path) !== entry) return
+      await this.preserveCorruptBytes(path, entry)
+      const held = this.held.get(path)
+      if (action === 'restore-latest') {
+        const backups = this.requireBackups()
+        const latest = await backups.latestValid(path)
+        if (!latest) throw new Error(`There is no valid backup of ${path}.`)
+        if (held?.kind === 'text') {
+          await backups.snapshot(path, new TextEncoder().encode(held.value), { tag: 'unsaved', force: true })
+        }
+        await backups.restore(latest, { snapshotCurrent: false })
+        restoredFrom = latest
+      } else if (held) {
+        const { dirs, name } = splitPath(path)
+        const dir = await this.resolveDir(dirs, true)
+        if (!dir) throw new Error(`Cannot open the folder for ${path}.`)
+        await this.writePayload(dir, name, held)
+      }
+      this.clearCorrupt(path)
+      this.acknowledged.add(path)
+    })
+    if (this.corrupt.has(path)) return null
+    if (restoredFrom) this.cache.delete(path)
+    this.refreshSafetySnapshot()
+    this.announce(path)
+    return restoredFrom
+  }
+
+  /** Makes sure what is on disk right now is saved somewhere else before the file is replaced or removed. */
+  private async preserveCorruptBytes(path: string, entry: CorruptEntry): Promise<void> {
+    const root = this.root
+    if (!root) return
+    const io = createHandleIO(root)
+    const current = await io.read(path)
+    if (current === null || current.length === 0) return
+    if (entry.copyPath !== null && bytesEqual(current, entry.bytes)) return
+    try {
+      entry.copyPath = await saveCorruptCopy(io, path, current)
+      entry.bytes = current
+      return
+    } catch (error) {
+      console.error(`FileStore corrupt copy of "${path}" failed:`, error)
+    }
+    // Last resort: the backups folder, so the bytes are never replaced without a second copy.
+    const backups = this.getBackups()
+    if (!backups) throw new Error(`Could not save a copy of ${path}, so it was left untouched.`)
+    await backups.snapshot(path, current, { force: true })
+    entry.bytes = current
+  }
+
+  private markReadable(path: string): void {
+    this.verified.add(path)
+    this.acknowledged.delete(path)
+    const entry = this.corrupt.get(path)
+    // The file parses now (fixed outside the app); a held edit still needs the user's say before it lands.
+    if (entry && !this.held.has(path)) {
+      this.corrupt.delete(path)
+      this.refreshSafetySnapshot()
+    }
+  }
+
+  private markCorrupt(path: string, bytes: Uint8Array): void {
+    this.verified.delete(path)
+    if (this.corrupt.has(path)) return
+    const entry: CorruptEntry = { bytes, copyPath: null, hasBackup: false, ready: false, settled: Promise.resolve() }
+    this.corrupt.set(path, entry)
+    entry.settled = this.quarantine(path, entry)
+  }
+
+  private async quarantine(path: string, entry: CorruptEntry): Promise<void> {
+    const root = this.root
+    if (root) {
+      try {
+        entry.copyPath = await saveCorruptCopy(createHandleIO(root), path, entry.bytes)
+      } catch (error) {
+        console.error(`FileStore corrupt copy of "${path}" failed:`, error)
+      }
+      try {
+        entry.hasBackup = (await this.getBackups()?.latestValid(path)) != null
+      } catch (error) {
+        console.error(`FileStore backup lookup for "${path}" failed:`, error)
+      }
+    }
+    if (this.corrupt.get(path) !== entry) return
+    entry.ready = true
+    this.refreshSafetySnapshot()
+  }
+
+  private clearCorrupt(path: string): void {
+    this.corrupt.delete(path)
+    this.held.delete(path)
+  }
+
+  private resetCorruptState(): void {
+    this.corrupt.clear()
+    this.held.clear()
+    this.verified.clear()
+    this.acknowledged.clear()
+    this.resolving.clear()
   }
 
   private requireBackups(): BackupManager {
@@ -396,12 +556,17 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
   private refreshSafetySnapshot(): void {
     const next: SafetySnapshot = {
       failed: [...this.failed].map(([path, { kind }]) => ({ path, kind })),
+      corrupt: [...this.corrupt]
+        .filter(([, entry]) => entry.ready)
+        .map(([path, { copyPath, hasBackup }]) => ({ path, copyPath, hasBackup })),
       permissionLost: this.permissionLost,
       backupsHealthy: this.backupsHealthy,
     }
     if (snapshotsEqual(next, this.safetySnapshot)) return
     this.safetySnapshot =
-      next.failed.length === 0 && !next.permissionLost && next.backupsHealthy ? EMPTY_SAFETY_SNAPSHOT : next
+      next.failed.length === 0 && next.corrupt.length === 0 && !next.permissionLost && next.backupsHealthy
+        ? EMPTY_SAFETY_SNAPSHOT
+        : next
     for (const cb of this.safetySubscribers) {
       try {
         cb()
@@ -478,6 +643,14 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     return file === null ? null : file.text()
   }
 
+  /** Reads the raw bytes once so a file that fails to parse can be copied exactly as it was. */
+  private async readTextAndBytes(path: string): Promise<{ text: string | null; bytes: Uint8Array | null }> {
+    const file = await this.readFile(path)
+    if (file === null) return { text: null, bytes: null }
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    return { text: new TextDecoder().decode(bytes), bytes }
+  }
+
   private queueWrite(path: string, payload: Payload, delay?: number): Promise<void> {
     const debounce = delay ?? (this.safetyEnabled ? SAFE_WRITE_DEBOUNCE_MS : WRITE_DEBOUNCE_MS)
     const failedEntry = this.failed.get(path)
@@ -509,7 +682,8 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
       await this.persist(path, entry.payload)
     } catch (error) {
       this.releaseInFlight(path)
-      this.recordFailure(path, entry.payload, error)
+      if (error instanceof FileStoreError) this.held.set(path, entry.payload)
+      else this.recordFailure(path, entry.payload, error)
       entry.waiters.forEach(w => w.reject(error))
       return
     }
@@ -531,12 +705,50 @@ export class FileSystemFileStore implements FileStore, SafetyNetStore {
     await withLock(`filestore:${path}`, async () => {
       const dir = await this.resolveDir(dirs, true)
       if (!dir) return
+      await this.assertNotCorrupt(dir, name, path, payload)
       await this.snapshotBeforeWrite(dir, name, path)
-      const handle = await dir.getFileHandle(name, { create: true })
-      const writable = await handle.createWritable()
-      await writable.write(payload.kind === 'text' ? payload.value : new Blob([payload.value]))
-      await writable.close()
+      await this.writePayload(dir, name, payload)
+      if (this.safetyEnabled && payload.kind === 'text' && isJsonPath(path)) this.markReadable(path)
     })
+  }
+
+  private async writePayload(dir: FileSystemDirectoryHandle, name: string, payload: Payload): Promise<void> {
+    const handle = await dir.getFileHandle(name, { create: true })
+    const writable = await handle.createWritable()
+    await writable.write(payload.kind === 'text' ? payload.value : new Blob([payload.value]))
+    await writable.close()
+  }
+
+  /**
+   * Refuses to overwrite a JSON file that does not parse. A path never read this session (or read before the
+   * safety net switched on) is checked once, so a blind write cannot replace bytes nobody has looked at.
+   */
+  private async assertNotCorrupt(
+    dir: FileSystemDirectoryHandle,
+    name: string,
+    path: string,
+    payload: Payload,
+  ): Promise<void> {
+    if (!this.safetyEnabled || payload.kind !== 'text' || !isJsonPath(path)) return
+    if (!this.corrupt.has(path)) {
+      if (this.verified.has(path) || this.acknowledged.has(path)) return
+      let bytes: Uint8Array
+      try {
+        bytes = new Uint8Array(await (await (await dir.getFileHandle(name)).getFile()).arrayBuffer())
+      } catch (error) {
+        if (isNotFound(error)) return
+        throw error
+      }
+      const text = new TextDecoder().decode(bytes)
+      try {
+        if (text.trim() !== '') JSON.parse(text)
+        this.verified.add(path)
+        return
+      } catch {
+        this.markCorrupt(path, bytes)
+      }
+    }
+    throw new FileStoreError('corrupt-blocked', `${path} is not valid JSON, so the write was held.`)
   }
 }
 

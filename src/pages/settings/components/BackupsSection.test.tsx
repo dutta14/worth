@@ -37,6 +37,7 @@ const renderSection = (overrides: Partial<SafetyNetContextValue> = {}) => {
     chooseFolderAgain: vi.fn(async () => {}),
     listBackups: vi.fn(async () => ENTRIES),
     restoreBackup: vi.fn(async () => {}),
+    resolveCorrupt: vi.fn(async () => null),
     ...overrides,
   }
   render(
@@ -264,6 +265,7 @@ describe('BackupsSection', () => {
       chooseFolderAgain: vi.fn(async () => {}),
       listBackups: () => new Promise<BackupEntry[]>(r => (resolve = r)),
       restoreBackup: vi.fn(async () => {}),
+      resolveCorrupt: vi.fn(async () => null),
     }
     const { unmount } = render(
       <SafetyNetContext.Provider value={value}>

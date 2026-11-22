@@ -38,8 +38,20 @@ export interface BackupManager {
   list(): Promise<BackupEntry[]>
   /** Deletes all but the newest copies of one file. */
   prune(path: string): Promise<void>
-  /** Copies the current file aside, then replaces it with the backup. The caller notifies the app. */
-  restore(entry: BackupEntry): Promise<void>
+  /**
+   * Replaces the file with the backup. The current bytes are copied aside first unless the caller already
+   * holds a copy of them (`snapshotCurrent: false`). The caller notifies the app.
+   */
+  restore(entry: BackupEntry, options?: RestoreOptions): Promise<void>
+  /**
+   * The newest copy of `path` whose bytes parse as JSON. Regular copies win over `-unsaved` ones, which are
+   * only the user's discarded edits, so they are used only when nothing else exists.
+   */
+  latestValid(path: string): Promise<BackupEntry | null>
+}
+
+export interface RestoreOptions {
+  snapshotCurrent?: boolean
 }
 
 const README_PATH = `${BACKUPS_DIR}/README.txt`
@@ -165,18 +177,40 @@ export function createBackupManager(io: RawIO, now: () => number = Date.now): Ba
     return found.sort((a, b) => (a.stamp < b.stamp ? 1 : a.stamp > b.stamp ? -1 : a.path.localeCompare(b.path)))
   }
 
-  const restore = async (entry: BackupEntry): Promise<void> => {
+  const restore = async (entry: BackupEntry, { snapshotCurrent = true }: RestoreOptions = {}): Promise<void> => {
     if (!isBackupEligible(entry.path) || !entry.backupPath.startsWith(`${BACKUPS_DIR}/`)) {
       throw new Error(`Cannot restore ${entry.path}.`)
     }
     const bytes = await io.read(entry.backupPath)
     if (bytes === null) throw new Error(`The backup ${entry.backupPath} no longer exists.`)
-    const current = await io.read(entry.path)
-    if (current && current.length > 0) await snapshot(entry.path, current, { force: true })
+    if (snapshotCurrent) {
+      const current = await io.read(entry.path)
+      if (current && current.length > 0) await snapshot(entry.path, current, { force: true })
+    }
     await io.write(entry.path, bytes)
   }
 
-  return { isDue, snapshot, list, prune, restore }
+  const parses = async (entry: BackupEntry): Promise<boolean> => {
+    try {
+      const bytes = await io.read(entry.backupPath)
+      if (!bytes || bytes.length === 0) return false
+      JSON.parse(new TextDecoder().decode(bytes))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const latestValid = async (path: string): Promise<BackupEntry | null> => {
+    if (disabled || !isBackupEligible(path) || !path.toLowerCase().endsWith('.json')) return null
+    const newestFirst = (await copiesOf(path)).sort((a, b) => (a.stamp < b.stamp ? 1 : a.stamp > b.stamp ? -1 : 0))
+    for (const entry of [...newestFirst.filter(copy => !copy.unsaved), ...newestFirst.filter(copy => copy.unsaved)]) {
+      if (await parses(entry)) return entry
+    }
+    return null
+  }
+
+  return { isDue, snapshot, list, prune, restore, latestValid }
 }
 
 const isNotFound = (error: unknown): boolean => (error as { name?: string } | null)?.name === 'NotFoundError'

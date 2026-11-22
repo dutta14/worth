@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryFileStore } from './memoryFileStore'
 import { FileSystemFileStore } from './fileStore'
+import { EMPTY_SAFETY_SNAPSHOT, FileStoreError } from './safetyNet'
+import type { BackupEntry } from './safetyNet'
 
 /* ── Fake File System Access API handles ─────────────────────── */
 
@@ -73,6 +75,8 @@ class FakeDirectoryHandle {
     for (const dir of this.dirs.values()) yield dir
   }
 }
+
+const EMPTY = EMPTY_SAFETY_SNAPSHOT
 
 const asHandle = (dir: FakeDirectoryHandle) => dir as unknown as FileSystemDirectoryHandle
 
@@ -449,6 +453,7 @@ describe('FileSystemFileStore safety net', () => {
       await expect(settle(store.writeJSON('accounts.json', [{ id: 1 }]))).resolves.toBe('rejected')
       expect(store.getSafetySnapshot()).toEqual({
         failed: [{ path: 'accounts.json', kind: 'other' }],
+        corrupt: [],
         permissionLost: false,
         backupsHealthy: true,
       })
@@ -615,7 +620,12 @@ describe('FileSystemFileStore safety net', () => {
       root.faults.close = diskError('NotAllowedError')
       await settle(store.writeJSON('a.json', [1]))
       store.configureSafety({ enabled: false })
-      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false, backupsHealthy: true })
+      expect(store.getSafetySnapshot()).toEqual({
+        failed: [],
+        corrupt: [],
+        permissionLost: false,
+        backupsHealthy: true,
+      })
     })
 
     it('clears failures when a new folder is connected', async () => {
@@ -652,7 +662,12 @@ describe('FileSystemFileStore safety net', () => {
       const checking = store.checkPermission()
       await vi.advanceTimersByTimeAsync(1)
       await checking
-      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false, backupsHealthy: true })
+      expect(store.getSafetySnapshot()).toEqual({
+        failed: [],
+        corrupt: [],
+        permissionLost: false,
+        backupsHealthy: true,
+      })
       expect(root.contents.has('a.json')).toBe(true)
     })
 
@@ -707,7 +722,12 @@ describe('FileSystemFileStore safety net', () => {
       await vi.advanceTimersByTimeAsync(1)
       await expect(reconnecting).resolves.toBe('granted')
       expect(root.requestPermission).toHaveBeenCalledWith({ mode: 'readwrite' })
-      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false, backupsHealthy: true })
+      expect(store.getSafetySnapshot()).toEqual({
+        failed: [],
+        corrupt: [],
+        permissionLost: false,
+        backupsHealthy: true,
+      })
       expect(root.contents.has('a.json')).toBe(true)
     })
 
@@ -861,7 +881,12 @@ describe('FileSystemFileStore safety net', () => {
       await save(store, 'accounts.json', [2])
 
       expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([2])
-      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false, backupsHealthy: false })
+      expect(store.getSafetySnapshot()).toEqual({
+        failed: [],
+        corrupt: [],
+        permissionLost: false,
+        backupsHealthy: false,
+      })
       expect(errorSpy).toHaveBeenCalledWith('FileStore backup of "accounts.json" failed:', expect.any(DOMException))
 
       await save(store, 'profile.json', { a: 2 })
@@ -1130,6 +1155,762 @@ describe('FileSystemFileStore safety net', () => {
 
       expect(store.getSafetySnapshot().backupsHealthy).toBe(true)
       errorSpy.mockRestore()
+    })
+  })
+
+  describe('corrupt files', () => {
+    const NOW = Date.UTC(2026, 10, 8, 12, 0, 0, 0)
+    const enc = (text: string): Uint8Array => new TextEncoder().encode(text)
+
+    beforeEach(() => {
+      vi.setSystemTime(NOW)
+    })
+
+    const textOf = async (data: string | Blob | undefined): Promise<string> =>
+      data === undefined ? '<missing>' : typeof data === 'string' ? data : data.text()
+
+    const bytesOf = async (data: string | Blob | undefined): Promise<number[]> =>
+      data === undefined ? [] : Array.from(new Uint8Array(await new Blob([data]).arrayBuffer()))
+
+    const folder = (root: FakeDirectoryHandle, path: string): FakeDirectoryHandle | undefined =>
+      path.split('/').reduce<FakeDirectoryHandle | undefined>((dir, name) => dir?.dirs.get(name), root)
+
+    const corruptCopies = (root: FakeDirectoryHandle, name = 'accounts.json'): string[] =>
+      [...root.contents.keys()].filter(key => key.startsWith(`${name}.corrupt-`)).sort()
+
+    const backupCopies = (root: FakeDirectoryHandle, dir = '_backups/accounts'): string[] =>
+      [...(folder(root, dir)?.contents.keys() ?? [])].sort()
+
+    /** Records every file whose write was committed, in order. */
+    const trackCommits = (root: FakeDirectoryHandle): string[] => {
+      const committed: string[] = []
+      root.faults.close = name => committed.push(name)
+      return committed
+    }
+
+    const settleIO = () => vi.advanceTimersByTimeAsync(1000)
+
+    /** Reads a corrupt file and waits for the quarantine copy and backup lookup to finish. */
+    const detect = async (store: FileSystemFileStore, path = 'accounts.json'): Promise<unknown> => {
+      const result = await store.readJSON(path, 'fallback')
+      await settleIO()
+      return result
+    }
+
+    const edit = async (store: FileSystemFileStore, path: string, data: unknown) => {
+      const outcome = store.writeJSON(path, data).then(
+        () => 'saved' as const,
+        (error: unknown) => error,
+      )
+      await settleIO()
+      return outcome
+    }
+
+    const seedBackup = (root: FakeDirectoryHandle, path: string, stamp: string, content: string, tag = '') => {
+      const dir = path.replace(/\.json$/, '')
+      let current = root
+      for (const segment of ['_backups', ...dir.split('/')]) {
+        let next = current.dirs.get(segment)
+        if (!next) {
+          next = new FakeDirectoryHandle(segment)
+          current.dirs.set(segment, next)
+        }
+        current = next
+      }
+      current.contents.set(`${stamp}${tag}.json`, content)
+    }
+
+    const MALFORMED = [
+      '{',
+      '{"a":',
+      '[1,2',
+      'not json at all',
+      '<html><body>502 Bad Gateway</body></html>',
+      '{"a":1}}',
+      '{"a":1} trailing text',
+      '\uFEFF{"truncated":',
+      "{'single':'quotes'}",
+      '[1,,2]',
+      'undefined',
+      '{"a":1,}',
+      '}{',
+      '[',
+      ']',
+      '"unterminated',
+      'nul\u0000l',
+      '{"a":01}',
+      '0x10',
+      '--- yaml: true',
+    ]
+
+    it('covers twenty distinct malformed inputs', () => {
+      expect(new Set(MALFORMED).size).toBe(20)
+      for (const text of MALFORMED) expect(() => JSON.parse(text)).toThrow()
+    })
+
+    it.each(MALFORMED.map(text => [JSON.stringify(text), text]))(
+      'quarantines %s without writing a byte to the original path',
+      async (_label, text) => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', text)
+        const committed = trackCommits(root)
+
+        await expect(detect(store)).resolves.toBe('fallback')
+        await expect(edit(store, 'accounts.json', [{ id: 'x' }])).resolves.toBeInstanceOf(FileStoreError)
+
+        expect(committed.filter(name => name === 'accounts.json')).toEqual([])
+        expect(root.contents.get('accounts.json')).toBe(text)
+        const [copy] = corruptCopies(root)
+        expect(copy).toMatch(/^accounts\.json\.corrupt-20261108T120000\d{3}Z$/)
+        await expect(bytesOf(root.contents.get(copy))).resolves.toEqual(Array.from(enc(text)))
+        expect(store.getSafetySnapshot().corrupt).toEqual([{ path: 'accounts.json', copyPath: copy, hasBackup: false }])
+      },
+    )
+
+    it('copies bytes that are not valid text exactly as they are', async () => {
+      const { root, store } = await setup()
+      const raw = new Uint8Array([0x7b, 0xff, 0xfe, 0x00, 0xc3, 0x28])
+      root.contents.set('accounts.json', new Blob([raw]))
+
+      await detect(store)
+
+      const [copy] = corruptCopies(root)
+      await expect(bytesOf(root.contents.get(copy))).resolves.toEqual(Array.from(raw))
+    })
+
+    it('treats a zero-byte or whitespace-only file as missing: no banner, no copy, writes go through', async () => {
+      const { root, store } = await setup()
+      root.contents.set('accounts.json', '')
+      root.contents.set('profile.json', ' \n\t ')
+
+      await expect(detect(store, 'accounts.json')).resolves.toBe('fallback')
+      await expect(detect(store, 'profile.json')).resolves.toBe('fallback')
+      expect(store.getSafetySnapshot()).toBe(EMPTY)
+      expect([...root.contents.keys()].filter(key => key.includes('.corrupt-'))).toEqual([])
+
+      await expect(edit(store, 'accounts.json', [1])).resolves.toBe('saved')
+      await expect(edit(store, 'profile.json', { a: 1 })).resolves.toBe('saved')
+      expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([1])
+      expect(JSON.parse(String(root.contents.get('profile.json')))).toEqual({ a: 1 })
+    })
+
+    it('does nothing when the safety net is off: the fallback is returned and the next save overwrites, as before', async () => {
+      const { root, store } = await setup(false)
+      root.contents.set('accounts.json', '{broken')
+
+      await expect(detect(store)).resolves.toBe('fallback')
+      expect(store.getSafetySnapshot()).toBe(EMPTY)
+      await expect(edit(store, 'accounts.json', [1])).resolves.toBe('saved')
+
+      expect(corruptCopies(root)).toEqual([])
+      expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([1])
+      expect(root.dirs.has('_backups')).toBe(false)
+      expect(store.hasUnsavedWork()).toBe(false)
+    })
+
+    it('does not publish the issue until the copy is made, so the banner never shows a half-known state', async () => {
+      const { root, store } = await setup()
+      root.contents.set('accounts.json', '{broken')
+      const seen: number[] = []
+      store.subscribeSafety(() => seen.push(store.getSafetySnapshot().corrupt.length))
+
+      await store.readJSON('accounts.json', null)
+      expect(store.getSafetySnapshot().corrupt).toEqual([])
+      await settleIO()
+
+      expect(seen).toEqual([1])
+    })
+
+    it('reports a valid backup so Restore can be offered, and ignores unparseable ones', async () => {
+      const { root, store } = await setup()
+      root.contents.set('accounts.json', '{broken')
+      seedBackup(root, 'accounts.json', '20261101T000000000Z', '{also broken')
+      await detect(store)
+      expect(store.getSafetySnapshot().corrupt[0].hasBackup).toBe(false)
+
+      const other = await setup()
+      other.root.contents.set('accounts.json', '{broken')
+      seedBackup(other.root, 'accounts.json', '20261101T000000000Z', '[1]')
+      await detect(other.store)
+      expect(other.store.getSafetySnapshot().corrupt[0].hasBackup).toBe(true)
+    })
+
+    it('still raises the issue, without a backup, when the backups folder cannot be read', async () => {
+      const { root, store } = await setup()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      root.contents.set('accounts.json', '{broken')
+      const original = root.getDirectoryHandle.bind(root)
+      root.getDirectoryHandle = async (name, options) => {
+        if (name === '_backups') throw new Error('unreadable')
+        return original(name, options)
+      }
+
+      await detect(store)
+
+      expect(store.getSafetySnapshot().corrupt).toEqual([
+        expect.objectContaining({ path: 'accounts.json', hasBackup: false }),
+      ])
+      errorSpy.mockRestore()
+    })
+
+    it('does not make another copy when the same broken file is read again', async () => {
+      const { root, store } = await setup()
+      root.contents.set('accounts.json', '{broken')
+      await detect(store)
+      await detect(store)
+      expect(corruptCopies(root)).toHaveLength(1)
+
+      const next = new FileSystemFileStore()
+      await next.init(asHandle(root))
+      next.configureSafety({ enabled: true })
+      await detect(next)
+      expect(corruptCopies(root)).toHaveLength(1)
+      expect(next.getSafetySnapshot().corrupt[0].copyPath).toBe(corruptCopies(root)[0])
+    })
+
+    it('keeps the original untouched and says no copy exists when the copy cannot be saved', async () => {
+      const { root, store } = await setup()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      root.contents.set('accounts.json', '{broken')
+      root.faults.createWritable = name => {
+        if (name.includes('.corrupt-')) throw new DOMException('full', 'QuotaExceededError')
+      }
+      const committed = trackCommits(root)
+
+      await detect(store)
+      await expect(edit(store, 'accounts.json', [1])).resolves.toBeInstanceOf(FileStoreError)
+
+      expect(store.getSafetySnapshot().corrupt).toEqual([{ path: 'accounts.json', copyPath: null, hasBackup: false }])
+      expect(root.contents.get('accounts.json')).toBe('{broken')
+      expect(committed).toEqual([])
+      expect(corruptCopies(root)).toEqual([])
+      errorSpy.mockRestore()
+    })
+
+    describe('held writes', () => {
+      it('refuses every write to a corrupt path, keeps the edit on screen, and is not a save failure', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+
+        const outcome = await edit(store, 'accounts.json', [{ id: 'new' }])
+
+        expect(outcome).toBeInstanceOf(FileStoreError)
+        expect((outcome as FileStoreError).code).toBe('corrupt-blocked')
+        expect(root.contents.get('accounts.json')).toBe('{broken')
+        await expect(store.readJSON('accounts.json', [])).resolves.toEqual([{ id: 'new' }])
+        expect(store.getSafetySnapshot().failed).toEqual([])
+        expect(store.hasUnsavedWork()).toBe(true)
+        expect(root.dirs.has('_backups')).toBe(false)
+      })
+
+      it('lets writes to other files through', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+
+        await expect(edit(store, 'profile.json', { name: 'A' })).resolves.toBe('saved')
+
+        expect(JSON.parse(String(root.contents.get('profile.json')))).toEqual({ name: 'A' })
+      })
+
+      it('holds a write that was queued before the file was found to be corrupt', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        const committed = trackCommits(root)
+
+        const outcome = edit(store, 'accounts.json', [1])
+        await expect(outcome).resolves.toBeInstanceOf(FileStoreError)
+
+        expect(committed.filter(name => name === 'accounts.json')).toEqual([])
+        expect(root.contents.get('accounts.json')).toBe('{broken')
+        expect(corruptCopies(root)).toHaveLength(1)
+        expect(store.getSafetySnapshot().corrupt).toHaveLength(1)
+      })
+
+      it('does not overwrite a corrupt file that was never read, and quarantines it first', async () => {
+        const { root, store } = await setup()
+        root.contents.set('goals.json', '{"financialGoals":[')
+
+        await expect(edit(store, 'goals.json', { financialGoals: [] })).resolves.toBeInstanceOf(FileStoreError)
+
+        expect(root.contents.get('goals.json')).toBe('{"financialGoals":[')
+        const [copy] = corruptCopies(root, 'goals.json')
+        await expect(textOf(root.contents.get(copy))).resolves.toBe('{"financialGoals":[')
+        expect(store.getSafetySnapshot().corrupt[0]).toMatchObject({ path: 'goals.json', copyPath: copy })
+      })
+
+      it('checks a never-read file once, then writes normally', async () => {
+        const { root, store } = await setup()
+        root.contents.set('goals.json', '{"financialGoals":[]}')
+
+        await expect(edit(store, 'goals.json', { financialGoals: [1] })).resolves.toBe('saved')
+        root.contents.set('goals.json', '{"financialGoals":[1]}')
+        await expect(edit(store, 'goals.json', { financialGoals: [2] })).resolves.toBe('saved')
+
+        expect(JSON.parse(String(root.contents.get('goals.json')))).toEqual({ financialGoals: [2] })
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+      })
+
+      it('does not treat a binary or CSV write to a .json-looking path as needing a check', async () => {
+        const { root, store } = await setup()
+        root.contents.set('balances/2026.csv', 'x')
+        const balances = await root.getDirectoryHandle('balances', { create: true })
+        balances.contents.set('2026.csv', 'month,balance\n{broken')
+
+        const outcome = store.writeCSV('balances/2026.csv', [['month']])
+        await settleIO()
+
+        await expect(outcome).resolves.toBeUndefined()
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+      })
+
+      it('surfaces a read error during the check as a save failure instead of writing', async () => {
+        const { root, store } = await setup()
+        root.contents.set('goals.json', '[1]')
+        const original = root.getFileHandle.bind(root)
+        root.getFileHandle = async (name, options) => {
+          if (!options?.create && name === 'goals.json') throw new DOMException('no', 'NotAllowedError')
+          return original(name, options)
+        }
+        const outcome = edit(store, 'goals.json', [2])
+
+        await expect(outcome).resolves.not.toBe('saved')
+        expect(store.getSafetySnapshot().failed).toEqual([{ path: 'goals.json', kind: 'permission' }])
+        expect(root.contents.get('goals.json')).toBe('[1]')
+      })
+
+      it('writes a new file without a check when nothing exists yet', async () => {
+        const { root, store } = await setup()
+        await expect(edit(store, 'goals.json', [1])).resolves.toBe('saved')
+        expect(root.contents.get('goals.json')).toBeDefined()
+      })
+
+      it('clears the hold when the file turns out to parse again and nothing was held', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        expect(store.getSafetySnapshot().corrupt).toHaveLength(1)
+
+        root.contents.set('accounts.json', '[1]')
+        await expect(store.readJSON('accounts.json', [])).resolves.toEqual([1])
+
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+      })
+
+      it('keeps the hold on a file that parses again while an edit is still held', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        await edit(store, 'accounts.json', [9])
+
+        store.configureSafety({ enabled: true })
+        root.contents.set('accounts.json', '[1]')
+        // Another tab saved; this one dropped its cache and re-reads.
+        await (store as unknown as { cache: Map<string, unknown> }).cache.delete('accounts.json')
+        await store.readJSON('accounts.json', [])
+
+        expect(store.getSafetySnapshot().corrupt).toHaveLength(1)
+        expect(store.hasUnsavedWork()).toBe(true)
+      })
+    })
+
+    describe('start fresh', () => {
+      it('writes the held edit, keeps the unreadable copy, and unblocks later saves', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        await edit(store, 'accounts.json', [1])
+        await edit(store, 'accounts.json', [1, 2])
+        const subscriber = vi.fn()
+        store.subscribe('accounts.json', subscriber)
+
+        await expect(store.resolveCorrupt('accounts.json', 'start-fresh')).resolves.toBeNull()
+
+        expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([1, 2])
+        const [copy] = corruptCopies(root)
+        await expect(textOf(root.contents.get(copy))).resolves.toBe('{broken')
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+        expect(store.hasUnsavedWork()).toBe(false)
+        expect(subscriber).toHaveBeenCalled()
+        // The corrupt bytes are not copied into _backups: the .corrupt- copy already holds them.
+        expect(backupCopies(root)).toEqual([])
+
+        await expect(edit(store, 'accounts.json', [1, 2, 3])).resolves.toBe('saved')
+        expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([1, 2, 3])
+      })
+
+      it('writes nothing when no edit was held, and does not flag the same bytes again', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        const committed = trackCommits(root)
+
+        await store.resolveCorrupt('accounts.json', 'start-fresh')
+        await detect(store)
+
+        expect(committed.filter(name => name === 'accounts.json')).toEqual([])
+        expect(root.contents.get('accounts.json')).toBe('{broken')
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+        await expect(edit(store, 'accounts.json', [7])).resolves.toBe('saved')
+        expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([7])
+      })
+
+      it('flags the file again if it breaks again after the user resolved it and it was rewritten', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        await store.resolveCorrupt('accounts.json', 'start-fresh')
+        await edit(store, 'accounts.json', [1])
+
+        root.contents.set('accounts.json', '{broken again')
+        ;(store as unknown as { cache: Map<string, unknown> }).cache.delete('accounts.json')
+        await detect(store)
+
+        expect(store.getSafetySnapshot().corrupt).toHaveLength(1)
+        expect(corruptCopies(root)).toHaveLength(2)
+      })
+
+      it('makes a fresh copy first when the file changed on disk since it was found', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        root.contents.set('accounts.json', '{broken differently')
+        await edit(store, 'accounts.json', [1])
+
+        await store.resolveCorrupt('accounts.json', 'start-fresh')
+
+        const copies = await Promise.all(corruptCopies(root).map(name => textOf(root.contents.get(name))))
+        expect(copies.sort()).toEqual(['{broken', '{broken differently'])
+      })
+
+      it('falls back to _backups when the copy cannot be made, and still never loses the bytes', async () => {
+        const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        root.contents.set('accounts.json', '{broken')
+        root.faults.createWritable = name => {
+          if (name.includes('.corrupt-')) throw new DOMException('full', 'QuotaExceededError')
+        }
+        await detect(store)
+        await edit(store, 'accounts.json', [1])
+
+        await store.resolveCorrupt('accounts.json', 'start-fresh')
+
+        const [backup] = backupCopies(root)
+        await expect(textOf(folder(root, '_backups/accounts')?.contents.get(backup))).resolves.toBe('{broken')
+        expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([1])
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+        errorSpy.mockRestore()
+      })
+
+      it('refuses, leaving the file and the held edit alone, when no copy of any kind can be saved', async () => {
+        const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        root.contents.set('accounts.json', '{broken')
+        root.faults.createWritable = name => {
+          if (name.includes('.corrupt-')) throw new DOMException('full', 'QuotaExceededError')
+        }
+        const original = root.getDirectoryHandle.bind(root)
+        root.getDirectoryHandle = async (name, options) => {
+          if (name === '_backups' && options?.create) throw new DOMException('full', 'QuotaExceededError')
+          return original(name, options)
+        }
+        await detect(store)
+        await edit(store, 'accounts.json', [1])
+
+        await expect(store.resolveCorrupt('accounts.json', 'start-fresh')).rejects.toThrow()
+
+        expect(root.contents.get('accounts.json')).toBe('{broken')
+        expect(store.getSafetySnapshot().corrupt).toHaveLength(1)
+        expect(store.hasUnsavedWork()).toBe(true)
+        errorSpy.mockRestore()
+      })
+
+      it('refuses when there is no way to back up at all', async () => {
+        const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        root.contents.set('accounts.json', '{broken')
+        root.faults.createWritable = name => {
+          if (name.includes('.corrupt-')) throw new DOMException('full', 'QuotaExceededError')
+        }
+        await detect(store)
+        const internals = store as unknown as { getBackups: () => null }
+        internals.getBackups = () => null
+
+        await expect(store.resolveCorrupt('accounts.json', 'start-fresh')).rejects.toThrow('left untouched')
+
+        expect(root.contents.get('accounts.json')).toBe('{broken')
+        errorSpy.mockRestore()
+      })
+
+      it('keeps the file, the copy and the held edit when the write itself fails, so it can be tried again', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        await edit(store, 'accounts.json', [1])
+        root.faults.close = name => {
+          if (name === 'accounts.json') throw new DOMException('boom', 'InvalidStateError')
+        }
+
+        await expect(store.resolveCorrupt('accounts.json', 'start-fresh')).rejects.toThrow('boom')
+
+        expect(root.contents.get('accounts.json')).toBe('{broken')
+        expect(store.getSafetySnapshot().corrupt).toHaveLength(1)
+        expect(store.hasUnsavedWork()).toBe(true)
+
+        root.faults.close = undefined
+        await store.resolveCorrupt('accounts.json', 'start-fresh')
+        expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([1])
+      })
+
+      it('preserves nothing and writes the edit when the file was removed meanwhile', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        await edit(store, 'accounts.json', [1])
+        root.contents.delete('accounts.json')
+
+        await store.resolveCorrupt('accounts.json', 'start-fresh')
+
+        expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([1])
+        expect(corruptCopies(root)).toHaveLength(1)
+      })
+
+      it('skips the copy when the identical one is still in place and the bytes are unchanged', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        const before = corruptCopies(root)
+
+        await store.resolveCorrupt('accounts.json', 'start-fresh')
+
+        expect(corruptCopies(root)).toEqual(before)
+      })
+    })
+
+    describe('restore latest backup', () => {
+      it('writes the newest valid backup, keeps the unreadable copy, and keeps the held edit as an unsaved backup', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        seedBackup(root, 'accounts.json', '20261101T000000000Z', '[1]')
+        seedBackup(root, 'accounts.json', '20261102T000000000Z', '[2]')
+        seedBackup(root, 'accounts.json', '20261103T000000000Z', '{broken backup')
+        await detect(store)
+        await edit(store, 'accounts.json', [9])
+        const subscriber = vi.fn()
+        store.subscribe('accounts.json', subscriber)
+
+        const restored = await store.resolveCorrupt('accounts.json', 'restore-latest')
+
+        expect(restored).toMatchObject({ path: 'accounts.json', stamp: '20261102T000000000Z' })
+        await expect(textOf(root.contents.get('accounts.json'))).resolves.toBe('[2]')
+        const [copy] = corruptCopies(root)
+        await expect(textOf(root.contents.get(copy))).resolves.toBe('{broken')
+        const names = backupCopies(root)
+        const unsaved = names.find(name => name.endsWith('-unsaved.json'))
+        expect(unsaved).toBeDefined()
+        await expect(textOf(folder(root, '_backups/accounts')?.contents.get(unsaved ?? ''))).resolves.toBe(
+          JSON.stringify([9], null, 2),
+        )
+        expect(names).toHaveLength(4)
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+        expect(store.hasUnsavedWork()).toBe(false)
+        expect(subscriber).toHaveBeenCalled()
+        await expect(store.readJSON('accounts.json', null)).resolves.toEqual([2])
+      })
+
+      it('uses an unsaved edit only when there is no regular backup', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        seedBackup(root, 'accounts.json', '20261105T000000000Z', '[5]', '-unsaved')
+        await detect(store)
+        expect(store.getSafetySnapshot().corrupt[0].hasBackup).toBe(true)
+
+        await store.resolveCorrupt('accounts.json', 'restore-latest')
+
+        await expect(textOf(root.contents.get('accounts.json'))).resolves.toBe('[5]')
+      })
+
+      it('rejects with the file untouched and the hold in place when no backup parses', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        seedBackup(root, 'accounts.json', '20261101T000000000Z', 'nope')
+        await detect(store)
+        await edit(store, 'accounts.json', [9])
+
+        await expect(store.resolveCorrupt('accounts.json', 'restore-latest')).rejects.toThrow('no valid backup')
+
+        expect(root.contents.get('accounts.json')).toBe('{broken')
+        expect(store.getSafetySnapshot().corrupt).toHaveLength(1)
+        expect(store.hasUnsavedWork()).toBe(true)
+      })
+
+      it('leaves the file and the hold alone when the unsaved edit cannot be backed up', async () => {
+        const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        root.contents.set('accounts.json', '{broken')
+        seedBackup(root, 'accounts.json', '20261101T000000000Z', '[1]')
+        await detect(store)
+        await edit(store, 'accounts.json', [9])
+        folder(root, '_backups/accounts')!.faults.createWritable = name => {
+          if (name.endsWith('-unsaved.json')) throw new DOMException('full', 'QuotaExceededError')
+        }
+
+        await expect(store.resolveCorrupt('accounts.json', 'restore-latest')).rejects.toThrow()
+
+        expect(root.contents.get('accounts.json')).toBe('{broken')
+        expect(store.getSafetySnapshot().corrupt).toHaveLength(1)
+        errorSpy.mockRestore()
+      })
+
+      it('restores without an unsaved copy when nothing was edited', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        seedBackup(root, 'accounts.json', '20261101T000000000Z', '[1]')
+        await detect(store)
+
+        await store.resolveCorrupt('accounts.json', 'restore-latest')
+
+        await expect(textOf(root.contents.get('accounts.json'))).resolves.toBe('[1]')
+        expect(backupCopies(root)).toEqual(['20261101T000000000Z.json'])
+      })
+
+      it('works for a nested path', async () => {
+        const { root, store } = await setup()
+        const budget = await root.getDirectoryHandle('budget', { create: true })
+        budget.contents.set('categories.json', '{broken')
+        seedBackup(root, 'budget/categories.json', '20261101T000000000Z', '{"a":1}')
+
+        await detect(store, 'budget/categories.json')
+        await store.resolveCorrupt('budget/categories.json', 'restore-latest')
+
+        await expect(textOf(budget.contents.get('categories.json'))).resolves.toBe('{"a":1}')
+        expect([...budget.contents.keys()].some(key => key.startsWith('categories.json.corrupt-'))).toBe(true)
+      })
+    })
+
+    describe('resolveCorrupt guards', () => {
+      it('does nothing for a path with no unresolved problem', async () => {
+        const { store } = await setup()
+        await expect(store.resolveCorrupt('accounts.json', 'start-fresh')).resolves.toBeNull()
+      })
+
+      it('does nothing when the safety net is off', async () => {
+        const { root, store } = await setup(false)
+        root.contents.set('accounts.json', '{broken')
+        await expect(store.resolveCorrupt('accounts.json', 'start-fresh')).resolves.toBeNull()
+        expect(root.contents.get('accounts.json')).toBe('{broken')
+      })
+
+      it('shares one run between simultaneous resolutions', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        seedBackup(root, 'accounts.json', '20261101T000000000Z', '[1]')
+        await detect(store)
+
+        const first = store.resolveCorrupt('accounts.json', 'restore-latest')
+        const second = store.resolveCorrupt('accounts.json', 'restore-latest')
+
+        expect(second).toBe(first)
+        await first
+        expect(backupCopies(root)).toHaveLength(1)
+      })
+
+      it('does nothing when the issue was already resolved while waiting for the lock', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        const outcome = store.resolveCorrupt('accounts.json', 'start-fresh')
+        ;(store as unknown as { corrupt: Map<string, unknown> }).corrupt.delete('accounts.json')
+
+        await expect(outcome).resolves.toBeNull()
+      })
+    })
+
+    describe('other paths into the same file', () => {
+      it('restoreBackup on a held path ends the hold and keeps the held edit as an unsaved backup', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        seedBackup(root, 'accounts.json', '20261101T000000000Z', '[1]')
+        await detect(store)
+        await edit(store, 'accounts.json', [9])
+        const [entry] = await store.listBackups()
+
+        await store.restoreBackup(entry as BackupEntry)
+
+        await expect(textOf(root.contents.get('accounts.json'))).resolves.toBe('[1]')
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+        expect(store.hasUnsavedWork()).toBe(false)
+        expect(backupCopies(root).some(name => name.endsWith('-unsaved.json'))).toBe(true)
+        await expect(edit(store, 'accounts.json', [2])).resolves.toBe('saved')
+      })
+
+      it('deleting a corrupt file keeps a copy, removes it, and ends the hold', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        await edit(store, 'accounts.json', [9])
+
+        await store.delete('accounts.json')
+
+        expect(root.contents.has('accounts.json')).toBe(false)
+        const [copy] = corruptCopies(root)
+        await expect(textOf(root.contents.get(copy))).resolves.toBe('{broken')
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+        expect(store.hasUnsavedWork()).toBe(false)
+      })
+
+      it('refuses to delete a corrupt file when its bytes cannot be kept', async () => {
+        const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        root.faults.createWritable = name => {
+          if (name.includes('.corrupt-')) throw new DOMException('full', 'QuotaExceededError')
+        }
+        root.contents.set('accounts.json', '{broken and changed')
+        ;(store as unknown as { getBackups: () => null }).getBackups = () => null
+
+        await expect(store.delete('accounts.json')).rejects.toThrow('left untouched')
+
+        expect(root.contents.get('accounts.json')).toBe('{broken and changed')
+        errorSpy.mockRestore()
+      })
+    })
+
+    describe('lifecycle', () => {
+      it('forgets everything when the safety net is turned off', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+        await edit(store, 'accounts.json', [1])
+
+        store.configureSafety({ enabled: false })
+
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+        expect(store.hasUnsavedWork()).toBe(false)
+      })
+
+      it('forgets everything when a new folder is connected', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await detect(store)
+
+        await store.init(asHandle(new FakeDirectoryHandle('other')))
+
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+      })
+
+      it('drops a copy that finishes after the net was turned off', async () => {
+        const { root, store } = await setup()
+        root.contents.set('accounts.json', '{broken')
+        await store.readJSON('accounts.json', null)
+
+        store.configureSafety({ enabled: false })
+        await settleIO()
+
+        expect(store.getSafetySnapshot()).toBe(EMPTY)
+      })
     })
   })
 })

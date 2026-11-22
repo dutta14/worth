@@ -7,7 +7,7 @@ import { FlagContext } from '../flags/FlagContext'
 import type { FlagContextValue } from '../flags/FlagContext'
 import { MemoryFileStore } from '../utils/memoryFileStore'
 import { EMPTY_SAFETY_SNAPSHOT } from '../utils/safetyNet'
-import type { BackupEntry, SafetySnapshot } from '../utils/safetyNet'
+import type { BackupEntry, CorruptAction, SafetySnapshot } from '../utils/safetyNet'
 import { makeFileStoreValue } from '../test/fileStoreTestUtils'
 import type { FileStore } from '../utils/fileStoreTypes'
 
@@ -30,6 +30,7 @@ const makeFakeStore = (hasHandle = true) => {
     requestReconnect: vi.fn<() => Promise<PermissionState>>(async () => 'granted'),
     listBackups: vi.fn<() => Promise<BackupEntry[]>>(async () => []),
     restoreBackup: vi.fn<(entry: BackupEntry) => Promise<void>>(async () => {}),
+    resolveCorrupt: vi.fn<(path: string, action: CorruptAction) => Promise<BackupEntry | null>>(async () => null),
   })
   const setSnapshot = (next: SafetySnapshot) => {
     snapshot = next
@@ -136,6 +137,7 @@ describe('SafetyNetProvider', () => {
       expect(result.current.snapshot).toBe(EMPTY_SAFETY_SNAPSHOT)
       const failed: SafetySnapshot = {
         failed: [{ path: 'a.json', kind: 'other' }],
+        corrupt: [],
         permissionLost: false,
         backupsHealthy: true,
       }
@@ -173,7 +175,12 @@ describe('SafetyNetProvider', () => {
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await expect(result.current.retryFailed()).resolves.toBe(false)
       act(() =>
-        setSnapshot({ failed: [{ path: 'a.json', kind: 'other' }], permissionLost: false, backupsHealthy: true }),
+        setSnapshot({
+          failed: [{ path: 'a.json', kind: 'other' }],
+          corrupt: [],
+          permissionLost: false,
+          backupsHealthy: true,
+        }),
       )
       await expect(result.current.retryFailed()).resolves.toBe(true)
     })
@@ -244,6 +251,69 @@ describe('SafetyNetProvider', () => {
       const { result } = renderHook(() => useSafetyNet())
       await expect(result.current.listBackups()).resolves.toEqual([])
       await expect(result.current.restoreBackup(entry)).resolves.toBeUndefined()
+      await expect(result.current.resolveCorrupt('accounts.json', 'start-fresh')).resolves.toBeNull()
+    })
+  })
+
+  describe('resolveCorrupt', () => {
+    const entry: BackupEntry = {
+      path: 'accounts.json',
+      backupPath: '_backups/accounts/20261108T120000000Z.json',
+      stamp: '20261108T120000000Z',
+      unsaved: false,
+      size: 10,
+    }
+
+    it('restoring a backup tells the app to refresh its data', async () => {
+      const { store } = makeFakeStore()
+      store.resolveCorrupt.mockResolvedValue(entry)
+      const { Wrapper } = makeWrapper(store, true)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      const changed = vi.fn()
+      window.addEventListener('data-changed', changed)
+
+      await expect(result.current.resolveCorrupt('accounts.json', 'restore-latest')).resolves.toBe(entry)
+
+      expect(store.resolveCorrupt).toHaveBeenCalledWith('accounts.json', 'restore-latest')
+      expect(changed).toHaveBeenCalledTimes(1)
+      window.removeEventListener('data-changed', changed)
+    })
+
+    it('starting fresh does not need a refresh', async () => {
+      const { store } = makeFakeStore()
+      const { Wrapper } = makeWrapper(store, true)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      const changed = vi.fn()
+      window.addEventListener('data-changed', changed)
+
+      await expect(result.current.resolveCorrupt('accounts.json', 'start-fresh')).resolves.toBeNull()
+
+      expect(changed).not.toHaveBeenCalled()
+      window.removeEventListener('data-changed', changed)
+    })
+
+    it('passes a failure on to the caller without refreshing', async () => {
+      const { store } = makeFakeStore()
+      store.resolveCorrupt.mockRejectedValue(new Error('disk gone'))
+      const { Wrapper } = makeWrapper(store, true)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      const changed = vi.fn()
+      window.addEventListener('data-changed', changed)
+
+      await expect(result.current.resolveCorrupt('accounts.json', 'restore-latest')).rejects.toThrow('disk gone')
+
+      expect(changed).not.toHaveBeenCalled()
+      window.removeEventListener('data-changed', changed)
+    })
+
+    it('is inert when the net is off', async () => {
+      const { store } = makeFakeStore()
+      const { Wrapper } = makeWrapper(store, false)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+
+      await expect(result.current.resolveCorrupt('accounts.json', 'restore-latest')).resolves.toBeNull()
+
+      expect(store.resolveCorrupt).not.toHaveBeenCalled()
     })
   })
 
@@ -308,7 +378,7 @@ describe('SafetyNetProvider', () => {
   })
 
   describe('reconnect', () => {
-    const permissionLost: SafetySnapshot = { failed: [], permissionLost: true, backupsHealthy: true }
+    const permissionLost: SafetySnapshot = { failed: [], corrupt: [], permissionLost: true, backupsHealthy: true }
 
     it('requests permission and stays not-denied when granted', async () => {
       const { store, setSnapshot } = makeFakeStore()

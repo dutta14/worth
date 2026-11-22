@@ -5,20 +5,48 @@
 
 export type WriteFailureKind = 'permission' | 'disk-full' | 'other'
 
+/** Thrown to callers whose write was held instead of reaching the disk. */
+export class FileStoreError extends Error {
+  code: 'corrupt-blocked'
+
+  constructor(code: 'corrupt-blocked', message: string) {
+    super(message)
+    this.name = 'FileStoreError'
+    this.code = code
+  }
+}
+
 export interface FailedWrite {
   path: string
   kind: WriteFailureKind
 }
 
+/** A JSON file that could not be parsed. Writes to it are held until the user chooses how to continue. */
+export interface CorruptFile {
+  path: string
+  /** Where the unreadable bytes were saved; `null` when no copy could be made. */
+  copyPath: string | null
+  /** True when `_backups/` holds a copy that parses, so "Restore latest backup" is offered. */
+  hasBackup: boolean
+}
+
+export type CorruptAction = 'restore-latest' | 'start-fresh'
+
 export interface SafetySnapshot {
   failed: FailedWrite[]
+  corrupt: CorruptFile[]
   permissionLost: boolean
   /** False after a backup copy could not be saved; cleared by the next successful copy. */
   backupsHealthy: boolean
 }
 
 /** Shared by every store that has nothing to report, so consumers get a stable reference. */
-export const EMPTY_SAFETY_SNAPSHOT: SafetySnapshot = { failed: [], permissionLost: false, backupsHealthy: true }
+export const EMPTY_SAFETY_SNAPSHOT: SafetySnapshot = {
+  failed: [],
+  corrupt: [],
+  permissionLost: false,
+  backupsHealthy: true,
+}
 
 const errorName = (error: unknown): string | undefined =>
   typeof error === 'object' && error !== null ? (error as { name?: string }).name : undefined
@@ -35,13 +63,23 @@ export const snapshotsEqual = (a: SafetySnapshot, b: SafetySnapshot): boolean =>
   a.permissionLost === b.permissionLost &&
   a.backupsHealthy === b.backupsHealthy &&
   a.failed.length === b.failed.length &&
-  a.failed.every((entry, i) => entry.path === b.failed[i].path && entry.kind === b.failed[i].kind)
+  a.failed.every((entry, i) => entry.path === b.failed[i].path && entry.kind === b.failed[i].kind) &&
+  a.corrupt.length === b.corrupt.length &&
+  a.corrupt.every(
+    (entry, i) =>
+      entry.path === b.corrupt[i].path &&
+      entry.copyPath === b.corrupt[i].copyPath &&
+      entry.hasBackup === b.corrupt[i].hasBackup,
+  )
 
-export type SafetyIssue = { type: 'permission' } | { type: 'write-failed'; paths: string[]; diskFull: boolean }
+export type SafetyIssue =
+  | { type: 'permission' }
+  | { type: 'write-failed'; paths: string[]; diskFull: boolean }
+  | ({ type: 'corrupt' } & CorruptFile)
 
 /**
  * Turns a snapshot into the issues the banner can show, highest priority first
- * (permission, then write failure). When permission is lost, failures caused by
+ * (permission, write failure, then one issue per corrupt file). When permission is lost, failures caused by
  * it are folded into the permission issue so the user sees one clear next step.
  */
 export const deriveIssues = (snapshot: SafetySnapshot): SafetyIssue[] => {
@@ -57,11 +95,18 @@ export const deriveIssues = (snapshot: SafetySnapshot): SafetyIssue[] => {
       diskFull: failed.some(entry => entry.kind === 'disk-full'),
     })
   }
+  for (const file of snapshot.corrupt) issues.push({ type: 'corrupt', ...file })
   return issues
 }
 
 export const moreIssuesText = (count: number): string =>
   count === 1 ? '1 more issue needs attention.' : `${count} more issues need attention.`
+
+/** `accounts.json` becomes `accounts.json.corrupt-<stamp>`: a sibling that no loader's file filter matches. */
+export const corruptPathFor = (path: string, stamp: string): string => `${path}.corrupt-${stamp}`
+
+/** The unreadable bytes of a corrupt file, as saved next to it. */
+export const isCorruptCopyOf = (name: string, original: string): boolean => name.startsWith(`${original}.corrupt-`)
 
 /* ── Backups ──────────────────────────────────────────────── */
 

@@ -1,4 +1,4 @@
-import type { BackupEntry, SafetySnapshot } from './safetyNet'
+import type { BackupEntry, CorruptAction, SafetySnapshot } from './safetyNet'
 
 /**
  * FileStore — the storage abstraction the whole app writes through.
@@ -49,6 +49,12 @@ export interface SafetyNetStore {
   listBackups(): Promise<BackupEntry[]>
   /** Copies the current file aside, then replaces it with the backup and tells subscribers. */
   restoreBackup(entry: BackupEntry): Promise<void>
+  /**
+   * Ends the hold on a JSON file that could not be parsed. The unreadable bytes are kept in a `.corrupt-` copy
+   * first. `restore-latest` writes the newest valid backup and resolves with it; `start-fresh` writes the
+   * edit that was held (if any) and resolves `null`. Rejects with the file untouched when a step fails.
+   */
+  resolveCorrupt(path: string, action: CorruptAction): Promise<BackupEntry | null>
 }
 
 export const isSafetyNetStore = (store: FileStore): store is FileStore & SafetyNetStore => 'getSafetySnapshot' in store

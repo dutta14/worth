@@ -346,7 +346,69 @@ describe('createBackupManager', () => {
     })
   })
 
+  describe('latestValid', () => {
+    const put = (files: Map<string, Uint8Array>, path: string, stamp: string, text: string, tag = '') =>
+      files.set(`_backups/${path.replace(/\.json$/, '')}/${stamp}${tag}.json`, enc(text))
+
+    it('returns the newest copy that parses as JSON, skipping broken and empty ones', async () => {
+      const { io, files } = makeIO()
+      put(files, 'accounts.json', '20261101T000000000Z', '[1]')
+      put(files, 'accounts.json', '20261102T000000000Z', '[2]')
+      put(files, 'accounts.json', '20261103T000000000Z', '{broken')
+      put(files, 'accounts.json', '20261104T000000000Z', '')
+
+      const entry = await createBackupManager(io, clock).latestValid('accounts.json')
+
+      expect(entry?.stamp).toBe('20261102T000000000Z')
+    })
+
+    it('prefers a regular copy over a newer unsaved edit, and falls back to the unsaved one', async () => {
+      const { io, files } = makeIO()
+      put(files, 'accounts.json', '20261101T000000000Z', '[1]')
+      put(files, 'accounts.json', '20261105T000000000Z', '[5]', '-unsaved')
+      const manager = createBackupManager(io, clock)
+      expect((await manager.latestValid('accounts.json'))?.stamp).toBe('20261101T000000000Z')
+
+      files.delete('_backups/accounts/20261101T000000000Z.json')
+      const fallback = await manager.latestValid('accounts.json')
+      expect(fallback).toMatchObject({ stamp: '20261105T000000000Z', unsaved: true })
+    })
+
+    it('returns null when nothing valid exists, the path is not JSON, or backups are unavailable', async () => {
+      const { io, files } = makeIO()
+      put(files, 'accounts.json', '20261101T000000000Z', 'nope')
+      const manager = createBackupManager(io, clock)
+      await expect(manager.latestValid('accounts.json')).resolves.toBeNull()
+      await expect(manager.latestValid('other.json')).resolves.toBeNull()
+      await expect(manager.latestValid('balances/2026.csv')).resolves.toBeNull()
+    })
+
+    it('returns null when the backups folder is disabled for the session', async () => {
+      const { io, files } = makeIO()
+      put(files, 'accounts.json', '20261101T000000000Z', '[1]')
+      io.write = async () => {
+        throw new Error('_backups is a file')
+      }
+      const manager = createBackupManager(io, clock)
+      await expect(manager.snapshot('accounts.json', enc('[2]'), { force: true })).rejects.toThrow()
+      await expect(manager.latestValid('accounts.json')).resolves.toBeNull()
+    })
+  })
+
   describe('restore', () => {
+    it('does not copy the current file aside when the caller already holds a copy', async () => {
+      const { io, files } = makeIO()
+      const manager = createBackupManager(io, clock)
+      await manager.snapshot('accounts.json', enc('[old]'))
+      files.set('accounts.json', enc('{corrupt'))
+      const [entry] = await manager.list()
+
+      await manager.restore(entry, { snapshotCurrent: false })
+
+      expect(dec(files.get('accounts.json'))).toBe('[old]')
+      expect(backupsOf(files, 'accounts')).toHaveLength(1)
+    })
+
     it('copies the current file aside first, then writes the backup over it', async () => {
       const { io, files } = makeIO()
       const manager = createBackupManager(io, clock)
