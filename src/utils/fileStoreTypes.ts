@@ -1,4 +1,4 @@
-import type { SafetySnapshot } from './safetyNet'
+import type { BackupEntry, SafetySnapshot } from './safetyNet'
 
 /**
  * FileStore — the storage abstraction the whole app writes through.
@@ -45,6 +45,10 @@ export interface SafetyNetStore {
   checkPermission(): Promise<void>
   /** Must run inside a user gesture. */
   requestReconnect(): Promise<PermissionState>
+  /** Every copy in the `_backups` folder, newest first. Rejects when the folder cannot be read. */
+  listBackups(): Promise<BackupEntry[]>
+  /** Copies the current file aside, then replaces it with the backup and tells subscribers. */
+  restoreBackup(entry: BackupEntry): Promise<void>
 }
 
 export const isSafetyNetStore = (store: FileStore): store is FileStore & SafetyNetStore => 'getSafetySnapshot' in store

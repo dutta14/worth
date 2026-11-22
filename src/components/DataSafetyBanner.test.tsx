@@ -10,6 +10,7 @@ import type { SafetySnapshot } from '../utils/safetyNet'
 const failedSnapshot = (...paths: string[]): SafetySnapshot => ({
   failed: paths.map(path => ({ path, kind: 'other' as const })),
   permissionLost: false,
+  backupsHealthy: true,
 })
 
 const makeValue = (overrides: Partial<SafetyNetContextValue> = {}): SafetyNetContextValue => ({
@@ -19,6 +20,8 @@ const makeValue = (overrides: Partial<SafetyNetContextValue> = {}): SafetyNetCon
   retryFailed: vi.fn(async () => false),
   reconnect: vi.fn(async () => {}),
   chooseFolderAgain: vi.fn(async () => {}),
+  listBackups: vi.fn(async () => []),
+  restoreBackup: vi.fn(async () => {}),
   ...overrides,
 })
 
@@ -80,7 +83,11 @@ describe('DataSafetyBanner', () => {
     })
 
     it('explains a full disk', () => {
-      renderBanner(makeValue({ snapshot: { failed: [{ path: 'a.json', kind: 'disk-full' }], permissionLost: false } }))
+      renderBanner(
+        makeValue({
+          snapshot: { failed: [{ path: 'a.json', kind: 'disk-full' }], permissionLost: false, backupsHealthy: true },
+        }),
+      )
       expect(screen.getByRole('alert')).toHaveTextContent('The disk looks full. Free some space, then try again.')
     })
 
@@ -115,7 +122,11 @@ describe('DataSafetyBanner', () => {
 
     it('uses the first-failure wording for a new failure after a successful retry', async () => {
       const user = userEvent.setup()
-      const diskFull: SafetySnapshot = { failed: [{ path: 'b.json', kind: 'disk-full' }], permissionLost: false }
+      const diskFull: SafetySnapshot = {
+        failed: [{ path: 'b.json', kind: 'disk-full' }],
+        permissionLost: false,
+        backupsHealthy: true,
+      }
       // The store clears its failures while the retry is still resolving, as in the real flow.
       const retryFailed = vi.fn(async () => {
         update({ ...value, snapshot: EMPTY_SAFETY_SNAPSHOT })
@@ -132,7 +143,7 @@ describe('DataSafetyBanner', () => {
   })
 
   describe('permission loss', () => {
-    const lost: SafetySnapshot = { failed: [], permissionLost: true }
+    const lost: SafetySnapshot = { failed: [], permissionLost: true, backupsHealthy: true }
 
     it('offers to reconnect the folder from a click handler', async () => {
       const user = userEvent.setup()
@@ -158,7 +169,11 @@ describe('DataSafetyBanner', () => {
     })
 
     it('shows the permission issue for a permission-caused write failure instead of a save error', () => {
-      renderBanner(makeValue({ snapshot: { failed: [{ path: 'a.json', kind: 'permission' }], permissionLost: true } }))
+      renderBanner(
+        makeValue({
+          snapshot: { failed: [{ path: 'a.json', kind: 'permission' }], permissionLost: true, backupsHealthy: true },
+        }),
+      )
       expect(screen.getByRole('alert')).toHaveTextContent('Access to your data folder was lost.')
       expect(screen.queryByText(/more issue/)).not.toBeInTheDocument()
     })
@@ -174,6 +189,7 @@ describe('DataSafetyBanner', () => {
               { path: 'b.json', kind: 'disk-full' },
             ],
             permissionLost: true,
+            backupsHealthy: true,
           },
         }),
       )
@@ -188,6 +204,7 @@ describe('DataSafetyBanner', () => {
       const both: SafetySnapshot = {
         failed: [{ path: 'b.json', kind: 'other' }],
         permissionLost: true,
+        backupsHealthy: true,
       }
       const { update } = renderBanner(makeValue({ snapshot: both }))
       update(makeValue({ snapshot: failedSnapshot('b.json') }))

@@ -7,7 +7,7 @@ import { FlagContext } from '../flags/FlagContext'
 import type { FlagContextValue } from '../flags/FlagContext'
 import { MemoryFileStore } from '../utils/memoryFileStore'
 import { EMPTY_SAFETY_SNAPSHOT } from '../utils/safetyNet'
-import type { SafetySnapshot } from '../utils/safetyNet'
+import type { BackupEntry, SafetySnapshot } from '../utils/safetyNet'
 import { makeFileStoreValue } from '../test/fileStoreTestUtils'
 import type { FileStore } from '../utils/fileStoreTypes'
 
@@ -28,6 +28,8 @@ const makeFakeStore = (hasHandle = true) => {
     retryFailed: vi.fn(async () => {}),
     checkPermission: vi.fn(async () => {}),
     requestReconnect: vi.fn<() => Promise<PermissionState>>(async () => 'granted'),
+    listBackups: vi.fn<() => Promise<BackupEntry[]>>(async () => []),
+    restoreBackup: vi.fn<(entry: BackupEntry) => Promise<void>>(async () => {}),
   })
   const setSnapshot = (next: SafetySnapshot) => {
     snapshot = next
@@ -132,7 +134,11 @@ describe('SafetyNetProvider', () => {
       const { Wrapper } = makeWrapper(store, true)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       expect(result.current.snapshot).toBe(EMPTY_SAFETY_SNAPSHOT)
-      const failed: SafetySnapshot = { failed: [{ path: 'a.json', kind: 'other' }], permissionLost: false }
+      const failed: SafetySnapshot = {
+        failed: [{ path: 'a.json', kind: 'other' }],
+        permissionLost: false,
+        backupsHealthy: true,
+      }
       act(() => setSnapshot(failed))
       expect(result.current.snapshot).toBe(failed)
     })
@@ -166,8 +172,78 @@ describe('SafetyNetProvider', () => {
       const { Wrapper } = makeWrapper(store, true)
       const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
       await expect(result.current.retryFailed()).resolves.toBe(false)
-      act(() => setSnapshot({ failed: [{ path: 'a.json', kind: 'other' }], permissionLost: false }))
+      act(() =>
+        setSnapshot({ failed: [{ path: 'a.json', kind: 'other' }], permissionLost: false, backupsHealthy: true }),
+      )
       await expect(result.current.retryFailed()).resolves.toBe(true)
+    })
+  })
+
+  describe('backups', () => {
+    const entry: BackupEntry = {
+      path: 'balances/2026.csv',
+      backupPath: '_backups/balances/2026/20261101T090000000Z.csv',
+      stamp: '20261101T090000000Z',
+      unsaved: false,
+      size: 12,
+    }
+
+    it('lists the copies the store reports', async () => {
+      const { store } = makeFakeStore()
+      store.listBackups.mockResolvedValue([entry])
+      const { Wrapper } = makeWrapper(store, true)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      await expect(result.current.listBackups()).resolves.toEqual([entry])
+    })
+
+    it('restores through the store, then tells the app to refresh its data', async () => {
+      const { store } = makeFakeStore()
+      const { Wrapper } = makeWrapper(store, true)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      const changed = vi.fn()
+      window.addEventListener('data-changed', changed)
+
+      await act(() => result.current.restoreBackup(entry))
+
+      expect(store.restoreBackup).toHaveBeenCalledWith(entry)
+      expect(changed).toHaveBeenCalledTimes(1)
+      window.removeEventListener('data-changed', changed)
+    })
+
+    it('does not refresh the app when the restore fails', async () => {
+      const { store } = makeFakeStore()
+      store.restoreBackup.mockRejectedValue(new Error('disk gone'))
+      const { Wrapper } = makeWrapper(store, true)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      const changed = vi.fn()
+      window.addEventListener('data-changed', changed)
+
+      await expect(result.current.restoreBackup(entry)).rejects.toThrow('disk gone')
+
+      expect(changed).not.toHaveBeenCalled()
+      window.removeEventListener('data-changed', changed)
+    })
+
+    it('is inert when the net is off', async () => {
+      const { store } = makeFakeStore()
+      const { Wrapper } = makeWrapper(store, false)
+      const { result } = renderHook(() => useSafetyNet(), { wrapper: Wrapper })
+      const changed = vi.fn()
+      window.addEventListener('data-changed', changed)
+
+      await expect(result.current.listBackups()).resolves.toEqual([])
+      await result.current.restoreBackup(entry)
+
+      expect(store.listBackups).not.toHaveBeenCalled()
+      expect(store.restoreBackup).not.toHaveBeenCalled()
+      expect(changed).not.toHaveBeenCalled()
+      window.removeEventListener('data-changed', changed)
+    })
+
+    it('has an inert default without a provider', async () => {
+      const { result } = renderHook(() => useSafetyNet())
+      await expect(result.current.listBackups()).resolves.toEqual([])
+      await expect(result.current.restoreBackup(entry)).resolves.toBeUndefined()
     })
   })
 
@@ -232,7 +308,7 @@ describe('SafetyNetProvider', () => {
   })
 
   describe('reconnect', () => {
-    const permissionLost: SafetySnapshot = { failed: [], permissionLost: true }
+    const permissionLost: SafetySnapshot = { failed: [], permissionLost: true, backupsHealthy: true }
 
     it('requests permission and stays not-denied when granted', async () => {
       const { store, setSnapshot } = makeFakeStore()

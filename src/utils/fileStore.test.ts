@@ -37,7 +37,7 @@ class FakeFileHandle {
 }
 
 class FakeDirectoryHandle {
-  kind = 'dir' as const
+  kind = 'directory' as const
   contents = new Map<string, string | Blob>()
   dirs = new Map<string, FakeDirectoryHandle>()
   /** Hooks that throw to simulate disk and permission faults. */
@@ -450,6 +450,7 @@ describe('FileSystemFileStore safety net', () => {
       expect(store.getSafetySnapshot()).toEqual({
         failed: [{ path: 'accounts.json', kind: 'other' }],
         permissionLost: false,
+        backupsHealthy: true,
       })
       await expect(store.readJSON('accounts.json', [])).resolves.toEqual([{ id: 1 }])
       expect(root.contents.get('accounts.json')).toBe('')
@@ -614,7 +615,7 @@ describe('FileSystemFileStore safety net', () => {
       root.faults.close = diskError('NotAllowedError')
       await settle(store.writeJSON('a.json', [1]))
       store.configureSafety({ enabled: false })
-      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false })
+      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false, backupsHealthy: true })
     })
 
     it('clears failures when a new folder is connected', async () => {
@@ -651,7 +652,7 @@ describe('FileSystemFileStore safety net', () => {
       const checking = store.checkPermission()
       await vi.advanceTimersByTimeAsync(1)
       await checking
-      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false })
+      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false, backupsHealthy: true })
       expect(root.contents.has('a.json')).toBe(true)
     })
 
@@ -706,7 +707,7 @@ describe('FileSystemFileStore safety net', () => {
       await vi.advanceTimersByTimeAsync(1)
       await expect(reconnecting).resolves.toBe('granted')
       expect(root.requestPermission).toHaveBeenCalledWith({ mode: 'readwrite' })
-      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false })
+      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false, backupsHealthy: true })
       expect(root.contents.has('a.json')).toBe(true)
     })
 
@@ -729,6 +730,406 @@ describe('FileSystemFileStore safety net', () => {
     it('reports denied when no folder is connected', async () => {
       const store = new FileSystemFileStore()
       await expect(store.requestReconnect()).resolves.toBe('denied')
+    })
+  })
+
+  describe('backups', () => {
+    const NOW = Date.UTC(2026, 10, 8, 12, 0, 0, 0)
+
+    beforeEach(() => {
+      vi.setSystemTime(NOW)
+    })
+
+    const textOf = async (data: string | Blob | undefined): Promise<string> =>
+      data === undefined ? '<missing>' : typeof data === 'string' ? data : data.text()
+
+    const folder = (root: FakeDirectoryHandle, path: string): FakeDirectoryHandle | undefined =>
+      path.split('/').reduce<FakeDirectoryHandle | undefined>((dir, name) => dir?.dirs.get(name), root)
+
+    const copiesIn = (root: FakeDirectoryHandle, dir: string): string[] =>
+      [...(folder(root, dir)?.contents.keys() ?? [])].sort()
+
+    const seed = (root: FakeDirectoryHandle, name: string, content: string) => root.contents.set(name, content)
+
+    const save = async (store: FileSystemFileStore, path: string, data: unknown) => {
+      const outcome = store.writeJSON(path, data)
+      await vi.advanceTimersByTimeAsync(1000)
+      await outcome
+    }
+
+    it('copies the previous bytes into _backups on the first overwrite and writes a README once', async () => {
+      const { root, store } = await setup()
+      seed(root, 'accounts.json', '[{"id":"old"}]')
+
+      await save(store, 'accounts.json', [{ id: 'new' }])
+
+      const [copy] = copiesIn(root, '_backups/accounts')
+      expect(copy).toMatch(/^20261108T120000\d{3}Z\.json$/)
+      await expect(textOf(folder(root, '_backups/accounts')?.contents.get(copy))).resolves.toBe('[{"id":"old"}]')
+      expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([{ id: 'new' }])
+      expect(await textOf(folder(root, '_backups')?.contents.get('README.txt'))).toContain('automatic copies')
+    })
+
+    it('makes no second copy for another overwrite within 6 hours', async () => {
+      const { root, store } = await setup()
+      seed(root, 'accounts.json', '[1]')
+
+      await save(store, 'accounts.json', [2])
+      await save(store, 'accounts.json', [3])
+
+      expect(copiesIn(root, '_backups/accounts')).toHaveLength(1)
+    })
+
+    it('takes another copy once 6 hours have passed', async () => {
+      const { root, store } = await setup()
+      seed(root, 'accounts.json', '[1]')
+      await save(store, 'accounts.json', [2])
+
+      await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000)
+      await save(store, 'accounts.json', [3])
+
+      expect(copiesIn(root, '_backups/accounts')).toHaveLength(2)
+    })
+
+    it('copies CSV files into a folder named after the file', async () => {
+      const { root, store } = await setup()
+      const balances = await root.getDirectoryHandle('balances', { create: true })
+      balances.contents.set('2026.csv', 'month,balance\n2026-01,5\n')
+
+      const outcome = store.writeCSV('balances/2026.csv', [['month', 'balance']])
+      await vi.advanceTimersByTimeAsync(1000)
+      await outcome
+
+      const [copy] = copiesIn(root, '_backups/balances/2026')
+      expect(copy).toMatch(/\.csv$/)
+      await expect(textOf(folder(root, '_backups/balances/2026')?.contents.get(copy))).resolves.toBe(
+        'month,balance\n2026-01,5\n',
+      )
+    })
+
+    it('does not copy a file that did not exist yet', async () => {
+      const { root, store } = await setup()
+      await save(store, 'accounts.json', [1])
+      expect(root.dirs.has('_backups')).toBe(false)
+    })
+
+    it('does not copy an empty file', async () => {
+      const { root, store } = await setup()
+      seed(root, 'accounts.json', '')
+      await save(store, 'accounts.json', [1])
+      expect(root.dirs.has('_backups')).toBe(false)
+    })
+
+    it('never copies tax documents or the derived summary cache', async () => {
+      const { root, store } = await setup()
+      const files = await (
+        await root.getDirectoryHandle('taxes', { create: true })
+      ).getDirectoryHandle('2025', { create: true })
+      const docs = await files.getDirectoryHandle('files', { create: true })
+      docs.contents.set('w2.pdf', 'pdf-bytes')
+      const budget = await root.getDirectoryHandle('budget', { create: true })
+      budget.contents.set('summary-cache.json', '{"old":true}')
+
+      const pdf = store.writeBinary('taxes/2025/files/w2.pdf', new Uint8Array([1]).buffer)
+      await save(store, 'budget/summary-cache.json', { fresh: true })
+      await vi.advanceTimersByTimeAsync(1000)
+      await pdf
+
+      expect(root.dirs.has('_backups')).toBe(false)
+    })
+
+    it('does nothing while the safety net is off', async () => {
+      const { root, store } = await setup(false)
+      seed(root, 'accounts.json', '[1]')
+      await save(store, 'accounts.json', [2])
+      expect(root.dirs.has('_backups')).toBe(false)
+      await expect(store.listBackups()).rejects.toThrow('not available')
+    })
+
+    it('still saves when the copy fails, reports it, and recovers on the next good copy', async () => {
+      const { root, store } = await setup()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      seed(root, 'accounts.json', '[1]')
+      seed(root, 'profile.json', '{"a":1}')
+      const dir = await (
+        await root.getDirectoryHandle('_backups', { create: true })
+      ).getDirectoryHandle('accounts', {
+        create: true,
+      })
+      dir.faults.createWritable = diskError('QuotaExceededError')
+
+      await save(store, 'accounts.json', [2])
+
+      expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([2])
+      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false, backupsHealthy: false })
+      expect(errorSpy).toHaveBeenCalledWith('FileStore backup of "accounts.json" failed:', expect.any(DOMException))
+
+      await save(store, 'profile.json', { a: 2 })
+      expect(store.getSafetySnapshot().backupsHealthy).toBe(true)
+      errorSpy.mockRestore()
+    })
+
+    it('turns backups off for the session when _backups cannot be set up, without blocking saves', async () => {
+      const { root, store } = await setup()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      seed(root, 'accounts.json', '[1]')
+      seed(root, 'profile.json', '{"a":1}')
+      const backups = await root.getDirectoryHandle('_backups', { create: true })
+      backups.faults.createWritable = diskError('InvalidStateError')
+
+      await save(store, 'accounts.json', [2])
+      await save(store, 'profile.json', { a: 2 })
+
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      expect(store.getSafetySnapshot().backupsHealthy).toBe(false)
+      expect(JSON.parse(String(root.contents.get('profile.json')))).toEqual({ a: 2 })
+      errorSpy.mockRestore()
+    })
+
+    it('copies a file right before deleting it, even if one was taken earlier this session', async () => {
+      const { root, store } = await setup()
+      const balances = await root.getDirectoryHandle('balances', { create: true })
+      balances.contents.set('2026.csv', 'v1')
+      const first = store.writeCSV('balances/2026.csv', [['v2']])
+      await vi.advanceTimersByTimeAsync(1000)
+      await first
+
+      await store.delete('balances/2026.csv')
+
+      const copies = copiesIn(root, '_backups/balances/2026')
+      expect(copies).toHaveLength(2)
+      const texts = await Promise.all(
+        copies.map(name => textOf(folder(root, '_backups/balances/2026')?.contents.get(name))),
+      )
+      expect(texts.sort()).toEqual(['v1', 'v2'])
+      expect(balances.contents.has('2026.csv')).toBe(false)
+    })
+
+    it('deletes without a copy when the file never existed', async () => {
+      const { root, store } = await setup()
+      await expect(store.delete('balances/1999.csv')).resolves.toBeUndefined()
+      expect(root.dirs.has('_backups')).toBe(false)
+    })
+
+    it('deletes an ineligible file without reading it or touching backup health', async () => {
+      const { root, store } = await setup()
+      const docs = await (
+        await (await root.getDirectoryHandle('taxes', { create: true })).getDirectoryHandle('2025', { create: true })
+      ).getDirectoryHandle('files', { create: true })
+      docs.contents.set('w2.pdf', 'pdf-bytes')
+      const getFile = vi.spyOn(FakeFileHandle.prototype, 'getFile')
+
+      await store.delete('taxes/2025/files/w2.pdf')
+
+      expect(getFile).not.toHaveBeenCalled()
+      expect(docs.contents.has('w2.pdf')).toBe(false)
+      expect(root.dirs.has('_backups')).toBe(false)
+      expect(store.getSafetySnapshot().backupsHealthy).toBe(true)
+      getFile.mockRestore()
+    })
+
+    it('does not report a backup failure when an ineligible file cannot be read before deletion', async () => {
+      const { root, store } = await setup()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      root.contents.set('notes.txt', 'hello')
+      const getFile = vi
+        .spyOn(FakeFileHandle.prototype, 'getFile')
+        .mockRejectedValue(new DOMException('x', 'NotReadableError'))
+
+      await store.delete('notes.txt')
+
+      expect(store.getSafetySnapshot().backupsHealthy).toBe(true)
+      expect(errorSpy).not.toHaveBeenCalled()
+      getFile.mockRestore()
+      errorSpy.mockRestore()
+    })
+
+    it('lists copies newest first', async () => {
+      const { root, store } = await setup()
+      seed(root, 'accounts.json', '[1]')
+      await save(store, 'accounts.json', [2])
+      const entries = await store.listBackups()
+      expect(entries).toHaveLength(1)
+      expect(entries[0]).toMatchObject({ path: 'accounts.json', unsaved: false, size: 3 })
+    })
+
+    describe('restoreBackup', () => {
+      const seedBackup = async (root: FakeDirectoryHandle, content: string) => {
+        const dir = await (
+          await root.getDirectoryHandle('_backups', { create: true })
+        ).getDirectoryHandle('accounts', {
+          create: true,
+        })
+        dir.contents.set('20261101T090000000Z.json', content)
+        return {
+          path: 'accounts.json',
+          backupPath: '_backups/accounts/20261101T090000000Z.json',
+          stamp: '20261101T090000000Z',
+          unsaved: false,
+          size: content.length,
+        }
+      }
+
+      it('writes the copy over the file, keeps the current version, drops the cache and notifies subscribers', async () => {
+        const { root, store } = await setup()
+        seed(root, 'accounts.json', '["current"]')
+        const entry = await seedBackup(root, '["old"]')
+        await expect(store.readJSON('accounts.json', [])).resolves.toEqual(['current'])
+        const notified = vi.fn()
+        store.subscribe('accounts.json', notified)
+
+        await store.restoreBackup(entry)
+
+        await expect(textOf(root.contents.get('accounts.json'))).resolves.toBe('["old"]')
+        await expect(store.readJSON('accounts.json', [])).resolves.toEqual(['old'])
+        expect(notified).toHaveBeenCalledTimes(1)
+        const copies = copiesIn(root, '_backups/accounts')
+        expect(copies).toHaveLength(2)
+        const texts = await Promise.all(
+          copies.map(name => textOf(folder(root, '_backups/accounts')?.contents.get(name))),
+        )
+        expect(texts.sort()).toEqual(['["current"]', '["old"]'])
+      })
+
+      it('keeps an edit that is still waiting to be saved as an unsaved copy, and does not write it afterwards', async () => {
+        const { root, store } = await setup()
+        seed(root, 'accounts.json', '["current"]')
+        const entry = await seedBackup(root, '["old"]')
+        const waiting = store.writeJSON('accounts.json', ['typed just now'])
+
+        await store.restoreBackup(entry)
+        await vi.advanceTimersByTimeAsync(1000)
+        await waiting
+
+        await expect(textOf(root.contents.get('accounts.json'))).resolves.toBe('["old"]')
+        const copies = copiesIn(root, '_backups/accounts')
+        const unsaved = copies.find(name => name.endsWith('-unsaved.json'))
+        expect(unsaved).toBeDefined()
+        expect(JSON.parse(await textOf(folder(root, '_backups/accounts')?.contents.get(unsaved ?? '')))).toEqual([
+          'typed just now',
+        ])
+        expect(store.hasUnsavedWork()).toBe(false)
+      })
+
+      it('keeps a failed save as an unsaved copy before clearing it', async () => {
+        const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        seed(root, 'accounts.json', '["current"]')
+        const entry = await seedBackup(root, '["old"]')
+        root.faults.close = diskError('InvalidStateError')
+        await settle(store.writeJSON('accounts.json', ['x']))
+        root.faults.close = undefined
+        expect(store.getSafetySnapshot().failed).toHaveLength(1)
+
+        await store.restoreBackup(entry)
+
+        expect(store.getSafetySnapshot().failed).toEqual([])
+        const dir = folder(root, '_backups/accounts')
+        const unsaved = copiesIn(root, '_backups/accounts').find(name => name.endsWith('-unsaved.json'))
+        expect(unsaved).toBeDefined()
+        expect(JSON.parse(await textOf(dir?.contents.get(unsaved ?? '')))).toEqual(['x'])
+        errorSpy.mockRestore()
+      })
+
+      it('keeps the failed save when the unsaved copy cannot be made, and leaves the file alone', async () => {
+        const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        seed(root, 'accounts.json', '["current"]')
+        const entry = await seedBackup(root, '["old"]')
+        root.faults.close = diskError('InvalidStateError')
+        await settle(store.writeJSON('accounts.json', ['x']))
+        root.faults.close = undefined
+        const dir = folder(root, '_backups/accounts')
+        if (dir) dir.faults.createWritable = diskError('QuotaExceededError')
+
+        await expect(store.restoreBackup(entry)).rejects.toThrow('boom')
+
+        expect(store.getSafetySnapshot().failed).toEqual([{ path: 'accounts.json', kind: 'other' }])
+        expect(store.hasUnsavedWork()).toBe(true)
+        expect(root.contents.get('accounts.json')).toBe('["current"]')
+        errorSpy.mockRestore()
+      })
+
+      it('leaves the file alone and re-queues the waiting edit when the restore fails', async () => {
+        const { root, store } = await setup()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        seed(root, 'accounts.json', '["current"]')
+        const entry = await seedBackup(root, '["old"]')
+        const unsavedDir = folder(root, '_backups/accounts')
+        if (unsavedDir) unsavedDir.faults.createWritable = diskError('QuotaExceededError')
+        const waiting = store.writeJSON('accounts.json', ['typed just now'])
+
+        await expect(store.restoreBackup(entry)).rejects.toThrow('boom')
+        expect(root.contents.get('accounts.json')).toBe('["current"]')
+
+        if (unsavedDir) unsavedDir.faults.createWritable = undefined
+        await vi.advanceTimersByTimeAsync(1000)
+        await waiting
+        expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual(['typed just now'])
+        errorSpy.mockRestore()
+      })
+
+      it('merges the waiting edit into a newer one typed while the restore was failing', async () => {
+        const { root, store } = await setup()
+        seed(root, 'accounts.json', '["current"]')
+        const entry = await seedBackup(root, '["old"]')
+        const unsavedDir = folder(root, '_backups/accounts')
+        let newer: Promise<void> = Promise.resolve()
+        if (unsavedDir) {
+          unsavedDir.faults.createWritable = () => {
+            newer = store.writeJSON('accounts.json', ['newest'])
+            throw new DOMException('boom', 'QuotaExceededError')
+          }
+        }
+        const waiting = store.writeJSON('accounts.json', ['typed just now'])
+
+        await expect(store.restoreBackup(entry)).rejects.toThrow('boom')
+        if (unsavedDir) unsavedDir.faults.createWritable = undefined
+        await vi.advanceTimersByTimeAsync(1000)
+        await Promise.all([waiting, newer])
+
+        expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual(['newest'])
+      })
+
+      it('rejects when the safety net is off', async () => {
+        const { store } = await setup(false)
+        await expect(
+          store.restoreBackup({ path: 'a.json', backupPath: '_backups/a/x.json', stamp: 'x', unsaved: false, size: 1 }),
+        ).rejects.toThrow('not available')
+      })
+
+      it('rejects when no folder is connected', async () => {
+        const store = new FileSystemFileStore()
+        store.configureSafety({ enabled: true })
+        await expect(store.listBackups()).rejects.toThrow('not available')
+      })
+    })
+
+    it('forgets session state when a new folder is connected', async () => {
+      const { root, store } = await setup()
+      seed(root, 'accounts.json', '[1]')
+      await save(store, 'accounts.json', [2])
+
+      const other = new FakeDirectoryHandle('other')
+      seed(other, 'accounts.json', '[9]')
+      await store.init(asHandle(other))
+      await save(store, 'accounts.json', [10])
+
+      expect(copiesIn(other, '_backups/accounts')).toHaveLength(1)
+    })
+
+    it('clears a backup warning when the safety net is turned off', async () => {
+      const { root, store } = await setup()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      seed(root, 'accounts.json', '[1]')
+      ;(await root.getDirectoryHandle('_backups', { create: true })).faults.createWritable = diskError('X')
+      await save(store, 'accounts.json', [2])
+      expect(store.getSafetySnapshot().backupsHealthy).toBe(false)
+
+      store.configureSafety({ enabled: false })
+
+      expect(store.getSafetySnapshot().backupsHealthy).toBe(true)
+      errorSpy.mockRestore()
     })
   })
 })

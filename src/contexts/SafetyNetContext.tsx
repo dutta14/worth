@@ -16,7 +16,7 @@ import { useFlag } from '../flags/useFlag'
 import { usePageHideFlush } from '../hooks/usePageHideFlush'
 import { isSafetyNetStore } from '../utils/fileStoreTypes'
 import { EMPTY_SAFETY_SNAPSHOT } from '../utils/safetyNet'
-import type { SafetySnapshot } from '../utils/safetyNet'
+import type { BackupEntry, SafetySnapshot } from '../utils/safetyNet'
 
 const FOCUS_CHECK_MIN_INTERVAL_MS = 5000
 
@@ -31,10 +31,15 @@ export interface SafetyNetContextValue {
   /** Must be called directly from a click handler: the browser requires a user gesture. */
   reconnect: () => Promise<void>
   chooseFolderAgain: () => Promise<void>
+  /** Every copy in `_backups/`, newest first. Rejects when the folder cannot be read. */
+  listBackups: () => Promise<BackupEntry[]>
+  /** Replaces the file with the copy, then refreshes the visible data. Rejects with the file untouched. */
+  restoreBackup: (entry: BackupEntry) => Promise<void>
 }
 
 const noop = async (): Promise<void> => {}
 const noRetry = async (): Promise<boolean> => false
+const noBackups = async (): Promise<BackupEntry[]> => []
 
 const defaultValue: SafetyNetContextValue = {
   enabled: false,
@@ -43,6 +48,8 @@ const defaultValue: SafetyNetContextValue = {
   retryFailed: noRetry,
   reconnect: noop,
   chooseFolderAgain: noop,
+  listBackups: noBackups,
+  restoreBackup: noop,
 }
 
 export const SafetyNetContext = createContext<SafetyNetContextValue>(defaultValue)
@@ -123,9 +130,30 @@ export const SafetyNetProvider: FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [pickFolder])
 
+  const listBackups = useCallback(async () => (store ? store.listBackups() : []), [store])
+
+  const restoreBackup = useCallback(
+    async (entry: BackupEntry) => {
+      if (!store) return
+      await store.restoreBackup(entry)
+      // Balances have no per-file subscription; DataContext refreshes them on this event.
+      window.dispatchEvent(new Event('data-changed'))
+    },
+    [store],
+  )
+
   const value = useMemo<SafetyNetContextValue>(
-    () => ({ enabled: store !== null, snapshot, reconnectDenied, retryFailed, reconnect, chooseFolderAgain }),
-    [store, snapshot, reconnectDenied, retryFailed, reconnect, chooseFolderAgain],
+    () => ({
+      enabled: store !== null,
+      snapshot,
+      reconnectDenied,
+      retryFailed,
+      reconnect,
+      chooseFolderAgain,
+      listBackups,
+      restoreBackup,
+    }),
+    [store, snapshot, reconnectDenied, retryFailed, reconnect, chooseFolderAgain, listBackups, restoreBackup],
   )
 
   return <SafetyNetContext.Provider value={value}>{children}</SafetyNetContext.Provider>
