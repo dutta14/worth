@@ -3,6 +3,7 @@ import { discoverCategories } from '../utils/categoryDiscovery'
 import { UNCATEGORIZED_EXPENSE, UNCATEGORIZED_INCOME } from './constants'
 import { applyDedupe, dedupeKey } from './dedupe'
 import { readExistingRows } from './mergeCsv'
+import { categoryResolver, compileRules, matchRules, type CategoryRule } from './rules'
 import type {
   ImportOptions,
   ImportPlan,
@@ -28,6 +29,8 @@ export interface PlanInput {
   existingCsvs: Record<string, string>
   categoryGroups: CategoryGroup[]
   options: ImportOptions
+  /** Applied, in order, to rows that arrive without a category. Defaults to none. */
+  rules?: CategoryRule[]
 }
 
 export const monthOf = (date: string): string => date.slice(0, 7)
@@ -37,11 +40,12 @@ export const fallbackCategoryFor = (amountCents: number): string =>
   amountCents > 0 ? UNCATEGORIZED_INCOME : UNCATEGORIZED_EXPENSE
 
 /**
- * Turns normalized rows into a commit plan without touching storage: groups rows by their own date, files
- * rows without a category under the sign-based fallbacks, drops duplicates, and counts what will change.
- * File-supplied category names match existing ones case-insensitively and take the existing spelling.
+ * Turns normalized rows into a commit plan without touching storage: groups rows by their own date, gives
+ * rows without a category the category of the first matching rule, files the rest under the sign-based
+ * fallbacks, drops duplicates, and counts what will change. File-supplied category names match existing
+ * ones case-insensitively and take the existing spelling; rules never override a category from the file.
  */
-export function buildImportPlan({ files, existingCsvs, categoryGroups, options }: PlanInput): ImportPlan {
+export function buildImportPlan({ files, existingCsvs, categoryGroups, options, rules = [] }: PlanInput): ImportPlan {
   const spelling = new Map<string, string>()
   const remember = (name: string): string => {
     const key = name.trim().toLowerCase()
@@ -51,6 +55,9 @@ export function buildImportPlan({ files, existingCsvs, categoryGroups, options }
     return name
   }
   categoryGroups.flatMap(group => group.categories).forEach(remember)
+  const compiledRules = compileRules(rules, categoryResolver(categoryGroups))
+  const ruled = new Set<PlannedRow>()
+  const passedOver = new Map<PlannedRow, string[]>()
 
   const known = new Map<string, Map<string, number>>()
   const monthPlans = new Map<string, MonthPlan>()
@@ -81,13 +88,17 @@ export function buildImportPlan({ files, existingCsvs, categoryGroups, options }
 
     const byMonth = new Map<string, PlannedRow[]>()
     for (const row of file.rows) {
+      const match = row.category === null ? matchRules(compiledRules, row.description) : null
+      const category = row.category ?? match?.category ?? null
       const planned: PlannedRow = {
         ...row,
         fileName: file.name,
         fileIndex,
-        fallback: row.category === null,
-        resolvedCategory: remember(row.category ?? fallbackCategoryFor(row.amountCents)),
+        fallback: category === null,
+        resolvedCategory: remember(category ?? fallbackCategoryFor(row.amountCents)),
       }
+      if (match?.category) ruled.add(planned)
+      if (match && match.skipped.length > 0) passedOver.set(planned, match.skipped)
       const month = monthOf(row.date)
       const list = byMonth.get(month)
       if (list) list.push(planned)
@@ -134,6 +145,8 @@ export function buildImportPlan({ files, existingCsvs, categoryGroups, options }
       ...discovered.income.map(name => ({ name, group: 'income' as const })),
     ],
     fallbackCount: addedRows.filter(row => row.fallback).length,
+    rulesApplied: addedRows.filter(row => ruled.has(row)).length,
+    rulesSkipped: new Set(addedRows.flatMap(row => passedOver.get(row) ?? [])).size,
     skipped,
     notices,
   }

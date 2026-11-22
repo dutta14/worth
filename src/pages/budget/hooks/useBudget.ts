@@ -20,9 +20,11 @@ import {
   mergeGroupsByType,
 } from '../utils/categoryDiscovery'
 import { executeImport, executeUndo, type CommitResult, type UndoRecord, type UndoResult } from '../import/commitImport'
-import type { PreImportSnapshot } from '../import/importStorage'
+import { retargetStoredRules, type PreImportSnapshot } from '../import/importStorage'
 import type { ImportPlan } from '../import/types'
 import { useFileStore } from '../../../contexts/FileStoreContext'
+import { FLAGS } from '../../../flags/flagDefinitions'
+import { useFlag } from '../../../flags/useFlag'
 
 const updateMergedGroups = (groups: CategoryGroup[], sourceSet: Set<string>, targetName: string): CategoryGroup[] => {
   const targetGroupId = groups.find(g => g.categories.includes(targetName))?.id
@@ -45,6 +47,7 @@ const EMPTY_STORE: BudgetStore = { csvs: {}, configs: {}, years: [], categoryGro
 
 export function useBudget() {
   const { fileStore } = useFileStore()
+  const importWizardOn = useFlag(FLAGS.IMPORT_WIZARD)
   const [store, setStore] = useState<BudgetStore>(EMPTY_STORE)
   const [loaded, setLoaded] = useState(false)
   const storeRef = useRef(store)
@@ -338,8 +341,15 @@ export function useBudget() {
           })),
         ],
       })
+
+      // Rules that pointed at a merged-away category follow it; without this they would be skipped as dangling.
+      if (importWizardOn) {
+        void retargetStoredRules(fileStore, [...sourceSet], targetName).then(outcome => {
+          if (!outcome.ok) console.error(`Could not update import rules after the merge (${outcome.reason})`)
+        })
+      }
     },
-    [persist],
+    [persist, importWizardOn, fileStore],
   )
 
   /** Check if a category has any transactions across all years' CSVs */

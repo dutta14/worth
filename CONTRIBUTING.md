@@ -116,6 +116,8 @@ The chosen folder handle is persisted in IndexedDB via `src/utils/handlePersiste
 | `balances/{year}.csv` | Monthly balances (columns: `month,accountId,balance`) |
 | `transactions/{year}/{yyyy-mm}.csv` | Budget transactions per month |
 | `budget/categories.json` | Category groups and tracked years |
+| `budget/import-formats.json` | Saved CSV import column formats |
+| `budget/category-rules.json` | Import categorization rules (`{ schemaVersion, rules }`) |
 | `budget/summary-cache.json` | Derived savings-rate summary |
 | `budget/targets.json` | Monthly targets per expense group, keyed by group id (only read and written when the `category-budget-targets` flag is on) |
 | `goals.json` | `{ financialGoals, gwGoals }` |

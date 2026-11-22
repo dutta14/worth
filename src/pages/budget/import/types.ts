@@ -67,7 +67,7 @@ export interface ImportOptions {
 /** A normalized row with the category it will be filed under. */
 export interface PlannedRow extends NormalizedRow {
   resolvedCategory: string
-  /** True when the file gave no category and the row went to one of the two fallback categories. */
+  /** True when neither the file nor a rule gave a category and the row went to one of the two fallback categories. */
   fallback: boolean
   fileName: string
   fileIndex: number
@@ -103,6 +103,10 @@ export interface ImportPlan {
   newCategories: { name: string; group: 'expense' | 'income' }[]
   /** Rows filed under the fallback categories. */
   fallbackCount: number
+  /** Rows a rule categorized. */
+  rulesApplied: number
+  /** Rules that matched a row but were passed over because their category no longer exists. */
+  rulesSkipped: number
   skipped: PlanSkippedRow[]
   /** Tokenizer messages, for example an unterminated quote. */
   notices: string[]

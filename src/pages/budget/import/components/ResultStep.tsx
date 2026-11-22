@@ -1,6 +1,7 @@
 import { FC, useId } from 'react'
 import type { CommitResult } from '../commitImport'
 import type { FormatNote } from '../wizardState'
+import { rulesSkippedMessage } from '../ruleMessages'
 import { failureMessage, formatNoteMessage, importedMessage, UNDONE_MESSAGE } from '../messages'
 
 interface ResultStepProps {
@@ -10,9 +11,19 @@ interface ResultStepProps {
   formatNote: FormatNote | null
   canUndo: boolean
   onUndo: () => void
+  /** Rules passed over during this import because their category no longer exists. */
+  rulesSkipped?: number
 }
 
-const ResultStep: FC<ResultStepProps> = ({ result, undone, undoFailed, formatNote, canUndo, onUndo }) => {
+const ResultStep: FC<ResultStepProps> = ({
+  result,
+  undone,
+  undoFailed,
+  formatNote,
+  canUndo,
+  onUndo,
+  rulesSkipped = 0,
+}) => {
   const id = useId()
 
   if (!result.ok) {
@@ -41,6 +52,7 @@ const ResultStep: FC<ResultStepProps> = ({ result, undone, undoFailed, formatNot
           {result.snapshotFailed && (
             <p className="iw-warning">A backup could not be made before importing. Your import still went through.</p>
           )}
+          {rulesSkipped > 0 && <p className="iw-warning">{rulesSkippedMessage(rulesSkipped)}</p>}
           {formatNote && (
             <p className={formatNote.kind === 'saved' ? 'iw-muted' : 'iw-warning'}>{formatNoteMessage(formatNote)}</p>
           )}
