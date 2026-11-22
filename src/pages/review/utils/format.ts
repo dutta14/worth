@@ -73,3 +73,35 @@ export function formatMonthLong(ym: string): string {
   const [y, m] = ym.split('-')
   return `${MONTH_NAMES_LONG[parseInt(m, 10) - 1]} ${y}`
 }
+
+/** "December", for sentences that already carry the year elsewhere. */
+export function formatMonthName(ym: string): string {
+  return formatMonthLong(ym).split(' ')[0]
+}
+
+const AXIS_UNITS = [
+  { min: 1e6, divisor: 1e6, suffix: 'M' },
+  { min: 1e3, divisor: 1e3, suffix: 'K' },
+  { min: 0, divisor: 1, suffix: '' },
+]
+const axisUnit = (v: number) => AXIS_UNITS.find(u => Math.abs(v) >= u.min)!
+
+/**
+ * Short dollar labels ("$1.25M", "-$20K") for a set of axis values, with just enough decimals
+ * that every label reads back as exactly its gridline value.
+ */
+export function formatAxisLabels(values: number[]): string[] {
+  const exact = (decimals: number) =>
+    values.every(v => {
+      const { divisor } = axisUnit(v)
+      return Math.abs(Number((v / divisor).toFixed(decimals)) * divisor - v) < 1e-6
+    })
+  let decimals = 0
+  while (decimals < 6 && !exact(decimals)) decimals += 1
+  const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: decimals })
+  return values.map(v => {
+    const { divisor, suffix } = axisUnit(v)
+    const magnitude = number.format(Math.abs(v) / divisor)
+    return `${v < 0 && Number(magnitude.replace(/,/g, '')) !== 0 ? '-' : ''}$${magnitude}${suffix}`
+  })
+}

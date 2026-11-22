@@ -35,6 +35,7 @@ const review = (overrides: Partial<AnnualReview> & { start?: NetWorthAnchor; end
     },
     spending: null,
     goals: [],
+    skippedGoals: 0,
     notes: [],
     prior: null,
     ...rest,

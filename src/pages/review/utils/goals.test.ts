@@ -22,7 +22,7 @@ const target = getFiTarget(
   GROWTH.inflation,
 )
 
-const snap = (overrides: Partial<Parameters<typeof snapshotGoals>[1][number]> = {}, year = 2025) =>
+const snapAll = (overrides: Partial<Parameters<typeof snapshotGoals>[1][number]> = {}, year = 2025) =>
   snapshotGoals(
     year,
     [{ ...goal, ...overrides }],
@@ -37,6 +37,7 @@ const snap = (overrides: Partial<Parameters<typeof snapshotGoals>[1][number]> = 
     anchor('2024-12'),
     anchor('2025-12'),
   )
+const snap = (...args: Parameters<typeof snapAll>) => snapAll(...args).goals
 
 describe('snapshotGoals', () => {
   it('computes the target from the real FI calculation', () => {
@@ -64,7 +65,7 @@ describe('snapshotGoals', () => {
       balancesFor(1, { '2024-12': -1000, '2025-12': target * 3 }),
       anchor('2024-12'),
       anchor('2025-12'),
-    )
+    ).goals
     expect(s.startPct).toBe(0)
     expect(s.endPct).toBe(100)
   })
@@ -111,8 +112,16 @@ describe('snapshotGoals', () => {
     expect(input.goalCreatedIn).toBe('whenever')
   })
 
-  it('skips goals without a positive target', () => {
-    expect(snap({ goalEndYear: '' })).toEqual([])
+  it('skips goals without a positive target and counts them', () => {
+    expect(snapAll({ goalEndYear: '' })).toEqual({ goals: [], skipped: 1 })
+  })
+
+  it('does not count a goal as skipped when it did not exist yet', () => {
+    expect(snapAll({ goalEndYear: '', goalCreatedIn: '2030-01' })).toEqual({ goals: [], skipped: 0 })
+  })
+
+  it('counts nothing as skipped when every goal has a target', () => {
+    expect(snapAll().skipped).toBe(0)
   })
 
   it('reports null balances and progress for missing or incomplete anchors', () => {
@@ -125,7 +134,7 @@ describe('snapshotGoals', () => {
       balancesFor(1, { '2025-12': 100 }),
       anchor(null, 'missing'),
       anchor('2025-12', 'incomplete'),
-    )
+    ).goals
     expect(s).toMatchObject({ startBalance: null, endBalance: null, startPct: null, endPct: null })
   })
 })

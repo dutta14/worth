@@ -142,6 +142,8 @@ describe('selectAnnualReview worked examples', () => {
       manualSavings: 40000,
       budgetIncome: 120000,
       budgetSavings: 42000,
+      incomeDiffers: true,
+      savingsDiffers: true,
     })
     expect(review.notes).toContainEqual({ code: 'mismatch' })
 
@@ -237,6 +239,7 @@ describe('selectAnnualReview worked examples', () => {
     expect(review.cashflow.source).toBe('none')
     expect(review.spending).toBeNull()
     expect(review.goals).toEqual([])
+    expect(review.skippedGoals).toBe(0)
     expect(review.notes).toEqual([])
     expect(review.prior).toBeNull()
   })
@@ -341,6 +344,19 @@ describe('selectAnnualReview behavior', () => {
     )
     expect(review.spending!.uncategorizedShare).toBeCloseTo(25, 10)
     expect(review.notes).toEqual([{ code: 'uncategorized', share: 25 }])
+  })
+
+  it('reports goals that existed by year end but have no positive target as skipped, not listed', () => {
+    vi.mocked(getFiTarget).mockReturnValue(0)
+    const review = selectAnnualReview(
+      makeInputs({
+        accounts: makeAccounts({ goalType: 'fi' }),
+        balances: balancesFor(1, { '2024-12': 100, '2025-12': 2000 }),
+        goals: [makeGoal({ id: 1, goalCreatedIn: '2024-01' }), makeGoal({ id: 2, goalCreatedIn: '2026-01' })],
+      }),
+    )
+    expect(review.goals).toEqual([])
+    expect(review.skippedGoals).toBe(1)
   })
 
   it('lists goals created in or before the review year, treats an unparseable creation month as existing', () => {

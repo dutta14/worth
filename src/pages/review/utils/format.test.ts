@@ -3,7 +3,9 @@ import {
   formatDelta,
   formatList,
   formatMoney,
+  formatAxisLabels,
   formatMonthLong,
+  formatMonthName,
   formatMonthShort,
   formatPercent,
   pluralize,
@@ -96,5 +98,32 @@ describe('month names', () => {
     expect(formatMonthShort('2024-12')).toBe('Dec 2024')
     expect(formatMonthLong('2024-12')).toBe('December 2024')
     expect(formatMonthLong('2025-01')).toBe('January 2025')
+  })
+})
+
+describe('formatMonthName', () => {
+  it('returns the month name without the year', () => {
+    expect(formatMonthName('2026-10')).toBe('October')
+  })
+})
+
+describe('formatAxisLabels', () => {
+  it('shortens axis values and keeps the sign', () => {
+    expect(formatAxisLabels([400000, 460000])).toEqual(['$400K', '$460K'])
+    expect(formatAxisLabels([-20000, 0, 20000])).toEqual(['-$20K', '$0', '$20K'])
+  })
+
+  it('adds only as many decimals as the set needs', () => {
+    expect(formatAxisLabels([1_000_000, 1_500_000, 2_000_000])).toEqual(['$1M', '$1.5M', '$2M'])
+    expect(formatAxisLabels([1_000_000, 1_250_000])).toEqual(['$1M', '$1.25M'])
+    expect(formatAxisLabels([1_000_000, 1_005_000])).toEqual(['$1M', '$1.005M'])
+  })
+
+  it('labels small values in plain dollars', () => {
+    expect(formatAxisLabels([0, 250, 500])).toEqual(['$0', '$250', '$500'])
+  })
+
+  it('shows negative zero as $0', () => {
+    expect(formatAxisLabels([-0])).toEqual(['$0'])
   })
 })

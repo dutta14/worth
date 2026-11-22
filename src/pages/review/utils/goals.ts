@@ -34,7 +34,10 @@ const withDeterministicCreation = (goal: FinancialGoal, year: number): Financial
 const usable = (a: NetWorthAnchor): a is NetWorthAnchor & { month: string } =>
   a.month !== null && (a.status === 'exact' || a.status === 'nearest')
 
-/** FI goal progress at the two anchors, measured against each goal's target as it is set today. */
+/**
+ * FI goal progress at the two anchors, measured against each goal's target as it is set today.
+ * `skipped` counts goals that existed by year end but have no positive target, so the page can say so.
+ */
 export function snapshotGoals(
   year: number,
   goals: FinancialGoal[],
@@ -44,11 +47,12 @@ export function snapshotGoals(
   balances: BalanceEntry[],
   start: NetWorthAnchor,
   end: NetWorthAnchor,
-): GoalSnapshot[] {
+): { goals: GoalSnapshot[]; skipped: number } {
   const startBalance = usable(start) ? fiBalanceAt(start.month, accounts, balances) : null
   const endBalance = usable(end) ? fiBalanceAt(end.month, accounts, balances) : null
 
   const snapshots: GoalSnapshot[] = []
+  let skipped = 0
   for (const goal of goals) {
     if (!existedBy(goal, year)) continue
     const target = getFiTarget(
@@ -59,7 +63,10 @@ export function snapshotGoals(
       growth.ageBoundary,
       growth.inflation,
     )
-    if (!(target > 0)) continue
+    if (!(target > 0)) {
+      skipped += 1
+      continue
+    }
     const pctOf = (balance: number | null) =>
       balance === null ? null : Math.min(100, Math.max(0, (balance / target) * 100))
     snapshots.push({
@@ -72,5 +79,5 @@ export function snapshotGoals(
       endPct: pctOf(endBalance),
     })
   }
-  return snapshots
+  return { goals: snapshots, skipped }
 }

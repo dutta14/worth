@@ -14,20 +14,21 @@
 
 **Success metrics (no telemetry; all verifiable by test or manual check).**
 
-| ID | Metric | How to verify |
-|---|---|---|
-| M-1 | For every row in the worked-examples table (section 4.8) the selector returns the exact stated output. | Unit tests `selectAnnualReview.test.ts`, fixtures W1 to W10. |
-| M-2 | For a fixture where Growth tab and Annual Review share a definition (no net-positive refund categories, no orphan balances), the two pages show identical net worth, income, expenses and savings. | Parity unit test calling the Growth tab pure helpers and the new selector on the same fixture. |
-| M-3 | A user with 12 months of balances and transactions gets a full review in under 3 clicks from Home (Wealth, Review, pick year) and the page is readable with no setup. | Playwright test; manual stopwatch check against demo data. |
-| M-4 | Printing (`emulateMedia({ media: 'print' })`) hides sidebar, tab bar and controls, forces a white background in dark mode, and never splits a figure or table row. | Playwright print test plus a manual Chrome print preview (US Letter). |
-| M-5 | The CSV opens in a spreadsheet with the documented columns and no formula-injection. | Unit test on `buildReviewCsv`; manual open in Numbers/Excel. |
-| M-6 | Zero network requests are made by the page. | Playwright `page.on('request')` assertion that no request leaves the app origin while the review loads. |
+| ID  | Metric                                                                                                                                                                                             | How to verify                                                                                           |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| M-1 | For every row in the worked-examples table (section 4.8) the selector returns the exact stated output.                                                                                             | Unit tests `selectAnnualReview.test.ts`, fixtures W1 to W10.                                            |
+| M-2 | For a fixture where Growth tab and Annual Review share a definition (no net-positive refund categories, no orphan balances), the two pages show identical net worth, income, expenses and savings. | Parity unit test calling the Growth tab pure helpers and the new selector on the same fixture.          |
+| M-3 | A user with 12 months of balances and transactions gets a full review in under 3 clicks from Home (Wealth, Review, pick year) and the page is readable with no setup.                              | Playwright test; manual stopwatch check against demo data.                                              |
+| M-4 | Printing (`emulateMedia({ media: 'print' })`) hides sidebar, tab bar and controls, forces a white background in dark mode, and never splits a figure or table row.                                 | Playwright print test plus a manual Chrome print preview (US Letter).                                   |
+| M-5 | The CSV opens in a spreadsheet with the documented columns and no formula-injection.                                                                                                               | Unit test on `buildReviewCsv`; manual open in Numbers/Excel.                                            |
+| M-6 | Zero network requests are made by the page.                                                                                                                                                        | Playwright `page.on('request')` assertion that no request leaves the app origin while the review loads. |
 
 ## 2. Current behavior (verified)
 
 Everything below was checked in the repo on 2026-11-08. Nothing in this spec is implemented yet. The sibling specs `monthly-check-in.md`, `import-wizard.md`, `category-budget-targets.md` and `data-safety-net.md` were written alongside this one and have since been reconciled with it in section 8.
 
 **IA and routing**
+
 - The sidebar has Home, Planning (`goal`), Wealth (`net-worth`), Cashflow (`budget`), plus Drive, Settings and User Guide: `src/components/SidebarNavigation.tsx`.
 - Router is `HashRouter` (`src/main.tsx`); the app is served at `/worth/` (`vite.config.js` `base`). Routes are declared in `src/App.tsx`; Wealth is `/net-worth/*` rendering `src/pages/data/Data.tsx`. `currentPage` is `net-worth` for any path that starts with `/net-worth`, so a new child route highlights Wealth with no `App.tsx` change.
 - Wealth tabs are `NavLink`s in `<nav className="tab-bar" aria-label="Wealth sections">`: Dashboard, Allocation, Growth (`Data.tsx` around lines 497 to 506). Growth is `/net-worth/growth/savings` or `/income` and renders the lazy `src/pages/tools/components/SavingsGrowthTracker.tsx`. `activeTab` is derived from `location.pathname` (`Data.tsx` line 217).
@@ -37,12 +38,14 @@ Everything below was checked in the repo on 2026-11-08. Nothing in this spec is 
 **Print today.** The only print rule is `@media print { .navbar { display: none } body { background-color: white } }` in `styles/app.css` (line 114). `.navbar` is not rendered by the current sidebar (`nav.sidebar`, `position: fixed`), so printing any page today includes the sidebar. No component stylesheet in `src/styles` contains `@media print`.
 
 **Net worth data**
+
 - Accounts live in `accounts.json` and balances in `balances/{year}.csv` with columns `month,accountId,balance` (`src/utils/balanceStorage.ts`). `BalanceEntry.month` is `YYYY-MM`. `DataContext` (`src/contexts/DataContext.tsx`) exposes `accounts`, `balances`, `allMonths` and has no loaded flag: both start as `[]` until the async reads finish.
 - Net worth for a month is a plain signed sum with no sign flip by `nature`: `netWorth: assets + liabilities` (`BalanceCharts.tsx` line 94) and `sumAccountBalances` over all accounts including inactive (`NetWorthSummary.tsx` line 22). Liabilities therefore only work if entered as negative numbers.
 - Saving balances in the spreadsheet only writes entries for active accounts (`Data.tsx` `handleSaveMonth`), so a closed account stops getting entries. Deleting an account deletes its balances (`handleDeleteAccount`).
 - Growth tab year-end net worth (`SavingsGrowthTracker.tsx` `getYearEndNetWorths`, line 18): per year it picks December if present, else the latest month of that year, and sums every balance in that month, even for account ids not in `accounts`. The "previous" year for the change is the previous year in the sorted list of years that have any data, not necessarily the adjacent year (lines 188 to 189). There is no completeness check, so a December missing one account silently lowers net worth.
 
 **Income, expenses, savings**
+
 - Transactions are `transactions/{year}/{YYYY-MM}.csv` (`budgetStorage.ts` `loadBudgetStore`). `parseCSV` (`src/pages/budget/utils/csvParser.ts` lines 125 and 165) skips any row with an empty Category, so blank-category rows are dropped from every total today.
 - Classification: a category is income if it is in a group with `type: 'income'` or id `income-others` (`getIncomeGroups`). Categories in the `removed` group are excluded. All other categories are expenses.
 - Budget page totals (`useBudget.ts` `summary`, line 525): income is the signed sum of income categories; expense is the signed sum of all other categories, with the absolute value taken once at the end, so refunds in an expense category reduce spending. `saveRate = totalIncome > 0 ? 1 - expense/income : 0`, so it shows 0 when income is 0.
@@ -69,6 +72,7 @@ Everything below was checked in the repo on 2026-11-08. Nothing in this spec is 
 **A new tab "Review" under Wealth, route `/net-worth/review/:year?` (browser URL `https://anindya.dev/worth/#/net-worth/review/2025`).** Tab order: Dashboard, Allocation, Growth, Review.
 
 Why not the alternatives:
+
 - Top-level sidebar item: the IA was just reduced to Planning, Wealth, Cashflow. A fifth primary item for a once-a-year page dilutes it.
 - Planning tab: Planning is forward-looking (Goals, Leverage, Pay Down, FIRE Calculator, Taxes). A backward-looking review belongs with history.
 - Cashflow tab: the review is mostly net worth, and Cashflow tabs are all monthly detail views.
@@ -102,48 +106,78 @@ src/styles/AnnualReview.css
 
 ```ts
 export type AnchorStatus = 'exact' | 'nearest' | 'incomplete' | 'missing'
-export interface AccountRef { id: number; name: string }
+export interface AccountRef {
+  id: number
+  name: string
+}
 
 export interface NetWorthAnchor {
-  month: string | null          // YYYY-MM actually used
-  total: number | null          // null when status is 'missing'
+  month: string | null // YYYY-MM actually used
+  total: number | null // null when status is 'missing'
   status: AnchorStatus
-  missing: AccountRef[]         // only for 'incomplete'
+  missing: AccountRef[] // only for 'incomplete'
 }
-export interface MonthPoint { month: string; total: number | null; complete: boolean } // always 12, Jan..Dec
+export interface MonthPoint {
+  month: string
+  total: number | null
+  complete: boolean
+} // always 12, Jan..Dec
 
 export interface NetWorthReview {
   start: NetWorthAnchor
   end: NetWorthAnchor
-  change: number | null         // null unless both anchors are exact/nearest and months differ
-  changePct: number | null      // null when start.total === 0 or change is null
+  change: number | null // null unless both anchors are exact/nearest and months differ
+  changePct: number | null // null when start.total === 0 or change is null
   startNegative: boolean
   series: MonthPoint[]
 }
 
 export type CashflowSource = 'budget' | 'manual' | 'budget-partial' | 'none'
-export interface ManualYearLog { grossIncome?: number; taxes?: number; netIncome?: number; savings?: number }
+export interface ManualYearLog {
+  grossIncome?: number
+  taxes?: number
+  netIncome?: number
+  savings?: number
+}
 export interface CashflowReview {
   source: CashflowSource
   income: number | null
   expenses: number | null
   savings: number | null
-  savingsRate: number | null    // percent, e.g. 35 for 35%
-  monthsCovered: string[]       // YYYY-MM with a readable CSV
-  gapMonths: string[]           // expected but missing
+  savingsRate: number | null // percent, e.g. 35 for 35%
+  monthsCovered: string[] // YYYY-MM with a readable CSV
+  gapMonths: string[] // expected but missing
   unreadableMonths: string[]
-  mismatch: { manualIncome: number | null; manualSavings: number | null; budgetIncome: number; budgetSavings: number } | null
+  mismatch: {
+    manualIncome: number | null
+    manualSavings: number | null
+    budgetIncome: number
+    budgetSavings: number
+  } | null
 }
 
-export interface GroupSpend { id: string; name: string; amount: number; share: number } // share is percent of positive spend
+export interface GroupSpend {
+  id: string
+  name: string
+  amount: number
+  share: number
+} // share is percent of positive spend
 export interface SpendingReview {
-  top: GroupSpend[]                  // up to 5
+  top: GroupSpend[] // up to 5
   other: { count: number; amount: number; share: number } | null
-  refundOnlyTotal: number            // sum of groups with net negative spend (a credit), as a positive number
+  refundOnlyTotal: number // sum of groups with net negative spend (a credit), as a positive number
   uncategorizedShare: number | null
 }
 
-export interface GoalSnapshot { goalId: number; name: string; target: number; startBalance: number | null; endBalance: number | null; startPct: number | null; endPct: number | null }
+export interface GoalSnapshot {
+  goalId: number
+  name: string
+  target: number
+  startBalance: number | null
+  endBalance: number | null
+  startPct: number | null
+  endPct: number | null
+}
 
 export type ReviewNote =
   | { code: 'anchor-incomplete'; which: 'start' | 'end'; month: string; accounts: AccountRef[] }
@@ -164,25 +198,36 @@ export interface AnnualReview {
   status: 'complete' | 'in-progress' | 'empty'
   netWorth: NetWorthReview
   cashflow: CashflowReview
-  spending: SpendingReview | null    // null when no readable transactions
+  spending: SpendingReview | null // null when no readable transactions
   goals: GoalSnapshot[]
-  notes: ReviewNote[]                // ordered; UI and CSV render the same list
-  prior: { netWorthChange: number | null; income: number | null; expenses: number | null; savingsRate: number | null } | null
+  notes: ReviewNote[] // ordered; UI and CSV render the same list
+  prior: {
+    netWorthChange: number | null
+    income: number | null
+    expenses: number | null
+    savingsRate: number | null
+  } | null
 }
 
 export interface ReviewInputs {
   year: number
-  today: Date                         // injected; only year and month are read
-  accounts: Account[]; balances: BalanceEntry[]
-  transactionsByMonth: Record<string, Transaction[]>   // built by the hook from BudgetStore via parseCSV
+  today: Date // injected; only year and month are read
+  accounts: Account[]
+  balances: BalanceEntry[]
+  transactionsByMonth: Record<string, Transaction[]> // built by the hook from BudgetStore via parseCSV
   unreadableMonths: string[]
-  categoryGroups: CategoryGroup[]                       // full list from BudgetStore
+  categoryGroups: CategoryGroup[] // full list from BudgetStore
   manual: Record<number, ManualYearLog>
-  goals: FinancialGoal[]; profileBirthday: string; growth: GrowthSettings // from useGrowthSettings
+  goals: FinancialGoal[]
+  profileBirthday: string
+  growth: GrowthSettings // from useGrowthSettings
 }
 
 export function selectAnnualReview(i: ReviewInputs): AnnualReview
-export function getAvailableYears(i: Pick<ReviewInputs, 'balances' | 'transactionsByMonth' | 'manual' | 'today'>): { years: number[]; defaultYear: number }
+export function getAvailableYears(i: Pick<ReviewInputs, 'balances' | 'transactionsByMonth' | 'manual' | 'today'>): {
+  years: number[]
+  defaultYear: number
+}
 ```
 
 `prior` is the same selector run for `year - 1` (one level only; `prior.prior` is not computed), hidden when that year is `empty`.
@@ -192,6 +237,7 @@ export function getAvailableYears(i: Pick<ReviewInputs, 'balances' | 'transactio
 **Month totals and coverage.** `total(M) = sum of balance for entries in month M whose accountId exists in accounts` (inactive accounts included, orphan ids ignored; this deliberately differs from the Growth tab only for orphans, which `handleDeleteAccount` normally prevents). An account is expected in month M when it has a first entry month `F <= M` and `M <= L`, where `L` is the latest month in all balances if the account is `active`, else the account's own last entry month. `missing(M)` = expected accounts with no entry in M. A month is complete when `missing(M)` is empty. Accounts with no entries are ignored. Limitation: a backfilled account opened earlier than its first entry is not flagged.
 
 **Anchors.** Start target is `{year-1}-12`, end target is `{year}-12`.
+
 1. Target month has entries and is complete: `exact`.
 2. Target month has entries but is incomplete: `incomplete`; `total` is still reported but `change` is null (no silent substitution, no carry-forward).
 3. Target month has no entries at all: `nearest`, resolved as follows. End: the latest month in `year` that has entries (for the in-progress year this is the normal case). Start: the latest month in `year-1` with entries, else the earliest month in `year`. The resolved month must itself be complete, else the anchor is `incomplete`. If nothing resolves: `missing`.
@@ -202,6 +248,7 @@ export function getAvailableYears(i: Pick<ReviewInputs, 'balances' | 'transactio
 **Status.** `year > today.year`: treated as `empty`. `year === today.year`: `in-progress`, note `in-progress` with the end anchor month. `year < today.year`: `complete`. `empty` when there is no resolvable anchor and `cashflow.source === 'none'`.
 
 **Cashflow.** Expected months: `01..12` for a past year; for the current year `01..M` where M is the latest month that has a CSV (trailing months are not gaps; interior gaps are). `gapMonths` = expected months with no readable CSV. Per-month sums use the CSV file's month key, the same as Budget and Growth.
+
 - Budget figures: `income` = signed sum of amounts in income-group categories; `expenses = -(signed sum of amounts in all other categories not in the removed group)`; both exclude removed categories (matches `useBudget` `summary`, not Growth's per-category `abs`). `savings = income - expenses`.
 - Source precedence: (1) `budget` when at least one month is covered and `gapMonths` is empty. (2) else `manual` when the manual log has `netIncome`: `income = netIncome`; `savings = log.savings` if present, else null; `expenses = netIncome - savings` when both exist, else null. (3) else `budget-partial` when some months are covered (figures cover only those months; note `budget-partial`). (4) else `none`. Sources are never mixed field by field.
 - `savingsRate = income > 0 && savings != null ? savings / income * 100 : null`. Savings may be negative, so the rate may be negative. Not annualized for partial years.
@@ -232,6 +279,7 @@ New flag `ANNUAL_REVIEW = defineFlag('annual-review', { type: 'boolean', default
 ## 4. Product requirements
 
 ### 4.1 User stories
+
 - As a user at year-end, I want net worth, savings rate and top spending for a year on one page, so that I can review it without assembling it myself.
 - As a user, I want to print it or save it as a PDF from the browser, so that I can keep it with my tax papers or share it with a partner.
 - As a user, I want a CSV of the same numbers, so that I can drop them into my own spreadsheet.
@@ -241,12 +289,14 @@ New flag `ANNUAL_REVIEW = defineFlag('annual-review', { type: 'boolean', default
 ### 4.2 Acceptance criteria
 
 Navigation and years
+
 - AC-1: With the flag on, Wealth shows a fourth tab "Review" after Growth; it links to `/net-worth/review`, and Wealth stays highlighted in the sidebar. With the flag off there is no tab, no search entry, and `/net-worth/review/2025` redirects to `/net-worth/dashboard`.
 - AC-2: `/net-worth/review` redirects (replace) to `/net-worth/review/{defaultYear}` per 3.4. A param that is not exactly four digits redirects to `/net-worth/review`.
 - AC-3: The year `<select>` lists `getAvailableYears` descending, shows the route year as selected, and changing it navigates with replace and announces "Showing the review for {year}." in a polite live region. A route year that is not in the list is still rendered (and typically shows the empty state).
 - AC-4: The selected year survives reload and is part of the copied URL.
 
 Net worth
+
 - AC-5: For a complete year, start is the December `year-1` total and end is the December `year` total, and "Net worth change" equals end minus start (W1).
 - AC-6: Percent change is `change / |start| * 100`, one decimal; hidden with the text "Percent change not available" when start is exactly 0 (W3); footnoted when start is negative (W2).
 - AC-7: If a target December is absent, the nearest-month rules in 3.4 apply and the period label names the real months (W4). A note says which months were used.
@@ -256,6 +306,7 @@ Net worth
 - AC-11: The net worth chart shows 12 monthly points, leaves gaps (no interpolation) for months without entries, and marks incomplete months with a hollow point. A table of the same 12 values is available to assistive tech and via a "Show monthly values" button.
 
 Cashflow
+
 - AC-12: Income, expenses, savings and savings rate follow 3.4. Savings rate is shown as "Not available" when income is 0 or missing (W8), never as 0%.
 - AC-13: Negative savings render as a negative dollar value and a negative rate, with neutral wording (W9).
 - AC-14: When source is `manual`, the page says so and omits the spending breakdown (W10). When source is `budget-partial`, the page names missing months and the count covered.
@@ -263,20 +314,24 @@ Cashflow
 - AC-16: Unreadable transaction files are listed and excluded; the page still renders.
 
 Spending
+
 - AC-17: "Top spending groups" lists up to 5 expense groups by net spend with amount and share; an "All other groups" row appears when more than 5 groups have positive spend; shares sum to 100% within rounding (W1).
 - AC-18: Refunds reduce the group they belong to; a group with net credit is not listed, and its credit is mentioned (W11). Income and removed categories never appear.
 - AC-19: Spend in the `Uncategorized` category or synthetic group is shown inside its group like any other spend, and a note appears when it is 20% or more of positive spend. `Uncategorized income` never triggers the note.
 
 Goals and prior year
+
 - AC-20: Goal progress shows, for each goal that existed by year-end, progress at the start and end anchors (percent and "Up/Down N points"), computed against today's target; goals whose anchors are missing or incomplete show "Not available".
-- AC-21: Under net worth change, income, expenses and savings rate the page shows "vs. {year-1}: ..." when the prior year is not empty, and nothing otherwise. No other year-over-year comparison exists.
+- AC-21: Under net worth change, income, expenses and savings rate the page shows "vs. {year-1}: ..." when the prior year is not empty, and nothing otherwise. For a year in progress only the savings rate line is shown, because income, expenses and net worth change cover part of a year and are not comparable with a full prior year. No other year-over-year comparison exists.
 
 States
+
 - AC-22: Empty year shows "Not enough data for {year}" with links to Wealth and Cashflow, and Print and CSV are disabled.
 - AC-23: While loading the page shows a `role="status"` "Loading your review..." and no numbers.
 - AC-24: A thrown error shows the existing card `ErrorBoundary` fallback; the page never writes to the data folder.
 
 Print and CSV
+
 - AC-25: In print media the sidebar, sidebar overlay and toggle, skip link, demo banner, Wealth header and tabs, year select, buttons, and in-app links are hidden; the review title, period and all sections remain (M-4).
 - AC-26: In print media the background is white and text is dark even when `body.dark` is set, and chart strokes use the light palette.
 - AC-27: No section, figure, or table row is split across pages; table headers repeat.
@@ -284,14 +339,17 @@ Print and CSV
 - AC-29: The page issues no network requests (M-6).
 
 Accessibility
+
 - AC-30: Every control is reachable by keyboard in the order in 5.7; focus indicators come from the global `:focus-visible` rule in `styles/app.css`.
 - AC-31: Each section is a `<section>` labelled by its heading; headline numbers are in a `<dl>`; change direction is conveyed by words ("Up", "Down"), never by color or glyph alone.
 - AC-32: The chart has a text summary and a data table; the spending bars are backed by a real `<table>`.
 
 ### 4.3 Scope IN
+
 Single-year read-only page; net worth start and end with a 12-month chart; income, expenses, savings, savings rate; top 5 spending groups; FI goal progress at year start and end; one-level prior-year delta on four numbers; notes for data problems; print stylesheet; CSV; flag, search entry, Guide and README updates.
 
 ### 4.4 Scope OUT (and why)
+
 - PDF library, server rendering, share links: breaks "no backend, nothing leaves your device"; the browser's Save as PDF covers it.
 - Multi-year trends and year-over-year tables: the Growth tab already does this; the review is one year plus a single prior-year delta.
 - Contribution versus market growth split: not derivable honestly from balances plus a savings figure (transfers, fees, valuation changes); the Growth tab's "Growth" column is already a rough version.
@@ -300,50 +358,55 @@ Single-year read-only page; net worth start and end with a 12-month chart; incom
 - GW goal progress (target helper is private); Home nudge; persisted year preference; carry-forward of missing balances (O-3).
 
 ### 4.5 States
-| State | Behavior |
-|---|---|
+
+| State                         | Behavior                                                                                                             |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | First-time (no data anywhere) | `getAvailableYears` returns only the current year; page shows "Nothing to review yet" with links; controls disabled. |
-| Returning, full data | Default year per 3.4; all sections. |
-| Loading | Status text, no numbers, controls disabled. |
-| Partial data | Sections render what exists; each gap has a note; unavailable values read "Not available". |
-| Error | Card fallback from `ErrorBoundary`; "Try again" resets. |
+| Returning, full data          | Default year per 3.4; all sections.                                                                                  |
+| Loading                       | Status text, no numbers, controls disabled.                                                                          |
+| Partial data                  | Sections render what exists; each gap has a note; unavailable values read "Not available".                           |
+| Error                         | Card fallback from `ErrorBoundary`; "Try again" resets.                                                              |
 
 ### 4.6 Keyboard and screen reader
+
 Native `<select>` and `<button>`s only. The live region (`role="status"`) announces year changes and loading completion ("Review for 2025 is ready."). Notes are a `<ul>` under a "Things to know" heading and they follow the headline stats in DOM order. The headline block includes an SR-only sentence "{n} notes about this data follow." when `notes.length > 0`, so the reader knows to continue.
 
 ### 4.7 Edge cases
+
 Year with only transactions (no balances): net worth card shows "Not available" with a link to Wealth; cashflow and spending render. Year with only balances: cashflow shows "No income or expense data for {year}" with a link to Cashflow. Leap-year and time zones are irrelevant (month keys only). Very long group or goal names wrap and never truncate in print. Hundreds of accounts: the selector is O(entries). Demo mode works unchanged. A transaction CSV dated outside its file month is counted by file month, as everywhere else.
 
 ### 4.8 Worked examples (selector contract, used as unit fixtures)
+
 `today` is 2026-11-08 unless stated.
 
-| ID | Scenario (year) | Inputs | Net worth output | Cashflow and spending output |
-|---|---|---|---|---|
-| W1 | Clean complete year (2025) | Dec 2024 total 400,000; Dec 2025 total 460,000; both complete. 12 CSV months: income 120,000. Group spend: Housing 30,000, Food 15,000, Transport 9,000, Travel 8,000, Health 6,000, Shopping 5,000, Entertainment 5,000. FI goal target 2,000,000; FI balances 300,000 (Dec 2024) and 380,000 (Dec 2025). | start 400,000 exact, end 460,000 exact, change +60,000, +15.0%. Goal 15.0% to 19.0%, Up 4.0 points. | source budget; expenses 78,000; savings 42,000; rate 35.0%. Top: Housing 38.5%, Food 19.2%, Transport 11.5%, Travel 10.3%, Health 7.7%; other (2 groups) 10,000 = 12.8%. |
-| W2 | Negative start (2025) | Dec 2024 -20,000; Dec 2025 -5,000. | change +15,000; pct +75.0% (15,000 / 20,000); `startNegative` true. | n/a |
-| W3 | Zero start (2025) | Dec 2024 0; Dec 2025 8,000. | change +8,000; pct null ("Percent change not available"). | n/a |
-| W4 | First year of tracking (2025) | No 2024 months; first entry Mar 2025 = 50,000; Dec 2025 = 62,000; complete. | start nearest Mar 2025, end exact, change +12,000, +24.0%; note anchor-nearest (start). | n/a |
-| W5 | Year in progress (2026) | Dec 2025 460,000; latest 2026 balances Oct = 483,000 (complete). CSVs Jan to Oct: income 100,000, expenses 70,000. | start exact, end nearest Oct 2026, change +23,000, +5.0%; status in-progress. | source budget (trailing Nov/Dec not gaps); savings 30,000; rate 30.0%, not annualized. |
-| W6 | Source mismatch (2025) | Budget complete: income 120,000, expenses 78,000. Manual log: netIncome 118,000, savings 40,000. | n/a | Displays budget: savings 42,000, rate 35.0%; `mismatch` set (2,000 > max(100, 1,200)); note mismatch. With manual netIncome 119,500 and savings 41,800 no mismatch (500 <= 1,200 and 200 <= 420). |
-| W7 | Incomplete December (2025) | Accounts: Checking (active), 401k (active). Dec 2025 has Checking 30,000 only; 401k has Nov 100,000 and Jan 2026 102,000. Dec 2024 complete 380,000. | end incomplete, missing [401k], change null, pct null; note anchor-incomplete (end). Chart shows hollow Dec point. | independent. |
-| W8 | Zero income (2025) | Budget income 0, expenses 5,000. | n/a | savings -5,000; rate null ("Not available"); note income-zero. |
-| W9 | Overspent year (2025) | Income 60,000; expenses 66,000. | n/a | savings -6,000; rate -10.0%. |
-| W10 | Manual only (2025) | No CSVs. Manual netIncome 90,000, savings 18,000. | n/a | source manual; income 90,000; expenses 72,000; savings 18,000; rate 20.0%; `spending` null; note source-manual. With savings missing: expenses null, savings null, rate null. |
-| W11 | Refunds (2025) | Travel: -8,000 spend and +500 refund; Gifts net +300 (credit only); other groups 70,000 spend. Income 120,000. | n/a | Travel amount 7,500; Gifts not listed; `refundOnlyTotal` 300; expenses = 77,500 + 70,000 - 300 = 147,200? No: expenses = 7,500 + 70,000 - 300 = 77,200; savings 42,800; rate 35.7%. Shares use positive total 77,500. |
-| W12 | Empty year (2024) | No balances in 2023 or 2024, no CSVs, no manual log. | both anchors missing; status empty. | source none. UI: "Not enough data for 2024". |
-| W13 | Closed account (2025) | Account X inactive, last entry Mar 2025. Dec 2025 has all other active accounts. | Dec 2025 complete (X not expected after Mar); X not in Dec total. | n/a |
+| ID  | Scenario (year)               | Inputs                                                                                                                                                                                                                                                                                                     | Net worth output                                                                                                   | Cashflow and spending output                                                                                                                                                                                          |
+| --- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| W1  | Clean complete year (2025)    | Dec 2024 total 400,000; Dec 2025 total 460,000; both complete. 12 CSV months: income 120,000. Group spend: Housing 30,000, Food 15,000, Transport 9,000, Travel 8,000, Health 6,000, Shopping 5,000, Entertainment 5,000. FI goal target 2,000,000; FI balances 300,000 (Dec 2024) and 380,000 (Dec 2025). | start 400,000 exact, end 460,000 exact, change +60,000, +15.0%. Goal 15.0% to 19.0%, Up 4.0 points.                | source budget; expenses 78,000; savings 42,000; rate 35.0%. Top: Housing 38.5%, Food 19.2%, Transport 11.5%, Travel 10.3%, Health 7.7%; other (2 groups) 10,000 = 12.8%.                                              |
+| W2  | Negative start (2025)         | Dec 2024 -20,000; Dec 2025 -5,000.                                                                                                                                                                                                                                                                         | change +15,000; pct +75.0% (15,000 / 20,000); `startNegative` true.                                                | n/a                                                                                                                                                                                                                   |
+| W3  | Zero start (2025)             | Dec 2024 0; Dec 2025 8,000.                                                                                                                                                                                                                                                                                | change +8,000; pct null ("Percent change not available").                                                          | n/a                                                                                                                                                                                                                   |
+| W4  | First year of tracking (2025) | No 2024 months; first entry Mar 2025 = 50,000; Dec 2025 = 62,000; complete.                                                                                                                                                                                                                                | start nearest Mar 2025, end exact, change +12,000, +24.0%; note anchor-nearest (start).                            | n/a                                                                                                                                                                                                                   |
+| W5  | Year in progress (2026)       | Dec 2025 460,000; latest 2026 balances Oct = 483,000 (complete). CSVs Jan to Oct: income 100,000, expenses 70,000.                                                                                                                                                                                         | start exact, end nearest Oct 2026, change +23,000, +5.0%; status in-progress.                                      | source budget (trailing Nov/Dec not gaps); savings 30,000; rate 30.0%, not annualized.                                                                                                                                |
+| W6  | Source mismatch (2025)        | Budget complete: income 120,000, expenses 78,000. Manual log: netIncome 118,000, savings 40,000.                                                                                                                                                                                                           | n/a                                                                                                                | Displays budget: savings 42,000, rate 35.0%; `mismatch` set (2,000 > max(100, 1,200)); note mismatch. With manual netIncome 119,500 and savings 41,800 no mismatch (500 <= 1,200 and 200 <= 420).                     |
+| W7  | Incomplete December (2025)    | Accounts: Checking (active), 401k (active). Dec 2025 has Checking 30,000 only; 401k has Nov 100,000 and Jan 2026 102,000. Dec 2024 complete 380,000.                                                                                                                                                       | end incomplete, missing [401k], change null, pct null; note anchor-incomplete (end). Chart shows hollow Dec point. | independent.                                                                                                                                                                                                          |
+| W8  | Zero income (2025)            | Budget income 0, expenses 5,000.                                                                                                                                                                                                                                                                           | n/a                                                                                                                | savings -5,000; rate null ("Not available"); note income-zero.                                                                                                                                                        |
+| W9  | Overspent year (2025)         | Income 60,000; expenses 66,000.                                                                                                                                                                                                                                                                            | n/a                                                                                                                | savings -6,000; rate -10.0%.                                                                                                                                                                                          |
+| W10 | Manual only (2025)            | No CSVs. Manual netIncome 90,000, savings 18,000.                                                                                                                                                                                                                                                          | n/a                                                                                                                | source manual; income 90,000; expenses 72,000; savings 18,000; rate 20.0%; `spending` null; note source-manual. With savings missing: expenses null, savings null, rate null.                                         |
+| W11 | Refunds (2025)                | Travel: -8,000 spend and +500 refund; Gifts net +300 (credit only); other groups 70,000 spend. Income 120,000.                                                                                                                                                                                             | n/a                                                                                                                | Travel amount 7,500; Gifts not listed; `refundOnlyTotal` 300; expenses = 77,500 + 70,000 - 300 = 147,200? No: expenses = 7,500 + 70,000 - 300 = 77,200; savings 42,800; rate 35.7%. Shares use positive total 77,500. |
+| W12 | Empty year (2024)             | No balances in 2023 or 2024, no CSVs, no manual log.                                                                                                                                                                                                                                                       | both anchors missing; status empty.                                                                                | source none. UI: "Not enough data for 2024".                                                                                                                                                                          |
+| W13 | Closed account (2025)         | Account X inactive, last entry Mar 2025. Dec 2025 has all other active accounts.                                                                                                                                                                                                                           | Dec 2025 complete (X not expected after Mar); X not in Dec total.                                                  | n/a                                                                                                                                                                                                                   |
 
 ### 4.9 CSV layout
+
 File `worth-annual-review-{year}.csv`, UTF-8, comma separated, RFC 4180 quoting through `serializeCSV`, LF line endings, one trailing newline. Header is always `section,item,label,value,unit,share_percent,note`. Numbers use `.` decimals with no thousands separators and no currency symbols; money has 2 decimals, percent values are percent units with 2 decimals. Unavailable values are an empty `value` cell with the reason in `note`. Row keys are stable; only `spending`, `goals` and `notes` rows vary in count.
 
-| section | item | value | unit | notes |
-|---|---|---|---|---|
-| report | `year`, `status` (`complete` or `in_progress`), `generated` (ISO date) | | year, text, date | |
-| networth | `start_month`, `start`, `end_month`, `end`, `change`, `change_percent` | | month, usd, percent | `note` holds anchor status or reason |
-| cashflow | `source`, `income`, `expenses`, `savings`, `savings_rate` | | text, usd, percent | `source` note is "12 of 12 months" style |
-| spending | `group_1` to `group_5`, `other` | amount | usd | `label` is the group name, `share_percent` filled |
-| goals | `goal_{id}_start`, `goal_{id}_end` | percent | percent | `note` is "FI balance 300000.00 usd of 2000000.00 usd target" |
-| notes | `note_1`, `note_2`, ... | the note text | text | same sentences as the UI |
+| section  | item                                                                   | value         | unit                | notes                                                         |
+| -------- | ---------------------------------------------------------------------- | ------------- | ------------------- | ------------------------------------------------------------- |
+| report   | `year`, `status` (`complete` or `in_progress`), `generated` (ISO date) |               | year, text, date    |                                                               |
+| networth | `start_month`, `start`, `end_month`, `end`, `change`, `change_percent` |               | month, usd, percent | `note` holds anchor status or reason                          |
+| cashflow | `source`, `income`, `expenses`, `savings`, `savings_rate`              |               | text, usd, percent  | `source` note is "12 of 12 months" style                      |
+| spending | `group_1` to `group_5`, `other`                                        | amount        | usd                 | `label` is the group name, `share_percent` filled             |
+| goals    | `goal_{id}_start`, `goal_{id}_end`                                     | percent       | percent             | `note` is "FI balance 300000.00 usd of 2000000.00 usd target" |
+| notes    | `note_1`, `note_2`, ...                                                | the note text | text                | same sentences as the UI                                      |
 
 Sample for W1:
 
@@ -376,6 +439,7 @@ goals,goal_12_end,Retire at 55,19.00,percent,,FI balance 380000.00 usd of 200000
 ## 5. Design spec
 
 ### 5.1 Component hierarchy
+
 ```
 <div class="ar-page">                           (inside Data's .data-scroll-area)
   <div class="ar-live sr-only" role="status">Showing the review for 2025.</div>
@@ -400,10 +464,13 @@ goals,goal_12_end,Retire at 55,19.00,percent,,FI balance 380000.00 usd of 200000
   <p class="ar-print-footer">Prepared with worth on 2026-11-08. Your data stays on your computer.</p>
 </div>
 ```
+
 Headings: the existing `<h1>Wealth</h1>` stays; the page title is `h2`, sections are `h3`. The page sets `document.title = 'Annual Review 2025 - worth'` on mount and year change and restores the previous title on unmount (browsers use it as the default PDF file name).
 
 ### 5.2 Visual spec
+
 Class prefix `ar-`. One stylesheet `src/styles/AnnualReview.css`, imported by `AnnualReview.tsx`. Colors only via variables from `colorThemes.css`; no hex except inside the print block (see 5.5). Spacing uses the multiples-of-4 literals already used in `SavingsGrowthTracker.css`.
+
 - Page: `max-width: 880px` (about 70 characters at `--fs-md`), `margin: 0 auto`, `display: flex; flex-direction: column; gap: 24px`.
 - Title `h2`: `--fs-2xl`, `--fw-bold`, `--color-text`, `letter-spacing: -0.3px` (the gradient `h1` style belongs to Wealth only). Subtitle and period: `--fs-sm`, `--color-text-muted`.
 - Section card: `background: var(--color-surface)`, `border: 1px solid var(--color-border)`, `border-radius: var(--radius)`, `padding: 20px 24px`, internal `gap: 16px`. Section `h3`: `--fs-lg`, `--fw-semibold`.
@@ -414,20 +481,24 @@ Class prefix `ar-`. One stylesheet `src/styles/AnnualReview.css`, imported by `A
 - Buttons `.ar-btn` follow `.budget-action-btn` (surface, `--color-border-light`, `--radius`, `--fs-md`, `--fw-medium`); the select inherits `body.modern-design select` styling.
 
 ### 5.3 States
-| Element | default | hover | focus | active | disabled | loading | empty | error |
-|---|---|---|---|---|---|---|---|---|
-| `.ar-btn` | surface | `--color-surface-hover`, border `--color-text-muted` | global `:focus-visible` ring | same as hover | `opacity: 0.5; cursor: default` | disabled | disabled | disabled |
-| `.ar-select` | per modern-design | border `--accent-border` | border `--accent`, ring from modern-design | n/a | disabled while loading | disabled | enabled (can pick another year) | enabled |
-| Section | card | none | none | none | n/a | skeleton text only | hidden except empty card | card fallback |
-| Table rows | none | none | none | none | n/a | n/a | n/a | n/a |
+
+| Element      | default           | hover                                                | focus                                      | active        | disabled                        | loading            | empty                           | error         |
+| ------------ | ----------------- | ---------------------------------------------------- | ------------------------------------------ | ------------- | ------------------------------- | ------------------ | ------------------------------- | ------------- |
+| `.ar-btn`    | surface           | `--color-surface-hover`, border `--color-text-muted` | global `:focus-visible` ring               | same as hover | `opacity: 0.5; cursor: default` | disabled           | disabled                        | disabled      |
+| `.ar-select` | per modern-design | border `--accent-border`                             | border `--accent`, ring from modern-design | n/a           | disabled while loading          | disabled           | enabled (can pick another year) | enabled       |
+| Section      | card              | none                                                 | none                                       | none          | n/a                             | skeleton text only | hidden except empty card        | card fallback |
+| Table rows   | none              | none                                                 | none                                       | none          | n/a                             | n/a                | n/a                             | n/a           |
 
 Empty card: centered, `--color-text-muted`, a heading, one sentence, two `.ar-btn` links. Error uses the existing `ErrorBoundary` card.
 
 ### 5.4 Responsive
+
 Mobile-first. Below 480px: single column, `.ar-header` stacks, controls wrap to full-width buttons (min height 44px), chart `viewBox` unchanged but width 100% (axis labels thin to every third month), table cells `--fs-sm`. 480 to 767px: stats in 2 columns, controls on one row if they fit. 768 to 991px: page padding 24px, stats 2 or 3 columns by `auto-fit`. 992px and up: page centered at 880px, stats up to 4 columns. Touch targets on `.ar-btn` and `.ar-select` are 44px high at all widths (WCAG 2.5.5). The sidebar collapse at 900px is handled by the existing layout.
 
 ### 5.5 Print stylesheet (`@media print` in `AnnualReview.css`)
+
 Scope every global rule with `body:has(.ar-page)` so other pages are unaffected (Chrome and Edge only, matching the app's support matrix).
+
 - `@page { size: letter portrait; margin: 0.6in; }` (the app formats US dollars and en-US only).
 - Hide: `.sidebar`, `.sidebar-overlay`, `.sidebar-toggle-wrapper`, `.skip-link`, `.demo-banner`, `.data-header`, `.ar-controls`, `.ar-live`, `.ar-link`, chart toggle buttons, and the undo toast.
 - Layout resets: `.app-layout { display: block }`, `.main-content { margin: 0; padding: 0 }`, `.data-page { height: auto; overflow: visible; padding: 0; max-width: none }`, `.data-scroll-area { overflow: visible }`, `.ar-page { max-width: none; gap: 16px }`.
@@ -438,9 +509,11 @@ Scope every global rule with `body:has(.ar-page)` so other pages are unaffected 
 - No transitions or shadows in print.
 
 ### 5.6 Interaction and motion
+
 Year change: content swaps immediately (no fade). Spending bar widths animate `width` 300ms `ease-out` on first paint only; `@media (prefers-reduced-motion: reduce)` and print disable it (matches the existing reduced-motion blocks). "Show monthly values" toggles the table with no animation. Print and CSV are one click; no confirmation. After Download CSV the live region says "Downloaded worth-annual-review-2025.csv." (no toast, no focus move).
 
 ### 5.7 Accessibility notes (WCAG 2.1 AA)
+
 - Tab order: Wealth tabs, year select, Print, Download CSV, in-note links (spreadsheet, Growth, Cashflow Groups), "Show monthly values". Nothing else is focusable. Satisfies 2.1.1, 2.4.3, 2.4.7.
 - Names and roles (4.1.2): select labelled by a visible `<label>`; buttons have visible text; `aria-expanded` and `aria-controls` on the toggle; the chart SVG is `aria-hidden` with the figcaption summary plus table (1.1.1, 1.3.1). Summary example: "Net worth rose from $400,000 in December 2024 to $460,000 in December 2025."
 - Do not convey direction by color (1.4.1); text contrast 4.5:1 for normal text (1.4.3) using existing muted text tokens (light: `#6b7280` on `#ffffff` is 4.8:1; verify `--color-text-muted` on `--color-surface-alt` in dark mode during QA); non-text contrast 3:1 for the chart line and points against surface (1.4.11), checked in both modes.
@@ -452,88 +525,90 @@ Year change: content swaps immediately (no fade). Spending bar widths animate `w
 
 Voice: plain, calm, direct. No exclamation marks, no praise, no shaming. Money is whole US dollars in the UI (`-$1,234` for negatives, matching `formatCurrency`), cents in the CSV. Percent: one decimal and `%`. Savings-rate change: "N.N points". Months: "Dec 2024" in compact places, "December 2024" in sentences. Deltas: "Up $X", "Down $X", "No change" (also when the rounded value is 0). Lists: "A, B, and C" (two items: "A and B"). Plurals: "1 month", "2 months"; "1 account", "2 accounts"; "1 point" only when exactly 1.0, else "points".
 
-| Surface | String | Notes |
-|---|---|---|
-| Tab | Review | Wealth tab; aria name same |
-| Search item | Annual Review (hint: "Your year in money: net worth, savings, spending") | keywords: annual review, year in review, year end, yearly, savings rate, top spending, print, csv |
-| Page title | Annual Review {year} | `h2` |
-| Subtitle | Your year in money, built from the files in your folder. | |
-| Period (complete) | January to December {year} | |
-| Period (in progress) | January to {Month} {year}, year in progress | |
-| Period (nearest) | {Mon YYYY} to {Mon YYYY} | actual anchors |
-| Year label | Year | select label |
-| Live (year) | Showing the review for {year}. | |
-| Live (ready) | Review for {year} is ready. | |
-| Buttons | Print or save as PDF; Download CSV | |
-| Live (CSV) | Downloaded worth-annual-review-{year}.csv. | |
-| Loading | Loading your review... | |
-| Notes heading | Things to know | |
-| Notes lead-in | {n} notes about this data follow. | SR-only; singular "1 note about this data follows." |
-| Net worth heading | Net worth | |
-| Stat labels | Net worth change; Starting net worth; Ending net worth | |
-| Stat value | Up $60,000 / Down $3,200 / No change | |
-| Stat sub | 15.0% from $400,000 in Dec 2024 to $460,000 in Dec 2025 | |
-| Percent n/a | Percent change not available | start is 0 |
-| Unavailable | Not available | any null number |
-| Chart caption | Net worth rose from $400,000 in December 2024 to $460,000 in December 2025. | "rose", "fell" or "was unchanged" |
-| Toggle | Show monthly values / Hide monthly values | |
-| Table caption | Net worth at the end of each month, {year} | |
-| Table headers | Month; Net worth; Status | status: Complete, Incomplete, No data |
-| Cashflow heading | Income and savings | |
-| Cashflow labels | Income; Expenses; Savings; Savings rate | |
-| Cashflow subs | Money in, from your transactions; Money out, after refunds; Income minus expenses; Savings as a share of income | manual source: "From your yearly log in Growth" |
-| Prior-year line | vs. {year-1}: up $5,000 / down 2.1 points / no change | lower case after colon |
-| Spending heading | Top spending groups | |
-| Table caption | Spending by group, {year} | |
-| Table headers | Group; Spent; Share | |
-| Other row | All other groups ({n}) | |
-| Goals heading | Goal progress at year end | |
-| Goal row | {Name}: {p}% at the end of {year}; up 4.0 points from the start of the year | "down" when negative |
-| Goals footnote | Progress is measured against each goal as it is set today. | |
-| Goals none | You had no goals set by the end of {year}. | |
-| Goals no plan | You have not set a goal yet. | link "Open Planning" |
-| Note anchor-incomplete | {Month YYYY} is missing a balance for {accounts}. Add it in the spreadsheet to see the change for this year. | link "Open the spreadsheet" |
-| Note anchor-nearest (start) | Your balances start in {Mon YYYY}, so the change covers {Mon YYYY} to {Mon YYYY}. | |
-| Note anchor-nearest (end) | There are no balances for December {year}. The change runs to {Mon YYYY}. | |
-| Note in-progress | {year} is still in progress. This review covers January to {Month}. | |
-| Note single-month | Only one month of balances is recorded, so there is no change to show. | |
-| Note negative-start | Net worth was negative at the start of the year, so the percent is relative to the size of that figure. | |
-| Note budget-partial | Transactions are missing for {months}. Income and expenses cover {n} of {m} months. | link "Open Cashflow" |
-| Note unreadable | {n} transaction files could not be read and are left out: {months}. | |
-| Note source-manual | Income and savings come from the yearly log in Growth. Add transactions in Cashflow for a breakdown by group. | link "Open Growth" |
-| Note mismatch | Your Growth log shows {manual} of income and your transactions add up to {budget}. This review uses your transactions. | link "Open Growth" |
-| Note income-zero | Savings rate is not available because no income is recorded for {year}. | |
-| Note refund-groups | Refunds in groups with no net spending reduced expenses by {amount}. | |
-| Note uncategorized | {share}% of spending is in Uncategorized. You can sort it in Cashflow, Groups. | link "Open Groups" |
-| Empty heading | Not enough data for {year} | |
-| Empty body | Add month-end balances in Wealth or import transactions in Cashflow, then come back. | |
-| Empty links | Go to Wealth; Go to Cashflow | |
-| Empty (no data at all) | Nothing to review yet | same body |
-| No cashflow | No income or expense data for {year} | |
-| No balances | No balances for {year} | |
-| Error | The review could not be built. Your files were not changed. | existing card fallback plus "Try again" |
-| Print footer | Prepared with worth on {YYYY-MM-DD}. Your data stays on your computer. | print only |
-| Doc title | Annual Review {year} - worth | |
-| Guide blurb | Review: a one-page summary of any year, with net worth change, savings rate, top spending groups and goal progress. Print it or download a CSV. | FeaturesByPage |
+| Surface                     | String                                                                                                                                          | Notes                                                                                             |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Tab                         | Review                                                                                                                                          | Wealth tab; aria name same                                                                        |
+| Search item                 | Annual Review (hint: "Your year in money: net worth, savings, spending")                                                                        | keywords: annual review, year in review, year end, yearly, savings rate, top spending, print, csv |
+| Page title                  | Annual Review {year}                                                                                                                            | `h2`                                                                                              |
+| Subtitle                    | Your year in money, built from the files in your folder.                                                                                        |                                                                                                   |
+| Period (complete)           | January to December {year}                                                                                                                      |                                                                                                   |
+| Period (in progress)        | January to {Month} {year}, year in progress                                                                                                     |                                                                                                   |
+| Period (nearest)            | {Mon YYYY} to {Mon YYYY}                                                                                                                        | actual anchors                                                                                    |
+| Year label                  | Year                                                                                                                                            | select label                                                                                      |
+| Live (year)                 | Showing the review for {year}.                                                                                                                  |                                                                                                   |
+| Live (ready)                | Review for {year} is ready.                                                                                                                     |                                                                                                   |
+| Buttons                     | Print or save as PDF; Download CSV                                                                                                              |                                                                                                   |
+| Live (CSV)                  | Downloaded worth-annual-review-{year}.csv.                                                                                                      |                                                                                                   |
+| Loading                     | Loading your review...                                                                                                                          |                                                                                                   |
+| Notes heading               | Things to know                                                                                                                                  |                                                                                                   |
+| Notes lead-in               | {n} notes about this data follow.                                                                                                               | SR-only; singular "1 note about this data follows."                                               |
+| Net worth heading           | Net worth                                                                                                                                       |                                                                                                   |
+| Stat labels                 | Net worth change; Starting net worth; Ending net worth                                                                                          |                                                                                                   |
+| Stat value                  | Up $60,000 / Down $3,200 / No change                                                                                                            |                                                                                                   |
+| Stat sub                    | 15.0% from $400,000 in Dec 2024 to $460,000 in Dec 2025                                                                                         |                                                                                                   |
+| Percent n/a                 | Percent change not available                                                                                                                    | start is 0                                                                                        |
+| Unavailable                 | Not available                                                                                                                                   | any null number                                                                                   |
+| Chart caption               | Net worth rose from $400,000 in December 2024 to $460,000 in December 2025.                                                                     | "rose", "fell" or "was unchanged"                                                                 |
+| Toggle                      | Show monthly values / Hide monthly values                                                                                                       |                                                                                                   |
+| Table caption               | Net worth at the end of each month, {year}                                                                                                      |                                                                                                   |
+| Table headers               | Month; Net worth; Status                                                                                                                        | status: Complete, Incomplete, No data                                                             |
+| Cashflow heading            | Income and savings                                                                                                                              |                                                                                                   |
+| Cashflow labels             | Income; Expenses; Savings; Savings rate                                                                                                         |                                                                                                   |
+| Cashflow subs               | Money in, from your transactions; Money out, after refunds; Income minus expenses; Savings as a share of income                                 | manual source: "From your yearly log in Growth"                                                   |
+| Prior-year line             | vs. {year-1}: up $5,000 / down 2.1 points / no change                                                                                           | lower case after colon                                                                            |
+| Spending heading            | Top spending groups                                                                                                                             |                                                                                                   |
+| Table caption               | Spending by group, {year}                                                                                                                       |                                                                                                   |
+| Table headers               | Group; Spent; Share                                                                                                                             |                                                                                                   |
+| Other row                   | All other groups ({n})                                                                                                                          |                                                                                                   |
+| Goals heading               | Goal progress at year end                                                                                                                       |                                                                                                   |
+| Goal row                    | {Name}: {p}% at the end of {year}; up 4.0 points from the start of the year                                                                     | "down" when negative                                                                              |
+| Goals footnote              | Progress is measured against each goal as it is set today.                                                                                      |                                                                                                   |
+| Goals none                  | You had no goals set by the end of {year}.                                                                                                      |                                                                                                   |
+| Goals no plan               | You have not set a goal yet.                                                                                                                    | link "Open Planning"                                                                              |
+| Note anchor-incomplete      | {Month YYYY} is missing a balance for {accounts}. Add it in the spreadsheet to see the change for this year.                                    | link "Open the spreadsheet"                                                                       |
+| Note anchor-nearest (start) | Your balances start in {Mon YYYY}, so the change covers {Mon YYYY} to {Mon YYYY}.                                                               |                                                                                                   |
+| Note anchor-nearest (end)   | There are no balances for December {year}. The change runs to {Mon YYYY}.                                                                       |                                                                                                   |
+| Note in-progress            | {year} is still in progress. This review covers January to {Month}.                                                                             |                                                                                                   |
+| Note single-month           | Only one month of balances is recorded, so there is no change to show.                                                                          |                                                                                                   |
+| Note negative-start         | Net worth was negative at the start of the year, so the percent is relative to the size of that figure.                                         |                                                                                                   |
+| Note budget-partial         | Transactions are missing for {months}. Income and expenses cover {n} of {m} months.                                                             | link "Open Cashflow"                                                                              |
+| Note unreadable             | {n} transaction files could not be read and are left out: {months}.                                                                             |                                                                                                   |
+| Note source-manual          | Income and savings come from the yearly log in Growth. Add transactions in Cashflow for a breakdown by group.                                   | link "Open Growth"                                                                                |
+| Note mismatch               | Your Growth log shows {manual} of income and your transactions add up to {budget}. This review uses your transactions.                          | link "Open Growth"                                                                                |
+| Note income-zero            | Savings rate is not available because no income is recorded for {year}.                                                                         |                                                                                                   |
+| Note refund-groups          | Refunds in groups with no net spending reduced expenses by {amount}.                                                                            |                                                                                                   |
+| Note uncategorized          | {share}% of spending is in Uncategorized. You can sort it in Cashflow, Groups.                                                                  | link "Open Groups"                                                                                |
+| Empty heading               | Not enough data for {year}                                                                                                                      |                                                                                                   |
+| Empty body                  | Add month-end balances in Wealth or import transactions in Cashflow, then come back.                                                            |                                                                                                   |
+| Empty links                 | Go to Wealth; Go to Cashflow                                                                                                                    |                                                                                                   |
+| Empty (no data at all)      | Nothing to review yet                                                                                                                           | same body                                                                                         |
+| No cashflow                 | No income or expense data for {year}                                                                                                            |                                                                                                   |
+| No balances                 | No balances for {year}                                                                                                                          |                                                                                                   |
+| Error                       | The review could not be built. Your files were not changed.                                                                                     | existing card fallback plus "Try again"                                                           |
+| Print footer                | Prepared with worth on {YYYY-MM-DD}. Your data stays on your computer.                                                                          | print only                                                                                        |
+| Doc title                   | Annual Review {year} - worth                                                                                                                    |                                                                                                   |
+| Guide blurb                 | Review: a one-page summary of any year, with net worth change, savings rate, top spending groups and goal progress. Print it or download a CSV. | FeaturesByPage                                                                                    |
 
 ## 7. Engineering plan
 
 ### 7.1 Files
-| File | Status | Change |
-|---|---|---|
-| `src/pages/review/**` (3.2) and their `*.test.ts(x)` | NEW | One test file per source file (repo convention). |
-| `src/styles/AnnualReview.css` | NEW | Screen and print styles. |
-| `src/pages/tools/utils/savingsOverrides.ts` (+ test) | NEW | `OVERRIDES_PATH`, `ManualYearLog`, `loadSavingsOverrides(fileStore)` that keeps only finite numbers. |
-| `src/pages/tools/components/SavingsGrowthTracker.tsx` | MODIFIED | Import the path and type instead of declaring them; no behavior change. |
-| `src/flags/flagDefinitions.ts`, `feature-flags.json` | MODIFIED | Add `ANNUAL_REVIEW` and a 0% rollout entry. |
-| `src/pages/data/Data.tsx` | MODIFIED | Lazy import, `activeTab` gains `'review'`, fourth `NavLink` when flag on, route `review/:year?` (with `/review` redirect) and flag-off redirect. Owns no header-right controls for this tab. |
-| `src/search/searchIndex.ts`, `src/search/useSearchIndexData.ts` | MODIFIED | `SearchIndexData.annualReviewEnabled?: boolean`; `buildIndex` appends `page-annual-review` (route `/net-worth/review`, icon `chart`) when true; hook reads `useFlag`. |
-| `src/contexts/DataContext.tsx` | MODIFIED (see O-5) | Add `isLoaded: boolean`, set after first accounts and balances reads settle. |
-| `src/pages/guide/sections/FeaturesByPage.tsx`, `src/pages/guide/Guide.tsx` | MODIFIED | Review paragraph under Wealth and TOC keywords. |
-| `README.md`, `CONTRIBUTING.md`, `docs/README.md` | MODIFIED | README Wealth section; CONTRIBUTING structure tree (`pages/review/`) and flag note; list this spec. |
-| `e2e/annual-review.spec.ts`, `e2e/pages/annual-review.page.ts`, `e2e/fixtures/annual-review.fixtures.ts` | NEW | Seeded via `seedFileStore`. |
+
+| File                                                                                                     | Status             | Change                                                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/pages/review/**` (3.2) and their `*.test.ts(x)`                                                     | NEW                | One test file per source file (repo convention).                                                                                                                                             |
+| `src/styles/AnnualReview.css`                                                                            | NEW                | Screen and print styles.                                                                                                                                                                     |
+| `src/pages/tools/utils/savingsOverrides.ts` (+ test)                                                     | NEW                | `OVERRIDES_PATH`, `ManualYearLog`, `loadSavingsOverrides(fileStore)` that keeps only finite numbers.                                                                                         |
+| `src/pages/tools/components/SavingsGrowthTracker.tsx`                                                    | MODIFIED           | Import the path and type instead of declaring them; no behavior change.                                                                                                                      |
+| `src/flags/flagDefinitions.ts`, `feature-flags.json`                                                     | MODIFIED           | Add `ANNUAL_REVIEW` and a 0% rollout entry.                                                                                                                                                  |
+| `src/pages/data/Data.tsx`                                                                                | MODIFIED           | Lazy import, `activeTab` gains `'review'`, fourth `NavLink` when flag on, route `review/:year?` (with `/review` redirect) and flag-off redirect. Owns no header-right controls for this tab. |
+| `src/search/searchIndex.ts`, `src/search/useSearchIndexData.ts`                                          | MODIFIED           | `SearchIndexData.annualReviewEnabled?: boolean`; `buildIndex` appends `page-annual-review` (route `/net-worth/review`, icon `chart`) when true; hook reads `useFlag`.                        |
+| `src/contexts/DataContext.tsx`                                                                           | MODIFIED (see O-5) | Add `isLoaded: boolean`, set after first accounts and balances reads settle.                                                                                                                 |
+| `src/pages/guide/sections/FeaturesByPage.tsx`, `src/pages/guide/Guide.tsx`                               | MODIFIED           | Review paragraph under Wealth and TOC keywords.                                                                                                                                              |
+| `README.md`, `CONTRIBUTING.md`, `docs/README.md`                                                         | MODIFIED           | README Wealth section; CONTRIBUTING structure tree (`pages/review/`) and flag note; list this spec.                                                                                          |
+| `e2e/annual-review.spec.ts`, `e2e/pages/annual-review.page.ts`, `e2e/fixtures/annual-review.fixtures.ts` | NEW                | Seeded via `seedFileStore`.                                                                                                                                                                  |
 
 ### 7.2 Key signatures
+
 ```ts
 export const resolveAnchors = (year: number, totals: Map<string, MonthTotal>): { start: NetWorthAnchor; end: NetWorthAnchor }
 export const buildMonthTotals = (accounts: Account[], balances: BalanceEntry[]): Map<string, { total: number; missing: AccountRef[] }>
@@ -544,9 +619,11 @@ export const buildReviewCsv = (r: AnnualReview, generatedOn: string): string
 export const downloadReviewCsv = (csv: string, year: number): void   // Blob + anchor, same as csvExport.ts
 export const useAnnualReview = (year: number): { status: 'loading' | 'ready' | 'error'; review: AnnualReview | null; years: number[]; defaultYear: number; retry: () => void }
 ```
+
 Spec of `formatDelta`: rounds once with `Intl.NumberFormat` (not `toFixed`), returns "No change" when the rounded value is 0.
 
 ### 7.3 Implementation order (PR-sized slices, each green on the pre-commit checklist in `.github/copilot-instructions.md`)
+
 1. **Selectors and types.** `types.ts`, `netWorth.ts`, `cashflow.ts`, `spending.ts`, `goals.ts`, `availableYears.ts`, `selectAnnualReview.ts`, `format.ts`, `savingsOverrides.ts` (+ SGT import swap), with tests for W1 to W13. No UI, no flag. Coverage stays above the 90% statements gate.
 2. **Flag, route, data hook, empty/loading states.** Flag definition, `useAnnualReview`, `AnnualReview` shell with header, year select, live region, empty and loading states, Data tab and route, search entry, `DataContext.isLoaded`. Flag defaults off.
 3. **Sections.** Net worth with SVG chart and table, cashflow, spending, goals, notes, prior-year lines.
@@ -554,6 +631,7 @@ Spec of `formatDelta`: rounds once with `Intl.NumberFormat` (not `toFixed`), ret
 5. **E2E, docs, enable.** Playwright specs, Guide, README, CONTRIBUTING, demo-data screenshot optional, then set the flag to 100% and schedule flag removal.
 
 ### 7.4 Test plan
+
 - **Selector unit tests** (`vi.useFakeTimers` not needed because `today` is injected): one test per worked example W1 to W13 asserting the exact numbers in 4.8; plus boundary tests for mismatch (exactly at threshold is not a mismatch), tie-breaking in top groups, category in two groups, unparseable `goalCreatedIn`, orphan balance ids ignored, `year > today.year`, December exists only for inactive accounts.
 - **Parity test (M-2):** fixture without net-positive refund categories; compare `netWorth` and `cashflow` with the Growth tab helpers (extract `getYearEndNetWorths` input/outputs by rendering `SavingsGrowthTracker` with a mocked store, or add a tiny export in slice 1 if rendering proves brittle).
 - **Component tests** (Testing Library, role queries): header (label, select options, live announcement on change), each section's states, notes rendering for every `ReviewNote` code, empty and loading, "Show monthly values" toggles `aria-expanded` and visibility, buttons disabled when empty, Download calls the Blob path (mock `URL.createObjectURL`), print button calls `window.print`.
@@ -564,15 +642,16 @@ Spec of `formatDelta`: rounds once with `Intl.NumberFormat` (not `toFixed`), ret
 - **Docs:** README Wealth section and Guide paragraph; CONTRIBUTING tree and flag note; `docs/README.md` spec list.
 
 ### 7.5 Risks
-| ID | Risk | Mitigation |
-|---|---|---|
-| R-1 | `DataContext` has no loaded flag, so the empty state could flash before balances load. | Add `isLoaded` (slice 2); fallback is to gate rendering on the budget load plus one `requestAnimationFrame`. |
-| R-2 | Three existing definitions of net worth and spending (Growth, Budget, Home) already differ; a fourth could confuse. | Reuse Budget's spending definition, document differences in section 2, ship the parity test, and leave Growth unchanged. Follow-up (O-1) can align Growth. |
-| R-3 | Print CSS depends on `:has()` and app layout classes that may change. | Print e2e test guards it; the selectors are listed in 5.5. |
-| R-4 | Today's goal target applied to a past year can mislead. | Footnote copy; shown as progress against the current goal, not history. |
-| R-5 | Strict incomplete-month rule may block users with sloppy data at year-end. | The note links straight to the spreadsheet; carry-forward is an open decision (O-3). |
-| R-6 | `loadBudgetStore` reads every CSV of every year on each visit. | Same cost as the Growth tab today; only two years are parsed; optimize later if it shows. |
-| R-7 | `.github/copilot-instructions.md` architecture notes (routing by page state, GitHub Sync, appStorage) predate the File System Access migration. | Follow `CONTRIBUTING.md` and the code cited here, not those notes. |
+
+| ID  | Risk                                                                                                                                            | Mitigation                                                                                                                                                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R-1 | `DataContext` has no loaded flag, so the empty state could flash before balances load.                                                          | Add `isLoaded` (slice 2); fallback is to gate rendering on the budget load plus one `requestAnimationFrame`.                                               |
+| R-2 | Three existing definitions of net worth and spending (Growth, Budget, Home) already differ; a fourth could confuse.                             | Reuse Budget's spending definition, document differences in section 2, ship the parity test, and leave Growth unchanged. Follow-up (O-1) can align Growth. |
+| R-3 | Print CSS depends on `:has()` and app layout classes that may change.                                                                           | Print e2e test guards it; the selectors are listed in 5.5.                                                                                                 |
+| R-4 | Today's goal target applied to a past year can mislead.                                                                                         | Footnote copy; shown as progress against the current goal, not history.                                                                                    |
+| R-5 | Strict incomplete-month rule may block users with sloppy data at year-end.                                                                      | The note links straight to the spreadsheet; carry-forward is an open decision (O-3).                                                                       |
+| R-6 | `loadBudgetStore` reads every CSV of every year on each visit.                                                                                  | Same cost as the Growth tab today; only two years are parsed; optimize later if it shows.                                                                  |
+| R-7 | `.github/copilot-instructions.md` architecture notes (routing by page state, GitHub Sync, appStorage) predate the File System Access migration. | Follow `CONTRIBUTING.md` and the code cited here, not those notes.                                                                                         |
 
 ## 8. Cross-feature dependencies
 
@@ -586,17 +665,17 @@ This is one of five specs written at once. They were reconciled against each oth
 
 ## 9. Open questions and decisions
 
-| ID | Question | Recommended answer | Blocks implementation? |
-|---|---|---|---|
-| O-1 | When budget data and the Growth manual log disagree, which wins? | Budget wins when all expected months exist, and a visible note shows both; matches the intent of the UI, which blocks editing when budget data exists. Accept that Growth (override wins) can differ; optionally align Growth in a follow-up. | No |
-| O-2 | Expense definition: Budget's signed net or Growth's per-category absolute value? | Budget's signed net (refunds reduce spend), because it is the number users see on Cashflow. Document the difference. | No |
-| O-3 | Carry forward a missing account's last balance when an anchor month is incomplete? | No for v1 (strict, never invents a balance). Revisit if users hit the note often. | No |
-| O-4 | Include budget-vs-actual per category now or defer? | Defer; depends on `category-budget-targets` and adds a second data source with its own gaps. | No |
-| O-5 | Add `isLoaded` to `DataContext` (touches a shared file) or gate on the budget load? | Add `isLoaded`; it is 5 lines and removes a real flash. Needs agreement with data-safety-net before slice 2. | Slice 2 only |
-| O-6 | Route form: `/net-worth/review/:year` or query string? | Path param, so the URL is clean and works with `NavLink`. | No |
-| O-7 | Include gross income and tax rate from Growth? | No; user-entered, adds taxes to scope. | No |
-| O-8 | Add a UTF-8 BOM to the CSV for Excel? | No, to match `csvExport.ts`; revisit only if a user reports garbled non-ASCII group names. | No |
-| O-9 | Add `@axe-core/playwright`? | Yes in a separate chore PR; this feature does not depend on it. | No |
-| O-10 | Show prior-year delta for net worth change only, or four numbers? | Four numbers (change, income, expenses, savings rate), one level deep. | No |
-| O-11 | Paper size? | US Letter, because currency and formats are en-US only; users can change it in the print dialog. | No |
-| O-12 | Should the Growth year cards link to the review for that year? | Yes, small follow-up after slice 5 (modifies `SavingsGrowthTracker.tsx`, no logic change). | No |
+| ID   | Question                                                                            | Recommended answer                                                                                                                                                                                                                            | Blocks implementation? |
+| ---- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| O-1  | When budget data and the Growth manual log disagree, which wins?                    | Budget wins when all expected months exist, and a visible note shows both; matches the intent of the UI, which blocks editing when budget data exists. Accept that Growth (override wins) can differ; optionally align Growth in a follow-up. | No                     |
+| O-2  | Expense definition: Budget's signed net or Growth's per-category absolute value?    | Budget's signed net (refunds reduce spend), because it is the number users see on Cashflow. Document the difference.                                                                                                                          | No                     |
+| O-3  | Carry forward a missing account's last balance when an anchor month is incomplete?  | No for v1 (strict, never invents a balance). Revisit if users hit the note often.                                                                                                                                                             | No                     |
+| O-4  | Include budget-vs-actual per category now or defer?                                 | Defer; depends on `category-budget-targets` and adds a second data source with its own gaps.                                                                                                                                                  | No                     |
+| O-5  | Add `isLoaded` to `DataContext` (touches a shared file) or gate on the budget load? | Add `isLoaded`; it is 5 lines and removes a real flash. Needs agreement with data-safety-net before slice 2.                                                                                                                                  | Slice 2 only           |
+| O-6  | Route form: `/net-worth/review/:year` or query string?                              | Path param, so the URL is clean and works with `NavLink`.                                                                                                                                                                                     | No                     |
+| O-7  | Include gross income and tax rate from Growth?                                      | No; user-entered, adds taxes to scope.                                                                                                                                                                                                        | No                     |
+| O-8  | Add a UTF-8 BOM to the CSV for Excel?                                               | No, to match `csvExport.ts`; revisit only if a user reports garbled non-ASCII group names.                                                                                                                                                    | No                     |
+| O-9  | Add `@axe-core/playwright`?                                                         | Yes in a separate chore PR; this feature does not depend on it.                                                                                                                                                                               | No                     |
+| O-10 | Show prior-year delta for net worth change only, or four numbers?                   | Four numbers (change, income, expenses, savings rate), one level deep.                                                                                                                                                                        | No                     |
+| O-11 | Paper size?                                                                         | US Letter, because currency and formats are en-US only; users can change it in the print dialog.                                                                                                                                              | No                     |
+| O-12 | Should the Growth year cards link to the review for that year?                      | Yes, small follow-up after slice 5 (modifies `SavingsGrowthTracker.tsx`, no logic change).                                                                                                                                                    | No                     |

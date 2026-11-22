@@ -97,9 +97,9 @@ export function chooseCashflow(budget: BudgetYear, manual: ManualYearLog | undef
   if (hasCovered && budget.gapMonths.length === 0) {
     const manualIncome = manual?.netIncome ?? null
     const manualSavings = manual?.savings ?? null
-    const differs =
-      (manualIncome !== null && Math.abs(budget.income - manualIncome) > mismatchLimit(budget.income)) ||
-      (manualSavings !== null && Math.abs(budgetSavings - manualSavings) > mismatchLimit(budgetSavings))
+    const incomeDiffers = manualIncome !== null && Math.abs(budget.income - manualIncome) > mismatchLimit(budget.income)
+    const savingsDiffers =
+      manualSavings !== null && Math.abs(budgetSavings - manualSavings) > mismatchLimit(budgetSavings)
     return {
       ...base,
       source: 'budget',
@@ -107,7 +107,10 @@ export function chooseCashflow(budget: BudgetYear, manual: ManualYearLog | undef
       expenses: budget.expenses,
       savings: budgetSavings,
       savingsRate: rateOf(budget.income, budgetSavings),
-      mismatch: differs ? { manualIncome, manualSavings, budgetIncome: budget.income, budgetSavings } : null,
+      mismatch:
+        incomeDiffers || savingsDiffers
+          ? { manualIncome, manualSavings, budgetIncome: budget.income, budgetSavings, incomeDiffers, savingsDiffers }
+          : null,
     }
   }
 
