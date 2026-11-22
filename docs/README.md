@@ -11,7 +11,7 @@ Internal documentation for worth. The user-facing README lives at the repo root.
   - `goals-page-redesign.md` — Goals page IA + visual redesign
   - **Proposed features** (each has a feature flag, off by default, and is split into PR-sized slices; see each spec's Status line for what has landed):
     - `data-safety-net.md` — built behind the `data-safety-net` flag (off by default): flush pending writes, visible save failures, corrupt-file protection, external-change detection, `_backups/` (priority 1)
-    - `monthly-check-in.md` — guided monthly balance update, missing/stale data detection, "Partial month" handling (priority 2)
+    - `monthly-check-in.md` — guided monthly balance update, missing/stale data detection, "Partial month" handling (priority 2); built behind the off-by-default `monthly-check-in` flag
     - `import-wizard.md` — CSV column mapping, categorization rules, duplicate guard, month splitting (priority 3)
     - `category-budget-targets.md` — monthly targets per category group with budget-vs-actual (priority 4)
     - `annual-review.md` — one-page printable year in review with CSV download (priority 5; built, experimental, flag `annual-review` off by default)

@@ -2,7 +2,7 @@
 
 - **Status:** Current state
 - **Owner:** Noel
-- **Last updated:** 2025-06-09
+- **Last updated:** 2026-11-22
 
 ## Page summary
 - **Purpose:** Serve as the source of truth for accounts and monthly balances, then turn that data into charts, allocation analysis, and yearly growth views.
@@ -37,6 +37,13 @@
 - **Steps:** 1. Switch to **Spreadsheet**. 2. Click **+ Add Entry** or **Copy Last Month**. 3. Enter values by account. 4. Save.
 - **End state:** The new month appears in the spreadsheet and updates downstream charts and calculations.
 - **Notes:** Only active accounts can be filled in the inline entry row.
+
+### Complete a monthly check-in (flag `monthly-check-in`, off by default)
+- **Start:** The Home check-in strip says a month is missing balances or ready to record, or the user opens **Details** and clicks **+ Add Entry**.
+- **User intent:** Bring the latest month up to date and be sure no account was forgotten.
+- **Steps:** 1. Click **Finish {Month}** or **Start {Month} check-in** on Home. 2. Details opens in edit mode with focus on the first balance field. 3. Review each account: copied values say **Copied from {Month}**, blank ones say **No balance yet** with the last recorded amount. 4. Click **Save**.
+- **End state:** Non-blank values are written to `balances/{year}.csv`, and a status message says how many accounts still have no balance. Focus returns to **+ Add Entry**.
+- **Notes:** Blank fields are never written and existing entries are never deleted. Escape or **Cancel** leaves the data unchanged. Reloading or pressing Back does not reopen the form.
 
 ### Manage account metadata in bulk
 - **Start:** User opens **View Accounts (N)**.
@@ -144,6 +151,16 @@
 - **Edge cases:** Spreadsheet filters can narrow what months or accounts are shown without changing the stored data itself.
 - **Related workflows:** Record a new month of balances.
 
+### Details check-in mode and partial months (flag `monthly-check-in`, off by default)
+- **What it is:** The Details tab's edit mode when opened from the Home strip, plus a marker for months with missing balances.
+- **Why it exists:** A forgotten account otherwise looks like a net worth drop, and the entry form gave no sign of what was left.
+- **Who sees it:** Only with the flag on. With it off, Details behaves as before.
+- **Data shown:** A banner (**Adding the missing balances for {Month} {Year}** or **Entering balances for {Month} {Year}**), per-account captions, a footer count (**{n} account(s) still blank. Blank accounts are not saved.** or **Every account has a balance.**), and a persistent status region written once on save (**Saved {Month} {Year}. {n} account(s) still have no balance.**).
+- **Actions available:** Edit values, **Save**, **Cancel**, Escape.
+- **Rules:** A month is partial when an expected active account has no balance for it. Details and the Home Net Worth card then show **Partial month**, hide change figures for accounts without a balance, and Charts (Home and Wealth) leave the latest partial month out with the caption **{Month} is not plotted until all accounts have a balance.** Goal, allocation, leverage, and year-end math are unchanged.
+- **Edge cases:** A balance of 0 counts as present. Inactive accounts are never expected. Future-dated months never become the month being checked in.
+- **Related workflows:** Complete a monthly check-in.
+
 ### Allocation view
 - **What it is:** The portfolio-allocation workspace under the **Allocation** tab.
 - **Why it exists:** It shows how current holdings are distributed and lets the user compare them to custom target ratios.
@@ -180,6 +197,7 @@
 - **Cross-page impact:** Net Worth data powers Home, goal progress, allocation summaries, and yearly growth analysis.
 
 ## Open questions / known gaps
+- Goal, allocation, and leverage totals still treat a missing balance in the latest month as 0, so they can dip while a month is partial. Only the Net Worth card, Details, and the trend charts are partial-aware (flag `monthly-check-in`).
 - CSV import does not surface much row-level error detail, which makes troubleshooting hard.
 - The Growth view uses budget-derived naming that can be confusing because the visible labels do not fully explain how **Net Income**, **Savings**, and **Growth** relate.
 - Spreadsheet totals can still surprise users when inactive-account behavior and active filters do not feel perfectly aligned.

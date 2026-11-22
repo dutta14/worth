@@ -34,6 +34,11 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>Use the goals peek to see which targets are on pace and which ones are drifting.</li>
         <li>Check the allocation bar to see where your money is actually sitting today.</li>
         <li>Drag and reorder the cards until the page matches the way you think.</li>
+        <li>
+          Experimental, off by default: turn on the Monthly check-in feature flag to see a strip above the cards when
+          the latest month is missing balances or your data is getting old. One click opens the balance form for that
+          month, and you can snooze the reminder for 7 days.
+        </li>
       </ul>
       <p>
         <strong>One tip:</strong> Put the card you check most often in the top-left slot. The dashboard remembers the
@@ -72,6 +77,11 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
       <h4>How to use it</h4>
       <ul className="guide-bullet-list">
         <li>In Accounts, add accounts and enter monthly balances over time.</li>
+        <li>
+          Experimental, off by default: with the Monthly check-in feature flag on, Details opens a guided entry for the
+          month. Amounts are copied from the last month, every account you have not touched is marked, and a month with
+          missing balances is labelled Partial month and left off the trend charts until it is complete.
+        </li>
         <li>Switch between chart view and spreadsheet view depending on whether you want trend or detail.</li>
         <li>Hover chart points to see deltas and how a month changed relative to the prior one.</li>
         <li>Filter the accounts table when you want to isolate cash, retirement, debt, or other slices.</li>

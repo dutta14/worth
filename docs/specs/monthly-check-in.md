@@ -1,8 +1,8 @@
 # Monthly Check-in
 
-- **Status:** Proposed
+- **Status:** Built behind the `monthly-check-in` flag (off by default, 0% rollout); experimental
 - **Owner:** Anindya
-- **Last updated:** 2026-11-08
+- **Last updated:** 2026-11-22
 - **Priority:** 2 of 5 in the next-features list
 - **Effort:** M (about 5 PR-sized slices; no new storage in the data folder)
 
@@ -550,6 +550,15 @@ interface BalanceDetailsProps { /* existing */ startCheckInMonth?: MonthKey | nu
 - **import-wizard:** Owns `csvImport.ts` and the import handler in `Data.tsx`. A wizard that imports whole months should end on the Home strip or Details so partial months are visible at once; `getMonthStatus` needs no change for imported data. Check-in owns `monthStatus.ts` and the router-state contract.
 - **category-budget-targets:** Budget-only; no shared files. Overlap is limited to `Home.tsx` (Spending card and `SpendingPeek`), which that spec owns. Check-in adds code only outside `.home-grid` and does not touch card indices.
 - **annual-review:** Should import `getMonthStatus` to flag a partial December or latest month in year-end net worth. `SavingsGrowthTracker.getYearEndNetWorths` stays with annual-review. If annual-review adds a Home entry, it must not use `home-card-order` slot 5 without also updating `isCardOrder` (length 5 today).
+
+## 8a. As built (deviations and additions)
+
+- `CheckInStrip.tsx` owns the clock, snooze, and navigation so that `useNow` re-renders never reach the rest of Home; `CheckInCard` stays presentational. `PartialMonthCaption.tsx` is a small shared component for the chart caption.
+- In Details check-in mode the first balance field in DOM order is focused, and accounts are listed by balance, so it is not always the first account in the sheet.
+- Save, Cancel, and Escape in Details unmount the focused button. With the flag on, focus then moves to **+ Add Entry** (found by the Playwright suite; the spec did not say where focus should go). With the flag off nothing changes.
+- The E2E-7 network assertion allows the Inter stylesheet and font files from `fonts.googleapis.com` and `fonts.gstatic.com`, which `index.html` loads in every build.
+- E2E-5 covers the snooze in three tests: hide and reload, expiry after seven days, and a snooze for an earlier month not hiding a new one.
+- Screenshots are not regenerated while the flag is at 0.
 
 ## 9. Open questions and decisions
 

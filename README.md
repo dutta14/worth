@@ -102,6 +102,7 @@ Your dashboard. A quick read on where things stand right now, without opening si
 - Use the goals peek to see which targets are on pace and which ones are drifting
 - Check the allocation bar to see where your money is actually sitting today
 - Drag and reorder the cards until the page matches the way you think
+- Experimental, off by default: a check-in strip above the cards tells you when the latest month is missing balances or the data is getting old, and one click opens the balance form for that month (feature flag `monthly-check-in`)
 
 **One tip:** Put the card you check most often in the top-left slot. The dashboard remembers the order, and the right first glance matters more than one more chart.
 
@@ -132,6 +133,7 @@ This is the spine of the app. The Accounts tab gives you the raw history, Alloca
 
 **How to use it**
 - In Accounts, add accounts and enter monthly balances over time
+- Experimental, off by default: with the monthly check-in flag on, Details opens a guided entry for the month, prefilled from the last one and marking every account you have not updated, and a month that is missing balances is labelled Partial month and left off the trend charts (feature flag `monthly-check-in`)
 - Switch between chart view and spreadsheet view depending on whether you want trend or detail
 - Hover chart points to see deltas and how a month changed relative to the prior one
 - Filter the accounts table when you want to isolate cash, retirement, debt, or other slices
