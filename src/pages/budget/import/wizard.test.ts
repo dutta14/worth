@@ -4,6 +4,7 @@ import { dateInfo, initialDraft, legacyMapping, readableDate, resolveMapping, sa
 import { createWizardFile, loadWizardFiles, noRowsMessage, reparseWizardFile } from './wizardFiles'
 import { canGoBack, hasColumnsStep, initialWizardState, wizardReducer, type WizardState } from './wizardState'
 import { MAX_FILES } from './constants'
+import { emptyFormatsFile } from './savedFormats'
 import f01 from './fixtures/F01-debit-credit.csv?raw'
 import f02b from './fixtures/F02b-transaction-date.csv?raw'
 import f04 from './fixtures/F04-european-semicolon.csv?raw'
@@ -160,7 +161,11 @@ describe('wizardFiles', () => {
 describe('wizardReducer', () => {
   const load = (...texts: string[]): WizardState => {
     const files = texts.map((text, i) => must(createWizardFile(`f${i}.csv`, text)))
-    return wizardReducer(initialWizardState, { type: 'loaded', files })
+    return wizardReducer(initialWizardState, {
+      type: 'loaded',
+      files,
+      formats: { state: 'ready', file: emptyFormatsFile() },
+    })
   }
   const choose = (state: WizardState): WizardState => {
     const file = state.files[state.fileIndex]
@@ -221,7 +226,7 @@ describe('wizardReducer', () => {
       categoriesFailed: false,
       restored: true,
     }
-    state = wizardReducer(state, { type: 'committed', result: failure })
+    state = wizardReducer(state, { type: 'committed', result: failure, formatNote: null })
     expect(state).toMatchObject({ phase: 'result', commit: failure })
     state = wizardReducer(state, { type: 'review-again' })
     expect(state).toMatchObject({ phase: 'review', commit: null })

@@ -70,9 +70,9 @@ test.describe('Import wizard (flag on)', () => {
     await budget.uploadDropDown.click()
     await budget.uploadMenu.getByRole('menuitem', { name: 'Import CSV…' }).click()
     await page.getByTestId('import-wizard-input').setInputFiles(csvFile('bank.csv', BANK_CSV))
-    await dialog.getByRole('radio', { name: 'Negative numbers are spending' }).check()
-    await dialog.getByRole('button', { name: 'Continue to review' }).click()
+    // The first import remembered the format, so the Columns step is skipped.
     await expect(dialog.getByRole('heading', { name: 'Review before importing' })).toBeVisible()
+    await expect(dialog.getByText('Using saved format: bank', { exact: true })).toBeVisible()
     await expect(dialog.getByText('Nothing new to import. Every transaction is already in your budget.')).toBeVisible()
     await expect(dialog.getByRole('button', { name: 'Import 0 transactions' })).toHaveAttribute('aria-disabled', 'true')
     await page.keyboard.press('Escape')

@@ -1,7 +1,14 @@
 import { Dispatch, FC, useEffect, useMemo, useRef } from 'react'
 import { useFocusTrap } from '../../../../hooks/useFocusTrap'
-import { resolveMapping } from '../mapping'
-import { columnsBlockReason, importedMessage, UNDONE_MESSAGE } from '../messages'
+import { resolveMapping, sameSignWarning } from '../mapping'
+import {
+  columnsBlockReason,
+  formatNoteMessage,
+  importedMessage,
+  sameSignMessage,
+  savedFormatLabel,
+  UNDONE_MESSAGE,
+} from '../messages'
 import { countLabel } from '../reviewRows'
 import type { ImportPlan } from '../types'
 import { canGoBack, hasColumnsStep, type WizardAction, type WizardState } from '../wizardState'
@@ -67,6 +74,23 @@ const ImportWizard: FC<ImportWizardProps> = ({
   )
   const hasLaterPending = files.some((f, i) => i > fileIndex && f.mapping === null)
   const stepper = stepLabel(state)
+  const savedFormats = useMemo(
+    () =>
+      files.flatMap((f, index) =>
+        f.auto === 'saved' && f.format && f.mapping
+          ? [
+              {
+                index,
+                fileName: f.name,
+                name: f.format.name,
+                sign: f.mapping.amountMode === 'single' ? f.mapping.signConvention : null,
+                sameSign: sameSignWarning(f.parsed.detection.dataRecords, f.draft),
+              },
+            ]
+          : [],
+      ),
+    [files],
+  )
 
   // Errors are announced by their own role="alert" in the step body, so they are left out of the live region.
   const announcement = (() => {
@@ -78,9 +102,19 @@ const ImportWizard: FC<ImportWizardProps> = ({
         plan.totals.newRows === 0
           ? 'Nothing new to import.'
           : `${countLabel(plan.totals.newRows, 'new transaction', 'new transactions')}.`
-      return `${stepper}. ${summary}`
+      const formatsUsed = savedFormats
+        .map(saved => [`${savedFormatLabel(saved.name)}.`, saved.sameSign && sameSignMessage(saved.sameSign)])
+        .flat()
+        .filter(Boolean)
+        .join(' ')
+      return [`${stepper}.`, formatsUsed, summary].filter(Boolean).join(' ')
     }
-    if (phase === 'result' && commit?.ok) return state.undone ? UNDONE_MESSAGE : importedMessage(commit)
+    if (phase === 'result' && commit?.ok) {
+      if (state.undone) return UNDONE_MESSAGE
+      return state.formatNote
+        ? `${importedMessage(commit)} ${formatNoteMessage(state.formatNote)}`
+        : importedMessage(commit)
+    }
     return ''
   })()
 
@@ -158,18 +192,26 @@ const ImportWizard: FC<ImportWizardProps> = ({
               file={file}
               fileIndex={fileIndex}
               fileCount={files.length}
+              formats={state.formats}
+              onRemember={remember => dispatch({ type: 'remember', remember })}
               onDraft={draft => dispatch({ type: 'draft', draft })}
               onReparse={settings => dispatch({ type: 'reparse', settings })}
             />
           )}
           {(phase === 'review' || committing) && plan && (
-            <ReviewStep plan={plan} onOptions={options => dispatch({ type: 'options', options })} />
+            <ReviewStep
+              plan={plan}
+              savedFormats={savedFormats}
+              onChangeFormat={fileIndex => dispatch({ type: 'change-format', fileIndex })}
+              onOptions={options => dispatch({ type: 'options', options })}
+            />
           )}
           {phase === 'result' && commit && (
             <ResultStep
               result={commit}
               undone={state.undone}
               undoFailed={state.undoFailed}
+              formatNote={state.formatNote}
               canUndo={canUndo}
               onUndo={onUndo}
             />

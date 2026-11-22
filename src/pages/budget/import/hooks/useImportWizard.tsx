@@ -1,14 +1,23 @@
 import { ChangeEvent, ReactNode, useCallback, useMemo, useReducer, useRef } from 'react'
+import { useFileStore } from '../../../../contexts/FileStoreContext'
 import type { BudgetStore } from '../../types'
 import ImportWizard from '../components/ImportWizard'
 import { buildImportPlan, type PlanFileInput } from '../buildImportPlan'
 import { canUndoImport, type CommitResult, type UndoRecord, type UndoResult } from '../commitImport'
-import { noopPreImportSnapshot, type PreImportSnapshot } from '../importStorage'
+import {
+  loadFormats,
+  noopPreImportSnapshot,
+  saveFormatUpdates,
+  type FormatsLoad,
+  type PreImportSnapshot,
+} from '../importStorage'
 import { normalizeRows } from '../normalizeRows'
 import type { ImportPlan } from '../types'
 import type { ReadableFile } from '../readFile'
 import { DEFAULT_TEXT_NAME, loadWizardFiles, type TextSource } from '../wizardFiles'
-import { initialWizardState, wizardReducer } from '../wizardState'
+import { cleanFormatName, defaultFormatName, formatContent, type FormatUpdate } from '../savedFormats'
+import type { WizardFile } from '../wizardFiles'
+import { initialWizardState, wizardReducer, type FormatNote } from '../wizardState'
 
 /** What the wizard needs from the Budget data hook. */
 export interface ImportBudgetApi {
@@ -33,6 +42,25 @@ export interface ImportWizardOptions {
 }
 
 const FILE_ACCEPT = '.csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values'
+
+/** Today as YYYY-MM-DD in the user's own calendar, for the "last used" date of a saved format. */
+function localToday(): string {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+/** What the import teaches the formats file: formats to remember, and saved formats that were used again. */
+function formatUpdatesFor(files: WizardFile[]): FormatUpdate[] {
+  return files.flatMap((file): FormatUpdate[] => {
+    if (file.auto === 'saved' && file.format) return [{ kind: 'touch', id: file.format.id }]
+    if (file.auto !== null || file.mapping === null || !file.remember.enabled) return []
+    const name = cleanFormatName(file.remember.name, defaultFormatName(file.name))
+    return [
+      { kind: 'save', replaceId: file.format?.id ?? null, content: formatContent(name, file.parsed, file.mapping) },
+    ]
+  })
+}
 
 function restoreFocus(opener: HTMLElement | null) {
   setTimeout(() => {
@@ -60,18 +88,24 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
   const loadToken = useRef(0)
   const lastPlan = useRef<ImportPlan | null>(null)
   const { preImportSnapshot = noopPreImportSnapshot, onViewTransactions } = options
+  const { fileStore } = useFileStore()
   const { phase, files, options: importOptions } = state
   const { store } = budget
 
-  const start = useCallback(async (sources: { files?: ReadableFile[]; texts?: TextSource[] }) => {
-    const token = ++loadToken.current
-    const names = [...(sources.files ?? []).map(f => f.name), ...(sources.texts ?? []).map(t => t.name)]
-    dispatch({ type: 'loading', names })
-    const result = await loadWizardFiles(sources)
-    if (token !== loadToken.current) return
-    if (result.ok) dispatch({ type: 'loaded', files: result.files })
-    else dispatch({ type: 'load-failed', failure: { message: result.message, canPickAgain: result.canPickAgain } })
-  }, [])
+  const start = useCallback(
+    async (sources: { files?: ReadableFile[]; texts?: TextSource[] }) => {
+      const token = ++loadToken.current
+      const names = [...(sources.files ?? []).map(f => f.name), ...(sources.texts ?? []).map(t => t.name)]
+      dispatch({ type: 'loading', names })
+      const formats: FormatsLoad = await loadFormats(fileStore)
+      if (token !== loadToken.current) return
+      const result = await loadWizardFiles({ ...sources, formats: formats.state === 'ready' ? formats.file : null })
+      if (token !== loadToken.current) return
+      if (result.ok) dispatch({ type: 'loaded', files: result.files, formats })
+      else dispatch({ type: 'load-failed', failure: { message: result.message, canPickAgain: result.canPickAgain } })
+    },
+    [fileStore],
+  )
 
   const pickFiles = useCallback((multiple: boolean) => {
     const input = inputRef.current
@@ -140,6 +174,21 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
   if (livePlan) lastPlan.current = livePlan
   const plan = phase === 'review' ? livePlan : phase === 'committing' ? lastPlan.current : null
 
+  // Runs only after the import itself succeeded; a formats problem is reported next to the result, never as a failure.
+  const rememberFormats = useCallback(
+    async (used: WizardFile[], formats: FormatsLoad): Promise<FormatNote | null> => {
+      const updates = formatUpdatesFor(used)
+      if (updates.length === 0) return null
+      const saves = updates.filter(update => update.kind === 'save')
+      if (formats.state === 'unreadable') return saves.length > 0 ? { kind: 'not-saved', reason: 'unreadable' } : null
+      const outcome = await saveFormatUpdates(fileStore, updates, localToday())
+      if (saves.length === 0) return null
+      if (!outcome.ok) return { kind: 'not-saved', reason: outcome.reason }
+      return { kind: 'saved', names: saves.map(update => update.content.name) }
+    },
+    [fileStore],
+  )
+
   const confirm = useCallback(async () => {
     if (!plan || plan.totals.newRows === 0) return
     dispatch({ type: 'committing' })
@@ -155,8 +204,9 @@ export function useImportWizard(budget: ImportBudgetApi, options: ImportWizardOp
         restored: false,
       }
     }
-    dispatch({ type: 'committed', result })
-  }, [budget, plan, preImportSnapshot])
+    const formatNote = result.ok ? await rememberFormats(files, state.formats) : null
+    dispatch({ type: 'committed', result, formatNote })
+  }, [budget, plan, preImportSnapshot, rememberFormats, files, state.formats])
 
   const undoRecord = state.commit?.ok ? state.commit.undo : null
   const canUndo = undoRecord !== null && !state.undone && canUndoImport(undoRecord, store)
