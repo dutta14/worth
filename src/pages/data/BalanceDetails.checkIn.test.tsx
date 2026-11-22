@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import BalanceDetails from './BalanceDetails'
 import { makeAccount, makeBalanceEntry } from '../../test/factories'
@@ -462,5 +462,123 @@ describe('BalanceDetails with the monthly-check-in flag off', () => {
     const save = screen.getByRole('button', { name: 'Save' })
     expect(save.parentElement).toHaveClass('data-details-entry-footer')
     expect(within(save.parentElement as HTMLElement).getAllByRole('button')).toHaveLength(2)
+  })
+})
+
+describe('BalanceDetails check-in: future-dated months', () => {
+  const projection = [
+    makeBalanceEntry({ id: 20, accountId: 1, month: '2027-01', balance: 9001 }),
+    makeBalanceEntry({ id: 21, accountId: 2, month: '2027-01', balance: 9002 }),
+    makeBalanceEntry({ id: 22, accountId: 3, month: '2027-01', balance: 9003 }),
+  ]
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 8, 12))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('copies a new month from the latest earlier month, not from a future-dated one', async () => {
+    render(<Harness balances={[...completeSeptember, ...projection]} startCheckInMonth="2026-10" />)
+
+    expect(await screen.findByRole('textbox', { name: 'Checking balance' })).toHaveValue('1000')
+    expect(screen.getByRole('textbox', { name: 'Roth IRA balance' })).toHaveValue('12400')
+    expect(screen.getAllByText('Copied from September 2026')).toHaveLength(3)
+    expect(screen.getByText('Amounts are copied from September 2026. Update each one, then save.')).toBeVisible()
+    expect(screen.queryByText(/January 2027/)).not.toBeInTheDocument()
+  })
+
+  it('saves the September values, never the future ones', async () => {
+    const user = userEvent.setup()
+    const onSaveMonth = vi.fn()
+    render(
+      <Harness
+        balances={[...completeSeptember, ...projection]}
+        startCheckInMonth="2026-10"
+        onSaveMonth={onSaveMonth}
+      />,
+    )
+
+    await screen.findByRole('textbox', { name: 'Checking balance' })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSaveMonth).toHaveBeenCalledWith('2026-10', { '1': 1000, '2': 2000, '3': 12400 })
+  })
+
+  it('recalls the last recorded amount from the same source month as the copied value', async () => {
+    const user = userEvent.setup()
+    render(<Harness balances={[...completeSeptember, ...projection]} startCheckInMonth="2026-10" />)
+
+    const checking = await screen.findByRole('textbox', { name: 'Checking balance' })
+    await firstInputFocused()
+    await user.clear(checking)
+
+    expect(checking).toHaveAccessibleDescription('No balance yet. Last recorded $1,000 in September 2026.')
+  })
+
+  it('leaves everything blank when only future-dated months exist', async () => {
+    render(<Harness balances={projection} startCheckInMonth="2026-10" />)
+
+    expect(await screen.findByRole('textbox', { name: 'Checking balance' })).toHaveValue('')
+    expect(screen.queryByText(/Copied from/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Amounts are copied from/)).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Checking balance' })).toHaveAccessibleDescription(
+      'No balance yet. No earlier balance.',
+    )
+  })
+
+  it('copies from the month before a gap month rather than the latest month', async () => {
+    const balances = [
+      makeBalanceEntry({ id: 30, accountId: 1, month: '2026-08', balance: 800 }),
+      makeBalanceEntry({ id: 31, accountId: 1, month: '2026-10', balance: 1100 }),
+    ]
+    render(<Harness balances={balances} startCheckInMonth="2026-09" accountList={[accounts[0]]} />)
+
+    expect(await screen.findByRole('textbox', { name: 'Checking balance' })).toHaveValue('800')
+    expect(screen.getByText('Copied from August 2026')).toBeVisible()
+  })
+
+  it('applies the same source rule to the Add Entry flow', async () => {
+    const user = userEvent.setup()
+    render(<Harness balances={[...completeSeptember, ...projection]} />)
+
+    await user.click(screen.getByRole('button', { name: '+ Add Entry' }))
+    fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2026-10' } })
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(await screen.findByRole('textbox', { name: 'Checking balance' })).toHaveValue('1000')
+    expect(screen.getAllByText('Copied from September 2026')).toHaveLength(3)
+  })
+
+  it('keeps the existing copy source (latest month) with the flag off', async () => {
+    mockFlag = false
+    const user = userEvent.setup()
+    render(<Harness balances={[...completeSeptember, ...projection]} />)
+
+    await user.click(screen.getByRole('button', { name: '+ Add Entry' }))
+    fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2026-10' } })
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(await screen.findByRole('textbox', { name: 'Checking balance' })).toHaveValue('9001')
+  })
+})
+
+describe('BalanceDetails footer layout hook', () => {
+  it.each([
+    [true, true],
+    [false, false],
+  ])('with the flag %s the footer check-in modifier is %s', async (flag, hasModifier) => {
+    mockFlag = flag
+    const user = userEvent.setup()
+    render(<Harness balances={completeSeptember} />)
+
+    await user.click(screen.getByRole('button', { name: '+ Add Entry' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    const footer = screen.getByRole('button', { name: 'Save' }).closest('.data-details-entry-footer')
+    expect(footer?.classList.contains('data-details-entry-footer--check-in')).toBe(hasModifier)
   })
 })

@@ -2688,7 +2688,7 @@ body.dark .data-inline-cancel {
 }
 
 @media (max-width: 640px) {
-  .data-details-entry-footer {
+  .data-details-entry-footer--check-in {
     flex-wrap: wrap;
   }
 
@@ -2696,8 +2696,8 @@ body.dark .data-inline-cancel {
     width: 100%;
   }
 
-  .data-details-entry-footer-save,
-  .data-details-entry-footer-cancel {
+  .data-details-entry-footer-actions .data-details-entry-footer-save,
+  .data-details-entry-footer-actions .data-details-entry-footer-cancel {
     min-height: 44px;
   }
 }

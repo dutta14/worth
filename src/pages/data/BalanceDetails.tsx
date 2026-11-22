@@ -5,7 +5,7 @@ import { Profile } from '../../hooks/useProfile'
 import { FLAGS } from '../../flags/flagDefinitions'
 import { useFlag } from '../../flags/useFlag'
 import { plural } from '../../utils/plural'
-import { getMonthStatus, isMonthKey, type MonthKey } from './monthStatus'
+import { currentMonthKey, getMonthStatus, isMonthKey, type MonthKey } from './monthStatus'
 import {
   Account,
   AccountOwner,
@@ -243,6 +243,10 @@ const DEFAULT_COLUMN_FILTERS: FilterState = {
   allocation: [],
   status: ['active'],
 }
+
+/** True for a month a value may be copied or recalled from: before the target month and not in the future. */
+const isEarlierRecordedMonth = (month: string, target: string, now: Date) =>
+  isMonthKey(month) && month < target && month <= currentMonthKey(now)
 
 const accountsLabel = (n: number) => `${n} ${plural(n, 'account', 'accounts')}`
 
@@ -594,10 +598,12 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
 
     const values: Record<string, string> = {}
     const copied: Record<string, true> = {}
+    // With check-in on, never copy from a future-dated month the user has not confirmed.
+    const sourceMonth = checkInEnabled ? allMonths.find(m => isEarlierRecordedMonth(m, month, new Date())) : latestMonth
 
     activeAccounts.forEach(account => {
       const previousValue =
-        addMonthForm.copyFrom && latestMonth ? balanceMap.get(`${account.id}:${latestMonth}`) : undefined
+        addMonthForm.copyFrom && sourceMonth ? balanceMap.get(`${account.id}:${sourceMonth}`) : undefined
       values[String(account.id)] = previousValue !== undefined ? String(previousValue) : ''
       if (previousValue !== undefined) copied[String(account.id)] = true
     })
@@ -607,7 +613,7 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
       month,
       values,
       copyFrom: addMonthForm.copyFrom,
-      copiedFrom: addMonthForm.copyFrom && latestMonth ? latestMonth : null,
+      copiedFrom: addMonthForm.copyFrom && sourceMonth ? sourceMonth : null,
       copied,
     })
     setIsAddMonthOpen(false)
@@ -616,7 +622,8 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
   const startCheckIn = useCallback(
     (month: MonthKey) => {
       const isExistingMonth = allMonths.includes(month)
-      const sourceMonth = isExistingMonth ? month : latestMonth
+      const copySource = allMonths.find(m => isEarlierRecordedMonth(m, month, new Date()))
+      const sourceMonth = isExistingMonth ? month : copySource
       const values: Record<string, string> = {}
       const copied: Record<string, true> = {}
 
@@ -635,11 +642,11 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
         month,
         values,
         copyFrom: !isExistingMonth,
-        copiedFrom: !isExistingMonth && latestMonth ? latestMonth : null,
+        copiedFrom: !isExistingMonth && copySource ? copySource : null,
         copied,
       })
     },
-    [activeAccounts, allMonths, balanceMap, latestMonth],
+    [activeAccounts, allMonths, balanceMap],
   )
 
   useEffect(() => {
@@ -691,7 +698,7 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
     const latest = new Map<number, LastRecorded>()
     if (!checkInEnabled || !editMonth) return latest
     for (const entry of balances) {
-      if (!isMonthKey(entry.month) || entry.month >= editMonth) continue
+      if (!isEarlierRecordedMonth(entry.month, editMonth, new Date())) continue
       const known = latest.get(entry.accountId)
       if (!known || entry.month > known.month)
         latest.set(entry.accountId, { month: entry.month, balance: entry.balance })
@@ -1025,7 +1032,7 @@ const BalanceDetails: FC<BalanceDetailsProps> = ({
       </div>
 
       {editMode ? (
-        <div className="data-details-entry-footer">
+        <div className={`data-details-entry-footer${checkInEnabled ? ' data-details-entry-footer--check-in' : ''}`}>
           {checkInEnabled ? (
             <>
               <p className="data-details-entry-footer-summary">
