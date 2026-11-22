@@ -16,7 +16,7 @@ const questions = [
     id: 'faq-switch-devices',
     question: 'What if I switch devices?',
     answer:
-      'Copy your data folder to the new device. It contains standard JSON and CSV files that the app reads directly. You can also keep the folder in a synced location like iCloud Drive or Dropbox.',
+      'Copy your data folder to the new device. It contains standard JSON and CSV files that the app reads directly. You can also keep the folder in a synced location like iCloud Drive or Dropbox. Experimental, off by default: with the Data safety net feature flag on, the app notices when a file was changed on the other device, pauses saving to it, and asks whether to reload or keep your version.',
   },
   {
     id: 'faq-export',

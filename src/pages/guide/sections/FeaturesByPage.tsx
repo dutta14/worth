@@ -184,6 +184,10 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>See and change your connected data folder in Data Folder.</li>
         <li>Toggle dark mode and accent preferences in Appearance.</li>
         <li>Explore experimental features in Labs and Feature Flags when you are curious.</li>
+        <li>
+          Experimental, off by default: turn on the Data safety net feature flag to see the safety copies kept in{' '}
+          <code>_backups</code> under Data Folder and restore one after you confirm.
+        </li>
       </ul>
       <p>
         <strong>One tip:</strong> Back up your data folder regularly. Copy it to an external drive or a synced cloud

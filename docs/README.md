@@ -10,7 +10,7 @@ Internal documentation for worth. The user-facing README lives at the repo root.
   - `goal-drawer.md` — goal detail drawer spec
   - `goals-page-redesign.md` — Goals page IA + visual redesign
   - **Proposed features** (not yet built; each has a feature flag and is split into PR-sized slices):
-    - `data-safety-net.md` — flush pending writes, visible save failures, corrupt-file protection, external-change detection, `_backups/` (priority 1)
+    - `data-safety-net.md` — built behind the `data-safety-net` flag (off by default): flush pending writes, visible save failures, corrupt-file protection, external-change detection, `_backups/` (priority 1)
     - `monthly-check-in.md` — guided monthly balance update, missing/stale data detection, "Partial month" handling (priority 2)
     - `import-wizard.md` — CSV column mapping, categorization rules, duplicate guard, month splitting (priority 3)
     - `category-budget-targets.md` — monthly targets per category group with budget-vs-actual (priority 4)
