@@ -8,6 +8,7 @@
 import type { FinancialGoal, GwGoal } from '../../types'
 import type { Account, BalanceEntry } from '../data/types'
 import type { CategoryGroup } from '../budget/types'
+import type { BudgetTargetsFile } from '../budget/utils/budgetTargets'
 import type { FileStore } from '../../utils/fileStoreTypes'
 
 function demoProfile() {
@@ -240,6 +241,20 @@ function demoBalances(): BalanceEntry[] {
   return balances
 }
 
+// Ignored unless the category-budget-targets flag is on.
+function demoBudgetTargets(): BudgetTargetsFile {
+  const target = (label: string, monthly: number) => ({ label, history: [{ from: null, monthly }] })
+  return {
+    version: 1,
+    groups: {
+      housing: target('Housing', 2150),
+      food: target('Food', 600),
+      transport: target('Transport', 250),
+      personal: target('Personal', 200),
+    },
+  }
+}
+
 function demoBudget(): { groups: CategoryGroup[]; years: number[]; csvs: Record<string, string> } {
   const categories = {
     income: ['Salary', 'Side Income', 'Interest'],
@@ -392,6 +407,7 @@ export async function seedDemoData(store: FileStore): Promise<void> {
     years: budget.years,
     categoryGroups: budget.groups,
   })
+  await store.writeJSON('budget/targets.json', demoBudgetTargets())
   for (const [monthKey, csv] of Object.entries(budget.csvs)) {
     const year = monthKey.slice(0, 4)
     await store.writeCSV(

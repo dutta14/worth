@@ -1,7 +1,7 @@
 import { FC, useState } from 'react'
 import { CategoryGroup, TimePeriod } from '../types'
 import { shortMonthName, buildMonthKey } from '../utils/csvParser'
-import { evaluatePeriod, monthlyTargetFor } from '../utils/budgetTargets'
+import { evaluatePeriod, isExpenseCategory, monthlyTargetFor } from '../utils/budgetTargets'
 import type { BudgetTargetsFile } from '../utils/budgetTargets'
 import BudgetTargetCell from './BudgetTargetCell'
 import BudgetTargetStatus from './BudgetTargetStatus'
@@ -72,10 +72,9 @@ const BudgetAggregatedView: FC<BudgetAggregatedViewProps> = ({
 
   // If a category has ANY negative month, it's an expense (positives are refunds).
   const isTypeCategory = (cat: string): boolean => {
+    if (type === 'expense') return isExpenseCategory(categorySums[cat])
     const monthValues = Object.values(categorySums[cat] || {})
-    const hasNegative = monthValues.some(v => v < 0)
-    if (type === 'expense') return hasNegative
-    return !hasNegative && monthValues.some(v => v > 0)
+    return !isExpenseCategory(categorySums[cat]) && monthValues.some(v => v > 0)
   }
 
   const hasTarget = (id: string): boolean => targetsOn && Object.hasOwn(targetsConfig.targets.groups, id)

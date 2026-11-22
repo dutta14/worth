@@ -249,6 +249,14 @@ export function summarizeGroups(results: ReadonlyArray<TargetResult | null>): { 
   return { evaluated, over }
 }
 
+/**
+ * A category counts as spending when any month of the year is negative; categories that are positive all
+ * year (reimbursements, cashback, misfiled income) are ignored. Shared by the Budget table and the Home
+ * line so both compare the same spend with a target.
+ */
+export const isExpenseCategory = (monthlySums: Readonly<Record<MonthKey, number>> | undefined): boolean =>
+  Object.values(monthlySums ?? {}).some(value => value < 0)
+
 /** Signed per-category totals (expenses negative), summed in integer cents. */
 export function sumByCategory(
   txs: ReadonlyArray<{ category: string; amount: number }>,

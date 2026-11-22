@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryFileStore } from '../../utils/memoryFileStore'
+import { normalizeTargetsFile } from '../budget/utils/budgetTargets'
 import { seedDemoData } from './demoMode'
 
 const freezeAt = (isoDate: string) => {
@@ -34,6 +35,8 @@ describe('seedDemoData', () => {
     await expect(store.exists('balances/2026.csv')).resolves.toBe(true)
     await expect(store.exists('transactions/2024/2024-01.csv')).resolves.toBe(true)
     await expect(store.exists('transactions/2026/2026-08.csv')).resolves.toBe(true)
+    const targets = normalizeTargetsFile(await store.readJSON<unknown>('budget/targets.json', null))
+    expect(Object.keys(targets?.groups ?? {}).sort()).toEqual(['food', 'housing', 'personal', 'transport'])
     await expect(store.readJSON('taxes/templates.json', [])).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ name: 'Standard Filing' })]),
     )

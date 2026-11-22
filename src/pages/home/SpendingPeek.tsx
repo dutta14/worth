@@ -5,6 +5,10 @@ import { formatMonth } from '../data/types'
 import { parseCSV } from '../budget/utils/csvParser'
 import { getIncomeGroups, loadBudgetStore, type BudgetStore } from '../budget/utils/budgetStorage'
 import type { FileStore } from '../../utils/fileStoreTypes'
+import { useFlag } from '../../flags/useFlag'
+import { FLAGS } from '../../flags/flagDefinitions'
+import SpendingPeekTargets from './SpendingPeekTargets'
+import { useSpendingTargetsLine } from './useSpendingTargetsLine'
 
 type SpendingMode =
   'last-month-vs-prior-month' | 'last-month-vs-last-year' | 'last-month-vs-average-month' | 'this-year-vs-last-year'
@@ -14,6 +18,7 @@ interface SpendingPeekProps {
   hasBudgetData: boolean
   budgetDataLoaded: boolean
   onNavigate: () => void
+  onOpenTargets?: () => void
 }
 
 interface ParsedMonthSpending {
@@ -341,12 +346,20 @@ const isPointComplete = (value: number | null | undefined): value is number => t
 const getTooltipNumericValue = (entry: TooltipPayloadEntry | undefined) =>
   typeof entry?.value === 'number' ? entry.value : null
 
-const SpendingPeek: FC<SpendingPeekProps> = ({ fileStore, hasBudgetData, budgetDataLoaded, onNavigate }) => {
+const SpendingPeek: FC<SpendingPeekProps> = ({
+  fileStore,
+  hasBudgetData,
+  budgetDataLoaded,
+  onNavigate,
+  onOpenTargets,
+}) => {
   const [mode, setMode] = useState<SpendingMode>('last-month-vs-prior-month')
   const [budgetStore, setBudgetStore] = useState<BudgetStore | null>(null)
   const [storeLoaded, setStoreLoaded] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const targetsOn = useFlag(FLAGS.CATEGORY_BUDGET_TARGETS)
+  const targetsLine = useSpendingTargetsLine(fileStore, targetsOn, budgetStore)
 
   const handleSelectMode = useCallback((next: SpendingMode) => {
     setMode(next)
@@ -560,6 +573,7 @@ const SpendingPeek: FC<SpendingPeekProps> = ({ fileStore, hasBudgetData, budgetD
           )}
         </div>
       </div>
+      {targetsLine && <SpendingPeekTargets line={targetsLine} onOpenTargets={onOpenTargets} />}
       <div className="spending-peek-chart">
         <ResponsiveContainer width="100%" height={230}>
           <ComposedChart data={chartModel.data} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>

@@ -91,10 +91,11 @@ vi.mock('./AllocationBreakdown', () => ({
   ),
 }))
 vi.mock('./SpendingPeek', () => ({
-  default: ({ onNavigate }: { onNavigate: () => void }) => (
+  default: ({ onNavigate, onOpenTargets }: { onNavigate: () => void; onOpenTargets?: () => void }) => (
     <div data-testid="spending-card">
       Spending Card
       <button onClick={onNavigate}>Open budget</button>
+      <button onClick={onOpenTargets}>Open targets</button>
     </div>
   ),
 }))
@@ -209,6 +210,15 @@ describe('Home cards', () => {
       ['/net-worth/allocation'],
       ['/budget'],
     ])
+  })
+
+  it('sends the spending card targets link to the Budget aggregated view', async () => {
+    const user = userEvent.setup()
+    renderHome()
+
+    await user.click(screen.getByRole('button', { name: 'Open targets' }))
+
+    expect(mockNavigate.mock.calls).toEqual([['/budget/spreadsheet']])
   })
 })
 

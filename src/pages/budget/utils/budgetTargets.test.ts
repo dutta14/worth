@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  isExpenseCategory,
   parseTargetInput,
   normalizeTargetsFile,
   monthlyTargetFor,
@@ -790,5 +791,20 @@ describe('sumByCategory', () => {
   it('handles a category named __proto__ as plain data', () => {
     const result = sumByCategory([{ category: '__proto__', amount: -5 }], new Set())
     expect(Object.keys(result)).toEqual(['__proto__'])
+  })
+})
+
+describe('isExpenseCategory', () => {
+  it('is true when any month is negative, even if others are positive', () => {
+    expect(isExpenseCategory({ '2026-01': -5, '2026-02': 40 })).toBe(true)
+  })
+
+  it('is false for a category that is positive or zero all year', () => {
+    expect(isExpenseCategory({ '2026-01': 100, '2026-02': 0 })).toBe(false)
+  })
+
+  it('is false when the category has no sums', () => {
+    expect(isExpenseCategory(undefined)).toBe(false)
+    expect(isExpenseCategory({})).toBe(false)
   })
 })

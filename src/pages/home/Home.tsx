@@ -214,6 +214,7 @@ const Home: FC = () => {
         hasBudgetData={hasBudgetData}
         budgetDataLoaded={dataLoaded}
         onNavigate={() => navigate('/budget')}
+        onOpenTargets={() => navigate('/budget/spreadsheet')}
       />
     </ErrorBoundary>,
   ]
