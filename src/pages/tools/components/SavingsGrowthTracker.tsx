@@ -6,6 +6,7 @@ import { useData } from '../../../contexts/DataContext'
 import type { Account, BalanceEntry } from '../../data/types'
 import { useFileStore } from '../../../contexts/FileStoreContext'
 import { delta } from '../utils/savingsCalc'
+import { OVERRIDES_PATH, type ManualYearLog } from '../utils/savingsOverrides'
 import '../../../styles/SavingsGrowthTracker.css'
 
 const REMOVED_GROUP_ID = 'removed'
@@ -113,15 +114,6 @@ async function getBudgetYearlyData(
   return result
 }
 
-const OVERRIDES_PATH = 'savings-tracker-overrides.json'
-
-interface YearOverrides {
-  grossIncome?: number
-  taxes?: number
-  netIncome?: number
-  savings?: number
-}
-
 interface YearRow {
   year: number
   netWorth: number | null
@@ -140,7 +132,7 @@ type TabMode = 'savings' | 'income'
 
 const SavingsGrowthTracker: FC = () => {
   const [showPct, setShowPct] = useState(false)
-  const [overrides, setOverrides] = useState<Record<number, YearOverrides>>({})
+  const [overrides, setOverrides] = useState<Record<number, ManualYearLog>>({})
   const [editCell, setEditCell] = useState<{ year: number; field: string } | null>(null)
   const [editValue, setEditValue] = useState('')
   const location = useLocation()
@@ -154,7 +146,7 @@ const SavingsGrowthTracker: FC = () => {
 
   useEffect(() => {
     fileStore
-      .readJSON<Record<number, YearOverrides>>(OVERRIDES_PATH, {})
+      .readJSON<Record<number, ManualYearLog>>(OVERRIDES_PATH, {})
       .then(setOverrides)
       .catch(() => setOverrides({}))
   }, [fileStore])
@@ -166,7 +158,7 @@ const SavingsGrowthTracker: FC = () => {
   }, [fileStore])
 
   const persistOverrides = useCallback(
-    (o: Record<number, YearOverrides>) => {
+    (o: Record<number, ManualYearLog>) => {
       fileStore.writeJSON(OVERRIDES_PATH, o).catch(console.error)
       window.dispatchEvent(new Event('tools-changed'))
     },
