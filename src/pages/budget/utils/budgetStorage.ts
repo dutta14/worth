@@ -197,43 +197,48 @@ export async function saveBudgetConfig(fileStore: FileStore, config: BudgetConfi
   window.dispatchEvent(new Event('budget-changed'))
 }
 
-export async function loadBudgetStore(fileStore: FileStore): Promise<BudgetStore> {
-  try {
-    const config = await loadBudgetConfig(fileStore)
+/** Reads the whole budget store; any read failure propagates instead of becoming an empty store. */
+export async function loadBudgetStoreStrict(fileStore: FileStore): Promise<BudgetStore> {
+  const config = await loadBudgetConfig(fileStore)
 
-    // Discover years from transactions folder + config
-    const txFolders = await fileStore.listFiles('transactions')
-    const discoveredYears = txFolders.filter(f => /^\d{4}$/.test(f)).map(Number)
-    const allYears = [...new Set([...config.years, ...discoveredYears])].sort()
+  // Discover years from transactions folder + config
+  const txFolders = await fileStore.listFiles('transactions')
+  const discoveredYears = txFolders.filter(f => /^\d{4}$/.test(f)).map(Number)
+  const allYears = [...new Set([...config.years, ...discoveredYears])].sort()
 
-    // Enumerate CSVs by year
-    const csvs: Record<string, MonthCSV> = {}
-    for (const year of allYears) {
-      const files = await fileStore.listFiles(`transactions/${year}`)
-      for (const filename of files) {
-        if (!filename.endsWith('.csv')) continue
-        const monthKey = filename.replace('.csv', '')
-        const path = `transactions/${year}/${filename}`
-        const rows = await fileStore.readCSV(path)
-        if (rows.length === 0) continue
-        csvs[monthKey] = {
-          month: monthKey,
-          csv: serializeCSV(rows),
-          uploadedAt: '',
-        }
+  // Enumerate CSVs by year
+  const csvs: Record<string, MonthCSV> = {}
+  for (const year of allYears) {
+    const files = await fileStore.listFiles(`transactions/${year}`)
+    for (const filename of files) {
+      if (!filename.endsWith('.csv')) continue
+      const monthKey = filename.replace('.csv', '')
+      const path = `transactions/${year}/${filename}`
+      const rows = await fileStore.readCSV(path)
+      if (rows.length === 0) continue
+      csvs[monthKey] = {
+        month: monthKey,
+        csv: serializeCSV(rows),
+        uploadedAt: '',
       }
     }
+  }
 
-    const store: BudgetStore = {
-      csvs,
-      configs: {},
-      years: allYears,
-      categoryGroups: config.categoryGroups,
-    }
+  const store: BudgetStore = {
+    csvs,
+    configs: {},
+    years: allYears,
+    categoryGroups: config.categoryGroups,
+  }
 
-    const migrated = migrateToGlobalGroups(store)
-    migrated.categoryGroups = normalizeGroups(migrated.categoryGroups || [])
-    return migrated
+  const migrated = migrateToGlobalGroups(store)
+  migrated.categoryGroups = normalizeGroups(migrated.categoryGroups || [])
+  return migrated
+}
+
+export async function loadBudgetStore(fileStore: FileStore): Promise<BudgetStore> {
+  try {
+    return await loadBudgetStoreStrict(fileStore)
   } catch {
     return { ...EMPTY_STORE, categoryGroups: cloneGroups(DEFAULT_GROUPS) }
   }

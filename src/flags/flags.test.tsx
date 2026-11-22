@@ -5,7 +5,8 @@ import userEvent from '@testing-library/user-event'
 import { useContext, type ReactNode, type FC } from 'react'
 import { defineFlag } from './flagSystem'
 import { FlagContext, FlagProvider, hashCode, type FlagContextValue, type RolloutConfig } from './FlagContext'
-import { useFlag } from './useFlag'
+import { useFlag, useFlagResolved } from './useFlag'
+import { makeFlagContextValue } from '../test/flagTestUtils'
 
 /* ── Admin token stand-in ─────────────────────────────────────────── */
 
@@ -1116,5 +1117,31 @@ describe('error handling and edge cases', () => {
 
     expect(screen.getByTestId('flag-value')).toHaveTextContent('false')
     expect(screen.getByTestId('overrides')).toHaveTextContent('{}')
+  })
+})
+
+describe('useFlagResolved', () => {
+  const flag = defineFlag('resolved-flag', { type: 'boolean', default: false, description: 'test' })
+  const renderResolved = (value: FlagContextValue) =>
+    renderHook(() => useFlagResolved(flag), {
+      wrapper: ({ children }) => <FlagContext.Provider value={value}>{children}</FlagContext.Provider>,
+    }).result.current
+
+  it('is true when the context does not report resolution (no provider semantics)', () => {
+    expect(renderResolved(makeFlagContextValue({}))).toBe(true)
+  })
+
+  it('is false while the rollout config is unresolved', () => {
+    expect(renderResolved(makeFlagContextValue({}, { isResolved: false }))).toBe(false)
+  })
+
+  it('is true once the rollout config is resolved', () => {
+    expect(renderResolved(makeFlagContextValue({}, { isResolved: true }))).toBe(true)
+  })
+
+  it('is true while unresolved when a local override decides the flag', () => {
+    expect(renderResolved(makeFlagContextValue({}, { isResolved: false, overrides: { 'resolved-flag': false } }))).toBe(
+      true,
+    )
   })
 })

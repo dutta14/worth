@@ -350,6 +350,79 @@ describe('FlagProvider', () => {
     })
   })
 
+  describe('isResolved', () => {
+    const percentageConfig = { version: 1, updatedAt: '2024-01-01', flags: { 'rollout-flag': { percentage: 100 } } }
+    const publicResponse = (config: unknown) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ content: btoa(JSON.stringify(config)), sha: 'abc' }),
+    })
+
+    it('resolves a percentage-enabled flag on the first render when the cache is fresh', () => {
+      localStorage.setItem('flag-rollout-cache', JSON.stringify({ config: percentageConfig, fetchedAt: Date.now() }))
+
+      const { result } = renderHook(() => useFlagContext(), { wrapper })
+
+      expect(result.current.isResolved).toBe(true)
+      expect(result.current.resolveFlag(boolFlag('rollout-flag', false))).toBe(true)
+    })
+
+    it('is unresolved with no cache until the first fetch settles, then applies the fetched rollout', async () => {
+      mockFetch.mockResolvedValue(publicResponse(percentageConfig))
+
+      const { result } = renderHook(() => useFlagContext(), { wrapper })
+
+      expect(result.current.isResolved).toBe(false)
+      expect(result.current.resolveFlag(boolFlag('rollout-flag', false))).toBe(false)
+      await waitFor(() => expect(result.current.isResolved).toBe(true))
+      expect(result.current.resolveFlag(boolFlag('rollout-flag', false))).toBe(true)
+    })
+
+    it('is unresolved with a stale cache until the refetch settles', async () => {
+      localStorage.setItem(
+        'flag-rollout-cache',
+        JSON.stringify({ config: percentageConfig, fetchedAt: Date.now() - 10 * 60 * 1000 }),
+      )
+      mockFetch.mockResolvedValue(publicResponse(percentageConfig))
+
+      const { result } = renderHook(() => useFlagContext(), { wrapper })
+
+      expect(result.current.isResolved).toBe(false)
+      expect(result.current.rolloutConfig.flags).toEqual({})
+      await waitFor(() => expect(result.current.isResolved).toBe(true))
+    })
+
+    it('becomes resolved when the fetch fails, so a flag that is truly off is not held back forever', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 404 })
+
+      const { result } = renderHook(() => useFlagContext(), { wrapper })
+
+      await waitFor(() => expect(result.current.isResolved).toBe(true))
+      expect(result.current.resolveFlag(boolFlag('rollout-flag', false))).toBe(false)
+    })
+
+    it('ignores a malformed cache entry and waits for the fetch', async () => {
+      localStorage.setItem(
+        'flag-rollout-cache',
+        JSON.stringify({ config: { version: 1, flags: [] }, fetchedAt: Date.now() }),
+      )
+
+      const { result } = renderHook(() => useFlagContext(), { wrapper })
+
+      expect(result.current.isResolved).toBe(false)
+      await waitFor(() => expect(result.current.isResolved).toBe(true))
+    })
+
+    it('keeps a local override synchronous while the rollout config is still unresolved', () => {
+      localStorage.setItem('flag-overrides', JSON.stringify({ 'rollout-flag': true }))
+
+      const { result } = renderHook(() => useFlagContext(), { wrapper })
+
+      expect(result.current.isResolved).toBe(false)
+      expect(result.current.resolveFlag(boolFlag('rollout-flag', false))).toBe(true)
+    })
+  })
+
   describe('fetchConfig', () => {
     it('uses cached config when cache is fresh without fetching', async () => {
       const localFetch = vi.fn()

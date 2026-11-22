@@ -27,6 +27,7 @@ vi.mock('../../contexts/DataContext', () => ({
     accounts: mockAccounts,
     balances: [],
     allMonths: [],
+    isLoaded: true,
     setAccounts: vi.fn(),
     setBalances: vi.fn(),
   })),
@@ -78,6 +79,7 @@ beforeEach(() => {
     accounts: [],
     balances: [],
     allMonths: [],
+    isLoaded: true,
     setAccounts: vi.fn(),
     setBalances: vi.fn(),
   })
@@ -393,6 +395,7 @@ describe('Taxes', () => {
         accounts: [makeAccount({ id: 10, name: 'Savings Account', owner: 'primary' })],
         balances: [],
         allMonths: [],
+        isLoaded: true,
         setAccounts: vi.fn(),
         setBalances: vi.fn(),
       })
@@ -479,6 +482,7 @@ describe('Taxes', () => {
         accounts: [makeAccount({ id: 10, name: 'Brokerage', owner: 'primary' })],
         balances: [],
         allMonths: [],
+        isLoaded: true,
         setAccounts: vi.fn(),
         setBalances: vi.fn(),
       })
@@ -492,6 +496,7 @@ describe('Taxes', () => {
         accounts: [makeAccount({ id: 10, name: 'Brokerage', owner: 'primary' })],
         balances: [],
         allMonths: [],
+        isLoaded: true,
         setAccounts: vi.fn(),
         setBalances: vi.fn(),
       })
@@ -916,6 +921,7 @@ describe('Taxes', () => {
         accounts: [makeAccount({ id: 10, name: 'Brokerage', owner: 'primary' })],
         balances: [],
         allMonths: [],
+        isLoaded: true,
         setAccounts: vi.fn(),
         setBalances: vi.fn(),
       })
@@ -933,6 +939,7 @@ describe('Taxes', () => {
         accounts: [makeAccount({ id: 10, name: 'Brokerage', owner: 'primary' })],
         balances: [],
         allMonths: [],
+        isLoaded: true,
         setAccounts: vi.fn(),
         setBalances: vi.fn(),
       })
@@ -951,6 +958,7 @@ describe('Taxes', () => {
         accounts: [makeAccount({ id: 10, name: 'Brokerage', owner: 'primary' })],
         balances: [],
         allMonths: [],
+        isLoaded: true,
         setAccounts: vi.fn(),
         setBalances: vi.fn(),
       })
@@ -971,6 +979,7 @@ describe('Taxes', () => {
         ],
         balances: [],
         allMonths: [],
+        isLoaded: true,
         setAccounts: vi.fn(),
         setBalances: vi.fn(),
       })
@@ -1011,6 +1020,7 @@ describe('Taxes', () => {
         accounts: [makeAccount({ id: 10, name: 'Old Account', owner: 'primary', status: 'inactive' })],
         balances: [],
         allMonths: [],
+        isLoaded: true,
         setAccounts: vi.fn(),
         setBalances: vi.fn(),
       })
@@ -1026,6 +1036,7 @@ describe('Taxes', () => {
         accounts: [makeAccount({ id: 10, name: 'Savings', owner: 'primary', institution: 'Chase' })],
         balances: [],
         allMonths: [],
+        isLoaded: true,
         setAccounts: vi.fn(),
         setBalances: vi.fn(),
       })
@@ -1263,6 +1274,7 @@ describe('Taxes', () => {
         ],
         balances: [],
         allMonths: [],
+        isLoaded: true,
         setAccounts: vi.fn(),
         setBalances: vi.fn(),
       })
@@ -1293,6 +1305,7 @@ describe('Taxes', () => {
         accounts: [makeAccount({ id: 1, name: 'Joint Checking', owner: 'joint', status: 'active' })],
         balances: [],
         allMonths: [],
+        isLoaded: true,
         setAccounts: vi.fn(),
         setBalances: vi.fn(),
       })

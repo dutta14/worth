@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useGoals } from '../contexts/GoalsContext'
 import { useData } from '../contexts/DataContext'
 import { useFileStore } from '../contexts/FileStoreContext'
+import { FLAGS } from '../flags/flagDefinitions'
+import { useFlag } from '../flags/useFlag'
 import { loadTaxStore, TEMPLATES_PATH } from '../pages/taxes/types'
 import { ALLOCATION_PATH } from '../pages/allocation/constants'
 import type { CategoryGroup } from '../pages/budget/types'
@@ -21,6 +23,7 @@ export function useSearchIndexData(enabled: boolean): SearchIndexData {
   const { goals, gwGoals } = useGoals()
   const { accounts } = useData()
   const { fileStore } = useFileStore()
+  const annualReviewEnabled = useFlag(FLAGS.ANNUAL_REVIEW)
   const [fileData, setFileData] = useState<FileBackedData>(EMPTY)
 
   useEffect(() => {
@@ -49,5 +52,8 @@ export function useSearchIndexData(enabled: boolean): SearchIndexData {
     }
   }, [enabled, fileStore])
 
-  return useMemo(() => ({ goals, gwGoals, accounts, ...fileData }), [goals, gwGoals, accounts, fileData])
+  return useMemo(
+    () => ({ goals, gwGoals, accounts, annualReviewEnabled, ...fileData }),
+    [goals, gwGoals, accounts, annualReviewEnabled, fileData],
+  )
 }

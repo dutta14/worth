@@ -81,6 +81,7 @@ function setMockData({
     accounts,
     balances,
     allMonths,
+    isLoaded: true,
     setAccounts: vi.fn(),
     setBalances: vi.fn(),
   })

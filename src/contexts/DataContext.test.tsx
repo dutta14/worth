@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, act, waitFor } from '@testing-library/react'
 import { DataProvider, useData } from './DataContext'
 import { FileStoreTestProvider } from '../test/fileStoreTestUtils'
@@ -29,6 +29,8 @@ function Consumer({ onData }: { onData?: (d: ReturnType<typeof useData>) => void
       <span data-testid="accounts">{JSON.stringify(data.accounts)}</span>
       <span data-testid="balances">{JSON.stringify(data.balances)}</span>
       <span data-testid="allMonths">{JSON.stringify(data.allMonths)}</span>
+      <span data-testid="isLoaded">{String(data.isLoaded)}</span>
+      <span data-testid="loadFailed">{String(data.loadFailed)}</span>
     </div>
   )
 }
@@ -208,5 +210,57 @@ describe('DataContext', () => {
       expect(balances[0].month).toBe('2024-03')
       expect(balances[0].balance).toBe(500)
     })
+  })
+
+  it('reports isLoaded false until the first read settles, then true even for an empty folder', async () => {
+    renderWithStore(<Consumer />, store)
+
+    expect(screen.getByTestId('isLoaded')).toHaveTextContent('false')
+    await waitFor(() => expect(screen.getByTestId('isLoaded')).toHaveTextContent('true'))
+    expect(JSON.parse(screen.getByTestId('accounts').textContent!)).toEqual([])
+  })
+
+  it('reports isLoaded true after a failed read so the page is not stuck loading', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(store, 'readJSON').mockRejectedValue(new Error('disk gone'))
+
+    renderWithStore(<Consumer />, store)
+
+    await waitFor(() => expect(screen.getByTestId('isLoaded')).toHaveTextContent('true'))
+    expect(errorSpy).toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it('reports loadFailed after a failed read, and clears it once a later read succeeds', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const readJSON = store.readJSON.bind(store)
+    let failing = true
+    vi.spyOn(store, 'readJSON').mockImplementation(async (path, fallback) => {
+      if (failing) throw new Error('disk gone')
+      return readJSON(path, fallback)
+    })
+
+    renderWithStore(<Consumer />, store)
+    await waitFor(() => expect(screen.getByTestId('loadFailed')).toHaveTextContent('true'))
+    expect(screen.getByTestId('isLoaded')).toHaveTextContent('true')
+
+    failing = false
+    act(() => {
+      window.dispatchEvent(new Event('data-changed'))
+    })
+    await waitFor(() => expect(screen.getByTestId('loadFailed')).toHaveTextContent('false'))
+  })
+
+  it('reports loadFailed false when every read succeeds', async () => {
+    renderWithStore(<Consumer />, store)
+
+    await waitFor(() => expect(screen.getByTestId('isLoaded')).toHaveTextContent('true'))
+    expect(screen.getByTestId('loadFailed')).toHaveTextContent('false')
+  })
+
+  it('treats a consumer without a provider as loaded', () => {
+    render(<Consumer />)
+
+    expect(screen.getByTestId('isLoaded')).toHaveTextContent('true')
   })
 })

@@ -121,6 +121,7 @@ beforeEach(() => {
     accounts: [],
     balances: [],
     allMonths: [],
+    isLoaded: true,
     setAccounts: noop,
     setBalances: noop,
   })
@@ -259,6 +260,7 @@ function mockSummaryCard({ monthlySaving = 5000, yearMonthlySaving = null as num
     ],
     balances: [{ id: 1, accountId: 1, month: '2024-01', balance: 0 }],
     allMonths: ['2024-01'],
+    isLoaded: true,
     setAccounts: noop,
     setBalances: noop,
   })
@@ -294,6 +296,7 @@ function mockProjectedGwSummary({
     ],
     balances: [{ id: 1, accountId: 1, month: '2024-01', balance: gwBalance }],
     allMonths: ['2024-01'],
+    isLoaded: true,
     setAccounts: noop,
     setBalances: noop,
   })
