@@ -1,0 +1,139 @@
+.dsn-region {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+}
+
+.dsn-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-negative-border);
+  background: var(--color-negative-light);
+  color: var(--color-text);
+  animation: dsn-fade-in 150ms ease;
+}
+
+.dsn-banner__icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--color-negative);
+}
+
+.dsn-banner__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.dsn-banner__title,
+.dsn-banner__body,
+.dsn-banner__more {
+  margin: 0;
+}
+
+.dsn-banner__title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  line-height: 1.4;
+}
+
+.dsn-banner__body {
+  max-width: 68ch;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-normal);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.dsn-banner__more {
+  margin-top: 4px;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.dsn-banner__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.dsn-btn {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+
+.dsn-btn--primary {
+  border: 2px solid var(--accent);
+  background: var(--color-surface);
+}
+
+.dsn-btn:hover {
+  background: var(--color-surface-hover);
+}
+
+.dsn-btn:active {
+  background: var(--accent-light);
+}
+
+.dsn-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.dsn-btn[aria-disabled='true'] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@keyframes dsn-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsn-banner {
+    animation: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .dsn-banner {
+    flex-wrap: wrap;
+  }
+
+  .dsn-banner__text {
+    flex-basis: calc(100% - 32px);
+  }
+
+  .dsn-banner__actions {
+    flex-basis: 100%;
+  }
+
+  .dsn-btn {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dsn-banner__actions {
+    flex-direction: column;
+  }
+
+  .dsn-btn {
+    width: 100%;
+  }
+}

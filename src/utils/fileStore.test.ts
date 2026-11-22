@@ -22,11 +22,16 @@ class FakeFileHandle {
   async createWritable() {
     const dir = this.dir
     const name = this.name
+    dir.faults.createWritable?.(name)
+    let buffer: string | Blob = ''
     return {
       async write(data: string | Blob) {
-        dir.contents.set(name, data)
+        buffer = data
       },
-      async close() {},
+      async close() {
+        dir.faults.close?.(name)
+        dir.contents.set(name, buffer)
+      },
     }
   }
 }
@@ -35,6 +40,10 @@ class FakeDirectoryHandle {
   kind = 'dir' as const
   contents = new Map<string, string | Blob>()
   dirs = new Map<string, FakeDirectoryHandle>()
+  /** Hooks that throw to simulate disk and permission faults. */
+  faults: { createWritable?: (name: string) => void; close?: (name: string) => void } = {}
+  queryPermission = vi.fn<() => Promise<PermissionState>>(async () => 'granted')
+  requestPermission = vi.fn<() => Promise<PermissionState>>(async () => 'granted')
   constructor(public name = 'root') {}
 
   async getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<FakeDirectoryHandle> {
@@ -324,5 +333,402 @@ describe('FileSystemFileStore', () => {
     const { root, store } = await setup()
     root.contents.set('accounts.json', '{not json')
     await expect(store.readJSON('accounts.json', ['fallback'])).resolves.toEqual(['fallback'])
+  })
+})
+
+/* ── FileSystemFileStore: data safety net ────────────────────── */
+
+describe('FileSystemFileStore safety net', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const setup = async (enabled = true) => {
+    const root = new FakeDirectoryHandle()
+    const store = new FileSystemFileStore()
+    await store.init(asHandle(root))
+    store.configureSafety({ enabled })
+    return { root, store }
+  }
+
+  const diskError = (name: string) => () => {
+    throw new DOMException('boom', name)
+  }
+
+  const retry = async (store: FileSystemFileStore) => {
+    const outcome = store.retryFailed()
+    await vi.advanceTimersByTimeAsync(1)
+    return outcome
+  }
+
+  const settle = async (promise: Promise<unknown>) => {
+    const outcome = promise.then(
+      () => 'resolved',
+      () => 'rejected',
+    )
+    await vi.advanceTimersByTimeAsync(1000)
+    return outcome
+  }
+
+  describe('when not enabled', () => {
+    it('keeps the legacy 300ms debounce', async () => {
+      const { root, store } = await setup(false)
+      void store.writeJSON('accounts.json', [1])
+      await vi.advanceTimersByTimeAsync(200)
+      expect(root.contents.has('accounts.json')).toBe(false)
+      await vi.advanceTimersByTimeAsync(100)
+      expect(root.contents.has('accounts.json')).toBe(true)
+    })
+
+    it('does not track failures and still rejects the caller', async () => {
+      const { root, store } = await setup(false)
+      root.faults.close = diskError('NotAllowedError')
+      await expect(settle(store.writeJSON('accounts.json', [1]))).resolves.toBe('rejected')
+      expect(store.getSafetySnapshot().failed).toEqual([])
+      expect(store.getSafetySnapshot().permissionLost).toBe(false)
+    })
+
+    it('ignores retries and permission checks', async () => {
+      const { root, store } = await setup(false)
+      await store.checkPermission()
+      await retry(store)
+      expect(root.queryPermission).not.toHaveBeenCalled()
+    })
+  })
+
+  it('uses the shorter debounce once enabled', async () => {
+    const { root, store } = await setup()
+    void store.writeJSON('accounts.json', [1])
+    await vi.advanceTimersByTimeAsync(119)
+    expect(root.contents.has('accounts.json')).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(root.contents.has('accounts.json')).toBe(true)
+  })
+
+  it('starts the write for every pending path on flush without advancing timers', async () => {
+    const { root, store } = await setup()
+    const writes = [store.writeJSON('a.json', [1]), store.writeCSV('b.csv', [['x']])]
+    expect(store.hasUnsavedWork()).toBe(true)
+    await store.flush()
+    await Promise.all(writes)
+    expect(root.contents.has('a.json')).toBe(true)
+    expect(root.contents.has('b.csv')).toBe(true)
+    expect(store.hasUnsavedWork()).toBe(false)
+  })
+
+  it('reports in-flight writes as unsaved work', async () => {
+    const { root, store } = await setup()
+    let release: () => void = () => {}
+    const gate = new Promise<void>(resolve => (release = resolve))
+    const original = root.getFileHandle.bind(root)
+    root.getFileHandle = async (name, options) => {
+      await gate
+      return original(name, options)
+    }
+    const write = store.writeJSON('a.json', [1])
+    await vi.advanceTimersByTimeAsync(120)
+    expect(store.hasUnsavedWork()).toBe(true)
+    release()
+    await write
+    expect(store.hasUnsavedWork()).toBe(false)
+  })
+
+  it('does not report unsaved work when nothing is outstanding', async () => {
+    const { store } = await setup()
+    expect(store.hasUnsavedWork()).toBe(false)
+  })
+
+  describe('write failures', () => {
+    it('records the failure, keeps the cached edit and still rejects the caller', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('InvalidStateError')
+      await expect(settle(store.writeJSON('accounts.json', [{ id: 1 }]))).resolves.toBe('rejected')
+      expect(store.getSafetySnapshot()).toEqual({
+        failed: [{ path: 'accounts.json', kind: 'other' }],
+        permissionLost: false,
+      })
+      await expect(store.readJSON('accounts.json', [])).resolves.toEqual([{ id: 1 }])
+      expect(root.contents.get('accounts.json')).toBe('')
+      expect(store.hasUnsavedWork()).toBe(true)
+    })
+
+    it.each([
+      ['QuotaExceededError', 'disk-full'],
+      ['NotAllowedError', 'permission'],
+      ['SecurityError', 'permission'],
+    ] as const)('classifies %s as %s', async (name, kind) => {
+      const { root, store } = await setup()
+      root.faults.createWritable = diskError(name)
+      await settle(store.writeJSON('accounts.json', [1]))
+      expect(store.getSafetySnapshot().failed).toEqual([{ path: 'accounts.json', kind }])
+      expect(store.getSafetySnapshot().permissionLost).toBe(kind === 'permission')
+    })
+
+    it('notifies safety subscribers and stops after unsubscribe', async () => {
+      const { root, store } = await setup()
+      const cb = vi.fn()
+      const unsubscribe = store.subscribeSafety(cb)
+      root.faults.close = diskError('InvalidStateError')
+      await settle(store.writeJSON('a.json', [1]))
+      expect(cb).toHaveBeenCalledTimes(1)
+      unsubscribe()
+      await settle(store.writeJSON('b.json', [1]))
+      expect(cb).toHaveBeenCalledTimes(1)
+    })
+
+    it('survives a throwing safety subscriber', async () => {
+      const { root, store } = await setup()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      store.subscribeSafety(() => {
+        throw new Error('bad subscriber')
+      })
+      root.faults.close = diskError('InvalidStateError')
+      await settle(store.writeJSON('a.json', [1]))
+      expect(errorSpy).toHaveBeenCalledWith('FileStore safety subscriber error:', expect.any(Error))
+      errorSpy.mockRestore()
+    })
+
+    it('keeps the snapshot reference stable until something changes', async () => {
+      const { root, store } = await setup()
+      const before = store.getSafetySnapshot()
+      expect(store.getSafetySnapshot()).toBe(before)
+      root.faults.close = diskError('InvalidStateError')
+      await settle(store.writeJSON('a.json', [1]))
+      const failed = store.getSafetySnapshot()
+      expect(failed).not.toBe(before)
+      await settle(store.writeJSON('a.json', [2]))
+      expect(store.getSafetySnapshot()).toBe(failed)
+    })
+
+    it('retries the failed payload and clears the issue on success', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('InvalidStateError')
+      await settle(store.writeJSON('accounts.json', [{ id: 1 }]))
+      root.faults.close = undefined
+      await retry(store)
+      expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual([{ id: 1 }])
+      expect(store.getSafetySnapshot().failed).toEqual([])
+      expect(store.hasUnsavedWork()).toBe(false)
+    })
+
+    it('keeps the issue when the retry fails again', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('QuotaExceededError')
+      await settle(store.writeJSON('accounts.json', [1]))
+      await expect(retry(store)).resolves.toBeUndefined()
+      expect(store.getSafetySnapshot().failed).toEqual([{ path: 'accounts.json', kind: 'disk-full' }])
+    })
+
+    it('replaces the failed payload with a newer edit so the older value is never written last', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('InvalidStateError')
+      await settle(store.writeJSON('accounts.json', ['old']))
+      root.faults.close = undefined
+      void store.writeJSON('accounts.json', ['new'])
+      await retry(store)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual(['new'])
+      expect(store.getSafetySnapshot().failed).toEqual([])
+    })
+
+    it('retries the newest payload when an edit lands after the failure', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('InvalidStateError')
+      await settle(store.writeJSON('accounts.json', ['old']))
+      void store.writeJSON('accounts.json', ['newer']).catch(() => {})
+      root.faults.close = undefined
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(JSON.parse(String(root.contents.get('accounts.json')))).toEqual(['newer'])
+    })
+
+    it('uses the newer pending payload when an in-flight write fails', async () => {
+      const { root, store } = await setup()
+      let release: () => void = () => {}
+      const gate = new Promise<void>(resolve => (release = resolve))
+      root.faults.close = diskError('InvalidStateError')
+      const original = root.getFileHandle.bind(root)
+      root.getFileHandle = async (name, options) => {
+        await gate
+        return original(name, options)
+      }
+      const first = store.writeJSON('a.json', ['first']).catch(() => {})
+      await vi.advanceTimersByTimeAsync(120)
+      const second = store.writeJSON('a.json', ['second']).catch(() => {})
+      release()
+      await vi.advanceTimersByTimeAsync(1000)
+      await Promise.all([first, second])
+      root.faults.close = undefined
+      await retry(store)
+      expect(JSON.parse(String(root.contents.get('a.json')))).toEqual(['second'])
+    })
+
+    it('does not clear a failure while a newer write is still pending', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('InvalidStateError')
+      await settle(store.writeJSON('a.json', [1]))
+      root.faults.close = undefined
+      let release: () => void = () => {}
+      const gate = new Promise<void>(resolve => (release = resolve))
+      const original = root.getFileHandle.bind(root)
+      root.getFileHandle = async (name, options) => {
+        await gate
+        return original(name, options)
+      }
+      const retrying = store.retryFailed()
+      await vi.advanceTimersByTimeAsync(1)
+      void store.writeJSON('a.json', [2])
+      release()
+      await retrying
+      expect(store.getSafetySnapshot().failed).toEqual([{ path: 'a.json', kind: 'other' }])
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(store.getSafetySnapshot().failed).toEqual([])
+    })
+
+    it('skips retrying a path that already has a pending write', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('InvalidStateError')
+      await settle(store.writeJSON('a.json', [1]))
+      root.faults.close = undefined
+      const pendingWrite = store.writeJSON('a.json', [2])
+      await retry(store)
+      expect(root.contents.get('a.json')).toBe('')
+      await vi.advanceTimersByTimeAsync(1000)
+      await pendingWrite
+      expect(JSON.parse(String(root.contents.get('a.json')))).toEqual([2])
+    })
+
+    it('drops a failure when the file is deleted', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('InvalidStateError')
+      await settle(store.writeJSON('a.json', [1]))
+      await store.delete('a.json')
+      expect(store.getSafetySnapshot().failed).toEqual([])
+    })
+
+    it('clears failures and permission state when the safety net is turned off', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('NotAllowedError')
+      await settle(store.writeJSON('a.json', [1]))
+      store.configureSafety({ enabled: false })
+      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false })
+    })
+
+    it('clears failures when a new folder is connected', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('InvalidStateError')
+      await settle(store.writeJSON('a.json', [1]))
+      await store.init(asHandle(new FakeDirectoryHandle()))
+      expect(store.getSafetySnapshot().failed).toEqual([])
+    })
+  })
+
+  describe('permission', () => {
+    it('flags permission loss when the focus check is not granted', async () => {
+      const { root, store } = await setup()
+      root.queryPermission.mockResolvedValue('prompt')
+      await store.checkPermission()
+      expect(root.queryPermission).toHaveBeenCalledWith({ mode: 'readwrite' })
+      expect(store.getSafetySnapshot().permissionLost).toBe(true)
+    })
+
+    it('flags permission loss when the check reports denied', async () => {
+      const { root, store } = await setup()
+      root.queryPermission.mockResolvedValue('denied')
+      await store.checkPermission()
+      expect(store.getSafetySnapshot().permissionLost).toBe(true)
+    })
+
+    it('clears permission loss and retries failed writes once access is back', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('NotAllowedError')
+      await settle(store.writeJSON('a.json', [1]))
+      expect(store.getSafetySnapshot().permissionLost).toBe(true)
+      root.faults.close = undefined
+      const checking = store.checkPermission()
+      await vi.advanceTimersByTimeAsync(1)
+      await checking
+      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false })
+      expect(root.contents.has('a.json')).toBe(true)
+    })
+
+    it('does nothing on a granted check when everything is fine', async () => {
+      const { store } = await setup()
+      const before = store.getSafetySnapshot()
+      await store.checkPermission()
+      expect(store.getSafetySnapshot()).toBe(before)
+    })
+
+    it('does nothing when the browser has no queryPermission', async () => {
+      const { root, store } = await setup()
+      ;(root as { queryPermission?: unknown }).queryPermission = undefined
+      await store.checkPermission()
+      expect(store.getSafetySnapshot().permissionLost).toBe(false)
+    })
+
+    it('does nothing before a folder is connected', async () => {
+      const store = new FileSystemFileStore()
+      store.configureSafety({ enabled: true })
+      await store.checkPermission()
+      expect(store.getSafetySnapshot().permissionLost).toBe(false)
+    })
+
+    it('logs and ignores a failing permission query', async () => {
+      const { root, store } = await setup()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      root.queryPermission.mockRejectedValue(new Error('nope'))
+      await store.checkPermission()
+      expect(store.getSafetySnapshot().permissionLost).toBe(false)
+      expect(errorSpy).toHaveBeenCalled()
+      errorSpy.mockRestore()
+    })
+
+    it('ignores a permission result that arrives after the safety net was turned off', async () => {
+      const { root, store } = await setup()
+      let answer: (state: PermissionState) => void = () => {}
+      root.queryPermission.mockReturnValue(new Promise(resolve => (answer = resolve)))
+      const check = store.checkPermission()
+      store.configureSafety({ enabled: false })
+      answer('denied')
+      await check
+      expect(store.getSafetySnapshot().permissionLost).toBe(false)
+    })
+
+    it('requests permission on reconnect and retries failed writes when granted', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('NotAllowedError')
+      await settle(store.writeJSON('a.json', [1]))
+      root.faults.close = undefined
+      const reconnecting = store.requestReconnect()
+      await vi.advanceTimersByTimeAsync(1)
+      await expect(reconnecting).resolves.toBe('granted')
+      expect(root.requestPermission).toHaveBeenCalledWith({ mode: 'readwrite' })
+      expect(store.getSafetySnapshot()).toEqual({ failed: [], permissionLost: false })
+      expect(root.contents.has('a.json')).toBe(true)
+    })
+
+    it('keeps the permission issue when reconnect is denied', async () => {
+      const { root, store } = await setup()
+      root.faults.close = diskError('NotAllowedError')
+      await settle(store.writeJSON('a.json', [1]))
+      root.requestPermission.mockResolvedValue('denied')
+      await expect(store.requestReconnect()).resolves.toBe('denied')
+      expect(store.getSafetySnapshot().permissionLost).toBe(true)
+      expect(store.getSafetySnapshot().failed).toHaveLength(1)
+    })
+
+    it('treats a browser without requestPermission as granted', async () => {
+      const { root, store } = await setup()
+      ;(root as { requestPermission?: unknown }).requestPermission = undefined
+      await expect(store.requestReconnect()).resolves.toBe('granted')
+    })
+
+    it('reports denied when no folder is connected', async () => {
+      const store = new FileSystemFileStore()
+      await expect(store.requestReconnect()).resolves.toBe('denied')
+    })
   })
 })

@@ -19,6 +19,8 @@ import { FileStoreProvider, useFileStore, isDemoActive } from './contexts/FileSt
 import { GoalsProvider, useGoals } from './contexts/GoalsContext'
 import { LayoutProvider, useLayout } from './contexts/LayoutContext'
 import { FlagProvider } from './flags/FlagContext'
+import { SafetyNetProvider } from './contexts/SafetyNetContext'
+import DataSafetyBanner from './components/DataSafetyBanner'
 import ErrorBoundary from './components/ErrorBoundary'
 import FolderPicker from './components/FolderPicker'
 import UndoToast from './components/UndoToast'
@@ -46,10 +48,11 @@ import { composeProviders } from './utils/composeProviders'
  *   GoalsProvider (uses useProfile hook, not a context)
  *   DataProvider
  *   FlagProvider
+ *   SafetyNetProvider (reads the data-safety-net flag, so it sits inside FlagProvider)
  */
 const OuterProviders = composeProviders(SettingsProvider, LayoutProvider)
 
-const InnerProviders = composeProviders(GoalsProvider, DataProvider, FlagProvider)
+const InnerProviders = composeProviders(GoalsProvider, DataProvider, FlagProvider, SafetyNetProvider)
 
 const AppShell: FC = () => {
   const navigate = useNavigate()
@@ -165,6 +168,7 @@ const AppShell: FC = () => {
             <button onClick={exitDemo}>Exit Demo</button>
           </div>
         )}
+        <DataSafetyBanner />
         <Suspense
           fallback={
             <div role="status" aria-label="Loading page" className="loading-fallback">
