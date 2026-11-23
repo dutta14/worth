@@ -108,8 +108,8 @@ export const SUB_PATHS: Record<string, string> = {
 /** The h1 text rendered on each route (regex tolerates the dynamic Home greeting). */
 export const PAGE_HEADINGS: Record<PrimaryNavLink | 'Drive', RegExp> = {
   Home: /^Good (morning|afternoon|evening)/,
-  Planning: /^Planning$/,
-  Wealth: /^Wealth$/,
-  Cashflow: /^Cashflow$/,
+  Planning: /^Goals$/,
+  Wealth: /^Dashboard$/,
+  Cashflow: /^Overview$/,
   Drive: /^Drive$/,
 }

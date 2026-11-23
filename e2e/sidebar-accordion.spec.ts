@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures/base'
 import type { Page } from '@playwright/test'
 import { NavigationPage } from './pages/navigation.page'
-import { NAV_GROUP_CHILDREN, NavGroupName, PAGE_HEADINGS, SUB_PATHS } from './fixtures/nav-data'
+import { NAV_GROUP_CHILDREN, NavGroupName, SUB_PATHS } from './fixtures/nav-data'
 
 /**
  * Sidebar accordion navigation: Planning, Wealth and Cashflow are accordion groups whose
@@ -21,11 +21,6 @@ async function seedOnce(page: Page): Promise<void> {
 }
 
 const GROUPS = Object.keys(NAV_GROUP_CHILDREN) as NavGroupName[]
-const GROUP_HEADING: Record<NavGroupName, RegExp> = {
-  Planning: PAGE_HEADINGS.Planning,
-  Wealth: PAGE_HEADINGS.Wealth,
-  Cashflow: PAGE_HEADINGS.Cashflow,
-}
 
 test.describe('Sidebar accordion navigation', () => {
   test.beforeEach(async ({ page }) => {
@@ -56,7 +51,9 @@ test.describe('Sidebar accordion navigation', () => {
   })
 
   for (const group of GROUPS) {
-    test(`${group}: every sub-item opens its route under the right heading with aria-current`, async ({ page }) => {
+    test(`${group}: every sub-item opens its route under a heading named after the sub-item, with aria-current`, async ({
+      page,
+    }) => {
       const nav = new NavigationPage(page)
       await nav.goto('/')
       await nav.expandGroup(group)
@@ -64,7 +61,7 @@ test.describe('Sidebar accordion navigation', () => {
       for (const label of NAV_GROUP_CHILDREN[group]) {
         await nav.subLink(group, label).click()
         await expect(page).toHaveURL(new RegExp(`#${SUB_PATHS[label].replace('/', '\\/')}`))
-        await expect(page.getByRole('heading', { level: 1, name: GROUP_HEADING[group] })).toBeVisible()
+        await expect(page.getByRole('heading', { level: 1, name: label, exact: true })).toBeVisible()
         await expect(nav.subLink(group, label)).toHaveAttribute('aria-current', 'page')
         await expect(page.locator('[aria-current="page"]')).toHaveCount(1)
         await nav.expectActive(group)
@@ -166,7 +163,7 @@ test.describe('Sidebar accordion navigation', () => {
 
     await nav.link('Cashflow').click()
     await expect(page).toHaveURL(/#\/budget\/cashflow$/)
-    await expect(page.getByRole('heading', { level: 1, name: 'Cashflow' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
     await expect(nav.sidebar.getByRole('link')).toHaveCount(0)
 
     await nav.expandSidebar()
@@ -188,7 +185,7 @@ test.describe('Sidebar accordion navigation', () => {
     await nav.subLink('Planning', 'Taxes').click()
     await expect(page).toHaveURL(/#\/taxes$/)
     await expect(nav.sidebar).toHaveCount(0)
-    await expect(page.getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible()
 
     await nav.toggleExpand.click()
     await expect(nav.subLink('Planning', 'Taxes')).toHaveAttribute('aria-current', 'page')

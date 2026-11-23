@@ -75,7 +75,7 @@ test.describe('Keyboard navigation, focus, ErrorBoundary, perf (#144)', () => {
 
     await page.keyboard.press('Enter')
     await expect(page).toHaveURL(/#\/goal\/plans$/)
-    await expect(page.getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible()
     await expect(kb.goalsLink).toHaveAttribute('aria-current', 'true')
   })
 
@@ -128,7 +128,7 @@ test.describe('Keyboard navigation, focus, ErrorBoundary, perf (#144)', () => {
 
     await kb.goalsLink.click()
     await expect(page).toHaveURL(/#\/goal\/plans$/)
-    await expect(page.getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible()
 
     const info = await kb.getActiveElementInfo()
     expect(info.tag).not.toBe('BODY')
@@ -168,7 +168,7 @@ test.describe('Keyboard navigation, focus, ErrorBoundary, perf (#144)', () => {
     })
 
     await kb.goto('/goal')
-    await expect(page.getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible()
 
     const alert = page.locator('[role="alert"]', { hasText: 'Retry' })
     const errorRendered = await alert.count()
@@ -196,7 +196,7 @@ test.describe('Keyboard navigation, focus, ErrorBoundary, perf (#144)', () => {
         '[#144 test 33] ErrorBoundary did not render under storage corruption; ' +
           'contexts catch JSON.parse internally. Documented as a known gap.',
       )
-      await expect(page.getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
+      await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible()
     }
   })
 
@@ -252,7 +252,7 @@ test.describe('Keyboard navigation, focus, ErrorBoundary, perf (#144)', () => {
     await page.keyboard.press('Enter')
 
     await expect(page).toHaveURL(/#\/budget(?:\/cashflow)?$/)
-    await expect(page.getByRole('heading', { level: 1, name: 'Cashflow' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
     await expect(kb.budgetLink).toHaveAttribute('aria-current', 'true')
   })
 
@@ -263,9 +263,9 @@ test.describe('Keyboard navigation, focus, ErrorBoundary, perf (#144)', () => {
     await kb.goto('/')
 
     const transitions: Array<{ from: string; to: 'Wealth' | 'Cashflow' | 'Planning'; heading: RegExp }> = [
-      { from: 'Home', to: 'Wealth', heading: /^Wealth$/ },
-      { from: 'Wealth', to: 'Cashflow', heading: /^Cashflow$/ },
-      { from: 'Cashflow', to: 'Planning', heading: /^Planning$/ },
+      { from: 'Home', to: 'Wealth', heading: /^Dashboard$/ },
+      { from: 'Wealth', to: 'Cashflow', heading: /^Overview$/ },
+      { from: 'Cashflow', to: 'Planning', heading: /^Goals$/ },
     ]
 
     const elapsed: number[] = []

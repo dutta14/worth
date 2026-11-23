@@ -95,10 +95,10 @@ afterEach(() => {
 
 describe('Taxes', () => {
   describe('page header', () => {
-    it('shows the Planning heading without an in-page section tab bar', async () => {
+    it('shows the Taxes heading without an in-page section tab bar', async () => {
       renderTaxes('/taxes')
 
-      expect(await screen.findByRole('heading', { level: 1, name: 'Planning' })).toBeInTheDocument()
+      expect(await screen.findByRole('heading', { level: 1, name: 'Taxes' })).toBeInTheDocument()
       expect(screen.queryByRole('navigation', { name: 'Planning sections' })).not.toBeInTheDocument()
       expect(screen.queryByRole('link', { name: 'Goals' })).not.toBeInTheDocument()
     })

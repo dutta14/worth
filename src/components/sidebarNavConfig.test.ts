@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { NAV_GROUPS, getActiveChildId, getNavGroup, isNavGroupId } from './sidebarNavConfig'
+import { NAV_GROUPS, getActiveChildId, getNavGroup, getNavTitle, isNavGroupId } from './sidebarNavConfig'
 
 const activeChild = (groupId: 'goal' | 'net-worth' | 'budget', pathname: string) => {
   const group = getNavGroup(groupId)
@@ -98,6 +98,31 @@ describe('sidebarNavConfig', () => {
     it('does not claim paths outside Cashflow', () => {
       expect(activeChild('budget', '/goal/plans')).toBeUndefined()
       expect(activeChild('budget', '/budgetx')).toBeUndefined()
+    })
+  })
+
+  describe('getNavTitle', () => {
+    it.each([
+      ['goal', '/goal', 'Goals'],
+      ['goal', '/goal/leverage', 'Leverage'],
+      ['goal', '/goal/paydown', 'Pay Down'],
+      ['goal', '/goal/calculator', 'FIRE Calculator'],
+      ['goal', '/taxes', 'Taxes'],
+      ['net-worth', '/net-worth', 'Dashboard'],
+      ['net-worth', '/net-worth/allocation', 'Allocation'],
+      ['net-worth', '/net-worth/growth/income', 'Growth'],
+      ['net-worth', '/net-worth/review/2025', 'Review'],
+      ['budget', '/budget/cashflow', 'Overview'],
+      ['budget', '/budget/spreadsheet', 'Spreadsheet'],
+      ['budget', '/budget/groups', 'Groups'],
+      ['budget', '/transactions', 'Transactions'],
+    ] as const)('titles %s %s as "%s"', (groupId, pathname, expected) => {
+      expect(getNavTitle(groupId, pathname)).toBe(expected)
+    })
+
+    it('falls back to the group label when no sub-item matches', () => {
+      expect(getNavTitle('budget', '/goal/plans')).toBe('Cashflow')
+      expect(getNavTitle('goal', '/net-worth/dashboard')).toBe('Planning')
     })
   })
 })
