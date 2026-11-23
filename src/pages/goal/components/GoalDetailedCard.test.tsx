@@ -385,6 +385,20 @@ describe('GoalDetailedCard savings override', () => {
     expect(lastCall?.[5]).toBe(2)
   })
 
+  it('still runs the projection when savings are zero so existing growth can reach FI', async () => {
+    mockedGetSaveRate.mockResolvedValue({ saveRate: 0, annualSavings: 0, monthsOfData: 12 })
+    mockedProjectFIDateWithDrawdown.mockReturnValue({
+      date: new Date(2044, 10, 1),
+      months: 214,
+      requiredCorpus: 2_000_000,
+    })
+    await renderCard({ fiGoal: 2_000_000 })
+
+    expect(mockedProjectFIDateWithDrawdown.mock.calls.at(-1)?.[1]).toBe(0)
+    expect(screen.queryByText(/not reachable/i)).not.toBeInTheDocument()
+    expect(getProjectionResultText()).toMatch(/\(\d+ years?/)
+  })
+
   it('shows that FI is not reachable when the projection returns null', async () => {
     mockedProjectFIDateWithDrawdown.mockReturnValueOnce(null)
     await renderCard({ fiGoal: 2_000_000 })

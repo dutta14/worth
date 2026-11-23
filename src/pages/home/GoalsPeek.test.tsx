@@ -272,11 +272,11 @@ describe('GoalsPeek projection — goal reached', () => {
    ═══════════════════════════════════════════════════════════════ */
 
 describe('GoalsPeek projection — not reachable', () => {
-  it('shows "Not reachable at current rate" when savings are zero', async () => {
+  it('shows "Not reachable at current rate" when savings are zero and there is no balance', async () => {
     const fiAcct = makeAccount(1, 'fi')
     mockedUseData.mockReturnValue({
       accounts: [fiAcct],
-      balances: [makeBalance(1, '2025-01', 500_000)],
+      balances: [makeBalance(1, '2025-01', 0)],
       allMonths: ['2025-01'],
       isLoaded: true,
       setAccounts: () => {},
@@ -287,11 +287,11 @@ describe('GoalsPeek projection — not reachable', () => {
     expect(await screen.findByText('Not reachable at current rate')).toBeInTheDocument()
   })
 
-  it('shows "Not reachable at current rate" when savings are negative', async () => {
+  it('shows "Not reachable at current rate" when savings are negative and there is no balance', async () => {
     const fiAcct = makeAccount(1, 'fi')
     mockedUseData.mockReturnValue({
       accounts: [fiAcct],
-      balances: [makeBalance(1, '2025-01', 500_000)],
+      balances: [makeBalance(1, '2025-01', 0)],
       allMonths: ['2025-01'],
       isLoaded: true,
       setAccounts: () => {},
@@ -335,6 +335,24 @@ describe('GoalsPeek projection — fiGoal is 0', () => {
     expect(screen.queryByText(/Goal reached!/)).not.toBeInTheDocument()
     expect(screen.queryByText(/not reachable/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/FI by/)).not.toBeInTheDocument()
+  })
+})
+
+describe('GoalsPeek projection — zero savings', () => {
+  it('shows an FI date when savings are zero but the balance compounds to the goal', async () => {
+    const fiAcct = makeAccount(1, 'fi')
+    mockedUseData.mockReturnValue({
+      accounts: [fiAcct],
+      balances: [makeBalance(1, '2025-01', 500_000)],
+      allMonths: ['2025-01'],
+      isLoaded: true,
+      setAccounts: () => {},
+      setBalances: () => {},
+    })
+    mockedGetSaveRate.mockResolvedValue({ annualSavings: 0, saveRate: 0, monthsOfData: 12 })
+    renderPeek()
+    expect(await screen.findByText(/FI by/)).toBeInTheDocument()
+    expect(screen.queryByText(/not reachable/i)).not.toBeInTheDocument()
   })
 })
 

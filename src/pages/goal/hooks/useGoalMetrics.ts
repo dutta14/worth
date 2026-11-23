@@ -136,9 +136,9 @@ export function useGoalMetrics(
         if (fiTotal >= fiTarget) {
           projectedState = 'reached'
           projectedFILabel = '🎉 Goal reached!'
-        } else if (!annualSavings || annualSavings <= 0) {
-          projectedState = annualSavings === null ? 'no-budget' : 'not-reachable'
-          projectedFILabel = annualSavings === null ? 'Add budget data →' : 'Not reachable at current rate'
+        } else if (annualSavings === null) {
+          projectedState = 'no-budget'
+          projectedFILabel = 'Add budget data →'
         } else if (goal.projectedFIDateISO) {
           projectedState = 'projected'
           const [yr, mo] = goal.projectedFIDateISO.split('-').map(Number)
@@ -151,46 +151,41 @@ export function useGoalMetrics(
               ? Math.max(0, budgetSaveRate.totalIncome - goal.annualSpending)
               : annualSavings
           const fiAnnualSavings = Math.max(0, effectiveAnnualSavings - gwMonthly * 12)
-          if (fiAnnualSavings <= 0) {
+          const endOfLife = goal.goalEndYear ? new Date(goal.goalEndYear) : null
+          let monthlyExpenseNow: number
+          if (goal.monthlyExpenseRetirement && goal.monthlyExpenseRetirement > 0) {
+            const retYear = by + goal.retirementAge
+            const yearsToRetirement = retYear - new Date().getFullYear()
+            monthlyExpenseNow = goal.monthlyExpenseRetirement / Math.pow(1 + inflation / 100, yearsToRetirement)
+          } else {
+            monthlyExpenseNow = (goal.expenseValue || 0) / 12
+          }
+          const ageBoundaryDate = new Date(by + ageBoundary, bm - 1, 1)
+
+          const result =
+            endOfLife && monthlyExpenseNow > 0
+              ? projectFIDateWithDrawdown(
+                  fiTotal,
+                  fiAnnualSavings,
+                  preBoundaryGrowth,
+                  postBoundaryGrowth,
+                  monthlyExpenseNow,
+                  inflation,
+                  endOfLife,
+                  ageBoundaryDate,
+                )
+              : projectFIDate(fiTotal, fiTarget, fiAnnualSavings, preBoundaryGrowth)
+
+          if (result && result.months === 0) {
+            projectedState = 'reached'
+            projectedFILabel = '🎉 Goal reached!'
+          } else if (result) {
+            projectedState = 'projected'
+            projectedFIDate = result.date
+            projectedFILabel = result.date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+          } else {
             projectedState = 'not-reachable'
             projectedFILabel = 'Not reachable at current rate'
-          } else {
-            const endOfLife = goal.goalEndYear ? new Date(goal.goalEndYear) : null
-            let monthlyExpenseNow: number
-            if (goal.monthlyExpenseRetirement && goal.monthlyExpenseRetirement > 0) {
-              const retYear = by + goal.retirementAge
-              const yearsToRetirement = retYear - new Date().getFullYear()
-              monthlyExpenseNow = goal.monthlyExpenseRetirement / Math.pow(1 + inflation / 100, yearsToRetirement)
-            } else {
-              monthlyExpenseNow = (goal.expenseValue || 0) / 12
-            }
-            const ageBoundaryDate = new Date(by + ageBoundary, bm - 1, 1)
-
-            const result =
-              endOfLife && monthlyExpenseNow > 0
-                ? projectFIDateWithDrawdown(
-                    fiTotal,
-                    fiAnnualSavings,
-                    preBoundaryGrowth,
-                    postBoundaryGrowth,
-                    monthlyExpenseNow,
-                    inflation,
-                    endOfLife,
-                    ageBoundaryDate,
-                  )
-                : projectFIDate(fiTotal, fiTarget, fiAnnualSavings, preBoundaryGrowth)
-
-            if (result && result.months === 0) {
-              projectedState = 'reached'
-              projectedFILabel = '🎉 Goal reached!'
-            } else if (result) {
-              projectedState = 'projected'
-              projectedFIDate = result.date
-              projectedFILabel = result.date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-            } else {
-              projectedState = 'not-reachable'
-              projectedFILabel = 'Not reachable at current rate'
-            }
           }
         }
       }

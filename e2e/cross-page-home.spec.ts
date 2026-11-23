@@ -102,10 +102,11 @@ test.describe('Cross-page: Home Dashboard Integration (#151)', () => {
       await expect(fallback).toHaveText('Add budget data →')
     })
 
-    test('3. GoalsPeek shows "Not reachable at current rate" when annual savings ≤ 0', async ({ page }) => {
-      // GoalsPeek.tsx:151–153 sets fiProjectedType='not-reachable' when
-      // budgetSaveRate.annualSavings <= 0 → class .goals-peek-projected--warn.
+    test('3. GoalsPeek shows "Not reachable at current rate" when there is no balance and no savings', async ({
+      page,
+    }) => {
       await seedCrossPage(page, {
+        balances: [],
         budgetSummary: { annualSavings: 0, saveRate: 0, monthsOfData: 3 },
       })
       await gotoHome(page)
@@ -113,6 +114,17 @@ test.describe('Cross-page: Home Dashboard Integration (#151)', () => {
       const warn = page.locator('.home-card--goals .goals-peek-projected--warn')
       await expect(warn).toBeVisible()
       await expect(warn).toHaveText('Not reachable at current rate')
+    })
+
+    test('3b. GoalsPeek shows an FI date at zero savings when the balance compounds to the goal', async ({ page }) => {
+      await seedCrossPage(page, {
+        budgetSummary: { annualSavings: 0, saveRate: 0, monthsOfData: 3 },
+      })
+      await gotoHome(page)
+
+      const projected = page.locator('.home-card--goals .goals-peek-projected').first()
+      await expect(projected).toContainText('FI by')
+      await expect(page.locator('.home-card--goals .goals-peek-projected--warn')).toHaveCount(0)
     })
 
     test('4. Goal detailed card shows savings pace prose with budget data', async ({ page }) => {

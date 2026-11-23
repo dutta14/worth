@@ -78,7 +78,8 @@ export function projectFIDate(
 ): { date: Date; months: number } | null {
   if (fiGoal <= 0) return null
   if (currentNetWorth >= fiGoal) return { date: new Date(), months: 0 }
-  if (annualSavings <= 0 && currentNetWorth < fiGoal) return null
+  // Without new savings the balance can still compound to the goal, so only give up when it cannot grow either.
+  if (annualSavings <= 0 && growthRate <= 0) return null
 
   const monthlyRate = growthRate / 100 / 12
   const monthlySavings = annualSavings / 12
