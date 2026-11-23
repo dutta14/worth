@@ -299,8 +299,12 @@ test.describe('Category budget targets', () => {
     await page.reload()
     await expect(targetButton(page, 'Dining')).toHaveText('$777')
 
-    // The flag config and the Google Fonts stylesheet are the only expected external requests.
-    const allowed = ['https://api.github.com/repos/dutta14/worth/', 'https://fonts.googleapis.com/']
+    // The flag config and the Google Fonts stylesheet and font files are the only expected external requests.
+    const allowed = [
+      'https://api.github.com/repos/dutta14/worth/',
+      'https://fonts.googleapis.com/',
+      'https://fonts.gstatic.com/',
+    ]
     expect([...new Set(external)].filter(url => !allowed.some(prefix => url.startsWith(prefix)))).toEqual([])
     expect(withBody).toEqual([])
     expect(external.some(url => url.includes('777'))).toBe(false)

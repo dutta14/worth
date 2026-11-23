@@ -159,7 +159,7 @@ The chosen folder handle is persisted in IndexedDB via `src/utils/handlePersiste
 
 - One CSS file per component/page in `src/styles/`.
 - Dark mode via `body.dark` class.
-- **Modern design system** — `modern-design.css`, scoped entirely under `body.modern-design`. Includes Inter font, translucent borders, composite shadows, premium inputs, dark surface layering, glass sidebar, pill tabs, accent glow, and borderless tables. Toggled via the `modern-design` feature flag (currently 100% rollout).
+- **Modern design system** — `modern-design.css`, scoped entirely under `body.modern-design`. Includes Inter font, translucent borders, composite shadows, premium inputs, dark surface layering, glass sidebar, pill tabs, accent glow, and borderless tables. Toggled via the `modern-design` feature flag (currently 100% rollout, and on by default so it still applies when the rollout config cannot be fetched).
 - Accent theming via `--accent` and `--accent-rgb` CSS custom properties.
 - `colorThemes.css` contains only base `:root` and `body.dark` variables (the 9-color theme picker was removed).
 - Responsive breakpoints: desktop (1200px+), tablet (768–1199px), mobile (≤900px sidebar collapse).

@@ -3,7 +3,7 @@ import { defineFlag } from './flagSystem'
 export const FLAGS = {
   MODERN_DESIGN: defineFlag('modern-design', {
     type: 'boolean',
-    default: false,
+    default: true,
     description: 'Enables the modernized CSS design system',
     temporary: true,
   }),
