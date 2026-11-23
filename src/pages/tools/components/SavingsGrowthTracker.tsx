@@ -1,5 +1,5 @@
 import { FC, useMemo, useState, useEffect, useCallback } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { loadBudgetStore, getIncomeGroups } from '../../budget/utils/budgetStorage'
 import { parseCSV } from '../../budget/utils/csvParser'
 import { useData } from '../../../contexts/DataContext'
@@ -402,6 +402,13 @@ const SavingsGrowthTracker: FC = () => {
                 <h2 className="sgt-year-card__year" data-sgt-field="year">
                   {row.year}
                 </h2>
+                <Link
+                  className="sgt-year-card__review"
+                  to={`/net-worth/review/${row.year}`}
+                  aria-label={`View review for ${row.year}`}
+                >
+                  View review
+                </Link>
                 {tab === 'savings' ? (
                   <div className="sgt-year-card__networth">
                     <span className="sgt-year-card__networth-label">Net Worth</span>
