@@ -135,14 +135,16 @@ test.describe('Goal Projections E2E', () => {
   })
 
   test.describe('Not Reachable State', () => {
-    test('shows "Not reachable at current rate" when annual savings is 0', async ({ page }) => {
+    test('still projects an FI date when annual savings is 0 but the balance compounds to the goal', async ({
+      page,
+    }) => {
       await seedNotReachableState(page)
       const home = new HomePage(page)
       await home.goto()
 
-      const warnState = page.locator('.goals-peek-projected--warn')
-      await expect(warnState).toBeVisible()
-      await expect(warnState).toContainText('Not reachable')
+      const projected = page.locator('.goals-peek-projected').first()
+      await expect(projected).toContainText('FI by')
+      await expect(page.locator('.goals-peek-projected--warn')).toHaveCount(0)
     })
 
     test('shows "Not reachable" when savings positive but insufficient', async ({ page }) => {

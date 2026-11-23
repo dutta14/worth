@@ -230,12 +230,23 @@ describe('projectFIDate', () => {
     expect(projectFIDate(100_000, -100, 50_000, 8)).toBeNull()
   })
 
-  it('returns null when annualSavings is 0 and net worth is below fiGoal', () => {
-    expect(projectFIDate(100_000, 500_000, 0, 8)).toBeNull()
+  it('reaches fiGoal by compounding alone when annualSavings is 0 and growth is positive', () => {
+    const result = projectFIDate(100_000, 500_000, 0, 8)
+    expect(result).not.toBeNull()
+    // 100k * (1 + 0.08/12)^m >= 500k first holds at m = 243
+    expect(result!.months).toBe(243)
   })
 
-  it('returns null when annualSavings is negative and net worth is below fiGoal', () => {
-    expect(projectFIDate(100_000, 500_000, -10_000, 8)).toBeNull()
+  it('returns null when annualSavings is 0 and growth is 0', () => {
+    expect(projectFIDate(100_000, 500_000, 0, 0)).toBeNull()
+  })
+
+  it('returns null when annualSavings is negative and growth is 0', () => {
+    expect(projectFIDate(100_000, 500_000, -10_000, 0)).toBeNull()
+  })
+
+  it('returns null when compounding alone cannot reach fiGoal within 100 years', () => {
+    expect(projectFIDate(1_000, 500_000_000, 0, 1)).toBeNull()
   })
 
   it('handles 0% growth rate with linear accumulation', () => {

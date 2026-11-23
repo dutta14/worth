@@ -185,12 +185,12 @@ describe('useGoalMetrics', () => {
     expect(metrics?.projectedFILabel).toBe('Add budget data →')
   })
 
-  it('returns not-reachable state when annual savings is zero or negative', async () => {
+  it('returns not-reachable when savings are zero and there is no balance to compound', async () => {
     const goal = makeTestGoal()
 
     setMockData({
       accounts: [makeFiAccount(1)],
-      balances: [makeBalance(1, 1000)],
+      balances: [makeBalance(1, 0)],
     })
     mockedGetBudgetSaveRate.mockResolvedValue({ annualSavings: 0, saveRate: 0, monthsOfData: 6 })
 
@@ -200,6 +200,19 @@ describe('useGoalMetrics', () => {
 
     expect(metrics?.projectedState).toBe('not-reachable')
     expect(metrics?.projectedFILabel).toBe('Not reachable at current rate')
+  })
+
+  it('returns a projected date when savings are zero but the existing balance compounds to the goal', async () => {
+    const goal = makeTestGoal({ expenseValue: 12000, goalEndYear: '2090-01-01', retirementAge: 60 })
+
+    setMockData({
+      accounts: [makeFiAccount(1)],
+      balances: [makeBalance(1, 500_000)],
+    })
+    mockedGetBudgetSaveRate.mockResolvedValue({ annualSavings: 0, saveRate: 0, monthsOfData: 6 })
+
+    const { result } = renderHook(() => useGoalMetrics([goal], [], profileBirthday))
+    await waitFor(() => expect(result.current.get(goal.id)?.projectedState).toBe('projected'))
   })
 
   it('returns projected state with a valid date when budget data exists', async () => {
@@ -307,7 +320,7 @@ describe('useGoalMetrics', () => {
     expect(metrics?.gwMonthly).toBeCloseTo(expectedGwMonthly, 6)
   })
 
-  it('returns not-reachable when gwMonthly exceeds annual savings', async () => {
+  it('still projects from the existing balance when gwMonthly exceeds annual savings', async () => {
     // Large GW goal that eats all savings
     const goal = makeTestGoal()
     const gwGoals = [buildGwGoal({ id: 1, fiGoalId: 1, disburseAge: 50, disburseAmount: 50_000_000, growthRate: 8 })]
@@ -318,9 +331,7 @@ describe('useGoalMetrics', () => {
     mockedGetBudgetSaveRate.mockResolvedValue({ annualSavings: 10_000, saveRate: 10, monthsOfData: 12 })
 
     const { result } = renderHook(() => useGoalMetrics([goal], gwGoals, profileBirthday))
-    await waitFor(() => expect(result.current.get(goal.id)?.projectedState).toBe('not-reachable'))
-    const metrics = result.current.get(goal.id)
-    expect(metrics?.projectedState).toBe('not-reachable')
+    await waitFor(() => expect(result.current.get(goal.id)?.projectedState).toBe('projected'))
   })
 
   it('uses expenseValue fallback when monthlyExpenseRetirement is 0', async () => {

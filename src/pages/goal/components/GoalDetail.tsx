@@ -84,7 +84,6 @@ const GoalDetail: FC<GoalDetailProps> = ({
   useEffect(() => {
     setFiYearOverride(null)
     setChartRequiredSavings(null)
-    setLocalSavingsOverride(null)
   }, [goal?.id])
 
   const { pre: fiGrowth, post: _fiPostGrowth, hasOverride: _fiHasOverride } = growthCtx.getEffectiveFiRates(goalId)

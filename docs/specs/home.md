@@ -131,7 +131,7 @@
 - **Data shown:** Up to three goals, each with the goal name, FI progress, optional GW progress, FI target amount, GW goal count, and FI timing or savings message when available.
 - **Actions available:** Open the full Goals page, open a goal detail page, or jump to Budget from the inline **Add budget data →** action.
 - **Default state:** Shows up to the first three goals.
-- **Other states:** Empty state with **Set an FI target or general wealth goal to start tracking your progress.** and **Create a goal →**; populated state with labels such as **FI by Mon YYYY**, **🎉 Goal reached!**, **Add budget data →**, or **Not reachable at current rate**.
+- **Other states:** Empty state with **Set an FI target or general wealth goal to start tracking your progress.** and **Create a goal →**; populated state with labels such as **FI by Mon YYYY**, **🎉 Goal reached!**, **Add budget data →**, or **Not reachable at current rate** (shown only when the goal cannot be reached even with the existing balance compounding; zero savings alone still projects a date).
 - **Rules:** Progress is capped between 0% and 100%. Optional monthly savings appears as **$X/mo** when it is positive and relevant.
 - **Edge cases:** If more than three goals exist, the card shows overflow text such as **+2 more goals**.
 - **Related workflows:** Review current financial snapshot.
