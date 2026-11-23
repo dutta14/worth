@@ -121,7 +121,7 @@ test.describe('Monthly check-in: Home strip', () => {
     await expect(home.checkInCard).toHaveClass(/checkin-card--stale/)
   })
 
-  test('E2E-8: demo mode reads as complete', async ({ page }) => {
+  test('E2E-8: demo mode shows no strip because its data is complete', async ({ page }) => {
     await seedCheckIn(page, { balances: PARTIAL_OCTOBER })
     await page.clock.setFixedTime(TODAY)
     const home = new HomePage(page)
@@ -134,9 +134,7 @@ test.describe('Monthly check-in: Home strip', () => {
     await settings.demoModeToggle.click()
     await page.keyboard.press('Escape')
 
-    await expect(home.checkInTitle).toHaveText('November is complete')
-    await expect(home.checkInCard).toContainText('All 5 active accounts have a balance.')
-    await expect(home.checkInSnoozeBtn).toHaveCount(0)
+    await expect(home.checkInCard).toHaveCount(0)
     await expect(home.partialBadge).toHaveCount(0)
   })
 })
@@ -162,9 +160,7 @@ test.describe('Monthly check-in: guided entry', () => {
     expect(rows.filter(row => row[0] === '2026-10')).toHaveLength(9)
 
     await page.goBack()
-    await expect(home.checkInTitle).toHaveText('October is complete')
-    await expect(home.checkInCard).toContainText('All 9 active accounts have a balance.')
-    await expect(home.checkInCta).toHaveCount(0)
+    await expect(home.checkInCard).toHaveCount(0)
   })
 
   test('E2E-3: finishing a partial month clears the badge and caption and plots the month', async ({ page }) => {
@@ -192,7 +188,7 @@ test.describe('Monthly check-in: guided entry', () => {
     await expect(saveStatus(page)).toHaveText('Saved October 2026. All 9 accounts have a balance.')
 
     await page.goBack()
-    await expect(home.checkInTitle).toHaveText('October is complete')
+    await expect(home.checkInCard).toHaveCount(0)
     await expect(home.partialBadge).toHaveCount(0)
     await expect(chartCaption).toHaveCount(0)
     await expect(chartPlot).toContainText('Oct 2026')
@@ -318,11 +314,10 @@ test.describe('Monthly check-in: snooze', () => {
     await expect(home.checkInTitle).toHaveText('2 accounts missing for November')
   })
 
-  test('offers no snooze when the month is complete', async ({ page }) => {
+  test('shows no strip when the month is complete', async ({ page }) => {
     const home = await openHome(page, COMPLETE_OCTOBER)
 
-    await expect(home.checkInTitle).toHaveText('October is complete')
-    await expect(home.checkInSnoozeBtn).toHaveCount(0)
+    await expect(home.checkInCard).toHaveCount(0)
     await expect(home.partialBadge).toHaveCount(0)
   })
 })

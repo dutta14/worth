@@ -194,42 +194,10 @@ describe('CheckInCard, due', () => {
 })
 
 describe('CheckInCard, up to date', () => {
-  const upToDate = (count = 3) => stateFor(accounts(count), monthEntries('2026-10', range(count)))
-
-  it('says the month is complete and counts active accounts', () => {
-    renderCard(upToDate())
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('October is complete')
-    expect(screen.getByText('All 3 active accounts have a balance.')).toBeInTheDocument()
-  })
-
-  it('uses the singular sentence for a single account', () => {
-    renderCard(upToDate(1))
-    expect(screen.getByText('Your active account has a balance.')).toBeInTheDocument()
-  })
-
-  it('links to Details and offers no snooze or call to action', async () => {
-    const user = userEvent.setup()
-    const { onNavigate } = renderCard(upToDate())
-    expect(screen.queryByRole('button', { name: /snooze/i })).not.toBeInTheDocument()
-    expect(screen.getAllByRole('button')).toHaveLength(1)
-    await user.click(screen.getByRole('button', { name: 'Review balances' }))
-    expect(onNavigate).toHaveBeenCalledExactlyOnceWith('/net-worth/dashboard/details')
-  })
-
-  it('uses the ok tone', () => {
-    renderCard(upToDate())
-    expect(screen.getByRole('region')).toHaveClass('checkin-card--ok')
-  })
-
-  it('pluralizes several future months in the note', () => {
-    renderCard(
-      stateFor(accounts(2), [
-        ...monthEntries('2026-10', [1, 2]),
-        ...monthEntries('2026-12', [1]),
-        ...monthEntries('2027-01', [1]),
-      ]),
-    )
-    expect(screen.getByText('Balances also exist for 2 future months, starting December.')).toBeInTheDocument()
+  it('renders nothing when the latest month is complete', () => {
+    renderCard(stateFor(accounts(3), monthEntries('2026-10', range(3))))
+    expect(screen.queryByRole('region')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 })
 
@@ -263,12 +231,6 @@ describe('CheckInCard, status announcements', () => {
     const { rerenderWith } = renderCard(stateFor(nine, monthEntries('2026-10', range(7))))
     rerenderWith(stateFor(nine, monthEntries('2026-10', range(8))))
     expect(screen.getByRole('status')).toHaveTextContent('1 account missing for October.')
-  })
-
-  it('announces completion when the month becomes complete', () => {
-    const { rerenderWith } = renderCard(stateFor(nine, monthEntries('2026-10', range(8))))
-    rerenderWith(stateFor(nine, monthEntries('2026-10', range(9))))
-    expect(screen.getByRole('status')).toHaveTextContent('October is complete.')
   })
 
   it('does not announce on a re-render with the same state', () => {

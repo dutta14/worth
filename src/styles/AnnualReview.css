@@ -1,4 +1,6 @@
 .ar-page {
+  /* Contains the absolutely positioned sr-only table captions, which would otherwise extend the document and add a second scrollbar. */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 24px;

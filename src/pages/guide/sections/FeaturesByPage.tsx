@@ -150,8 +150,8 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>Categorize or recategorize items before they pollute your longer-term summaries.</li>
         <li>Use it as the place for cleanup work, not just for reading totals.</li>
         <li>
-          This tab also has Import, Rules and Apply rules to uncategorized. Open a row&apos;s category menu and choose
-          Always categorize merchants like this to create a rule from it.
+          The ⋯ More actions menu on this tab has Import, Rules and Apply rules to uncategorized. Open a row&apos;s
+          category menu and choose Always categorize merchants like this to create a rule from it.
         </li>
       </ul>
       <p>

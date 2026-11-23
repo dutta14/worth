@@ -854,7 +854,8 @@ test.describe('Import wizard: Transactions page (AC-30, AC-31, E7)', () => {
     await expect(page.getByText('Import a CSV to see transactions here.')).toBeVisible()
 
     const chooser = page.waitForEvent('filechooser')
-    await page.getByRole('button', { name: 'Import', exact: true }).click()
+    await page.getByRole('button', { name: 'More actions' }).click()
+    await page.getByRole('menuitem', { name: 'Import', exact: true }).click()
     await (await chooser).setFiles(csvFile('bank.csv', BANK_CSV))
     await expect(wizard.heading('Columns')).toBeFocused()
     await wizard.chooseSign('Negative numbers are spending')
@@ -866,7 +867,7 @@ test.describe('Import wizard: Transactions page (AC-30, AC-31, E7)', () => {
     const list = page.getByRole('region', { name: 'All transactions' })
     await expect(list.getByText('Starbucks')).toBeVisible()
     await expect(list.getByText('Shell Oil')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Import', exact: true })).toBeFocused()
+    await expect(page.getByRole('button', { name: 'More actions' })).toBeFocused()
   })
 
   test('applies saved rules to uncategorized transactions after a confirmation, and undoes it', async ({ page }) => {
@@ -875,14 +876,16 @@ test.describe('Import wizard: Transactions page (AC-30, AC-31, E7)', () => {
     const list = page.getByRole('region', { name: 'All transactions' })
     await expect(list.getByText('Shell Oil')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Apply rules to uncategorized' }).click()
+    await page.getByRole('button', { name: 'More actions' }).click()
+    await page.getByRole('menuitem', { name: 'Apply rules to uncategorized' }).click()
     const dialog = page.getByRole('dialog', { name: 'Apply rules to 2 uncategorized transactions?' })
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText('Only uncategorized transactions change.')).toBeVisible()
     await dialog.getByRole('button', { name: 'Cancel' }).click()
     expect((await readCsvFile(page, MARCH)).map(row => row[1])).not.toContain('Dining')
 
-    await page.getByRole('button', { name: 'Apply rules to uncategorized' }).click()
+    await page.getByRole('button', { name: 'More actions' }).click()
+    await page.getByRole('menuitem', { name: 'Apply rules to uncategorized' }).click()
     await page.getByRole('button', { name: 'Apply rules', exact: true }).click()
     const done = page.getByRole('dialog', { name: 'Rules applied' })
     await expect(done.locator('p', { hasText: 'Recategorized 2 transactions.' })).toBeVisible()
