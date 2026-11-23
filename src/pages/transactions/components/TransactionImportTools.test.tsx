@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { FileStoreTestProvider } from '../../../test/fileStoreTestUtils'
 import { containsRule } from '../../../test/importHelpers'
@@ -7,6 +7,12 @@ import { MemoryFileStore } from '../../../utils/memoryFileStore'
 import { parseCSV } from '../../../utils/csvUtils'
 import { RULES_PATH } from '../../budget/import/importStorage'
 import TransactionImportTools, { type RuleSource } from './TransactionImportTools'
+
+const menuItem = (name: string): HTMLElement => {
+  const toggle = screen.getByRole('button', { name: 'More actions' })
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle)
+  return screen.getByRole('menuitem', { name })
+}
 
 const OCT = [
   'Date,Category,Amount,Description',
@@ -60,7 +66,7 @@ const setup = async ({ fileStore, ruleSource = null, onRuleSourceClose = () => {
       />
     </FileStoreTestProvider>,
   )
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Import' })).toBeEnabled())
+  await waitFor(() => expect(menuItem('Import')).toBeEnabled())
   return { store, onInvalidate, user: userEvent.setup(), ...view }
 }
 
@@ -79,15 +85,15 @@ describe('TransactionImportTools', () => {
         />
       </FileStoreTestProvider>,
     )
-    expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Apply rules to uncategorized' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Rules' })).toBeEnabled()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Import' })).toBeEnabled())
+    expect(menuItem('Import')).toBeDisabled()
+    expect(menuItem('Apply rules to uncategorized')).toBeDisabled()
+    expect(menuItem('Rules')).toBeEnabled()
+    await waitFor(() => expect(menuItem('Import')).toBeEnabled())
   })
 
   it('opens the import wizard from the Import button', async () => {
     const { user } = await setup()
-    await user.click(screen.getByRole('button', { name: 'Import' }))
+    await user.click(menuItem('Import'))
     await user.upload(
       screen.getByTestId('import-wizard-input'),
       new File(['Date,Category,Amount,Description\n2026-11-01,Dining,-4.00,Cafe'], 'nov.csv', { type: 'text/csv' }),
@@ -97,14 +103,14 @@ describe('TransactionImportTools', () => {
 
   it('opens the rules dialog from the Rules button', async () => {
     const { user } = await setup()
-    await user.click(screen.getByRole('button', { name: 'Rules' }))
+    await user.click(menuItem('Rules'))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('starbucks')).toBeInTheDocument()
   })
 
   it('saves a rule added in the rules dialog', async () => {
     const { user, store } = await setup()
-    await user.click(screen.getByRole('button', { name: 'Rules' }))
+    await user.click(menuItem('Rules'))
     await user.type(await screen.findByLabelText('Description contains'), 'kroger')
     await user.selectOptions(screen.getByLabelText('Category'), 'Groceries')
     await user.click(screen.getByRole('button', { name: 'Add rule' }))
@@ -116,7 +122,7 @@ describe('TransactionImportTools', () => {
 
   it('applies rules to uncategorized transactions, then undoes it', async () => {
     const { user, store, onInvalidate } = await setup()
-    await user.click(screen.getByRole('button', { name: 'Apply rules to uncategorized' }))
+    await user.click(menuItem('Apply rules to uncategorized'))
     expect(
       await screen.findByRole('heading', { name: 'Apply rules to 1 uncategorized transaction?' }),
     ).toBeInTheDocument()
@@ -137,14 +143,14 @@ describe('TransactionImportTools', () => {
 
   it('says nothing matches when there are no rules', async () => {
     const { user } = await setup({ fileStore: await seed(false) })
-    await user.click(screen.getByRole('button', { name: 'Apply rules to uncategorized' }))
+    await user.click(menuItem('Apply rules to uncategorized'))
     expect(await screen.findByText('No uncategorized transactions match your rules.')).toBeInTheDocument()
   })
 
   it('reports a write failure and leaves the files as they were', async () => {
     const fileStore = await seed()
     const { user } = await setup({ fileStore })
-    await user.click(screen.getByRole('button', { name: 'Apply rules to uncategorized' }))
+    await user.click(menuItem('Apply rules to uncategorized'))
     await screen.findByRole('button', { name: 'Apply rules' })
     const write = fileStore.writeCSV.bind(fileStore)
     let failing = true
@@ -161,7 +167,7 @@ describe('TransactionImportTools', () => {
   it('refuses to apply when a month changed while the dialog was open', async () => {
     const fileStore = await seed()
     const { user } = await setup({ fileStore })
-    await user.click(screen.getByRole('button', { name: 'Apply rules to uncategorized' }))
+    await user.click(menuItem('Apply rules to uncategorized'))
     await screen.findByRole('button', { name: 'Apply rules' })
     await act(async () => {
       await fileStore.writeCSV(
@@ -276,9 +282,9 @@ describe('TransactionImportTools', () => {
       )
 
       expect(await screen.findByRole('alert')).toHaveTextContent(/could not read your budget files/)
-      expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Apply rules to uncategorized' })).toBeDisabled()
-      await user.click(screen.getByRole('button', { name: 'Import' }))
+      expect(menuItem('Import')).toBeDisabled()
+      expect(menuItem('Apply rules to uncategorized')).toBeDisabled()
+      await user.click(menuItem('Import'))
       expect(writes).not.toHaveBeenCalled()
       expect(await categoriesIn(fileStore)).toEqual(['Uncategorized', 'Uncategorized', 'Dining'])
     })
@@ -300,8 +306,8 @@ describe('TransactionImportTools', () => {
       await screen.findByRole('alert')
       recover()
       await user.click(screen.getByRole('button', { name: 'Try again' }))
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Import' })).toBeEnabled())
-      expect(screen.getByRole('button', { name: 'Apply rules to uncategorized' })).toBeEnabled()
+      await waitFor(() => expect(menuItem('Import')).toBeEnabled())
+      expect(menuItem('Apply rules to uncategorized')).toBeEnabled()
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     })
   })

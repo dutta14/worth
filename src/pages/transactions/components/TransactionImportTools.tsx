@@ -44,8 +44,8 @@ const EMPTY_STORE: BudgetStore = { csvs: {}, configs: {}, years: [], categoryGro
 type Panel = 'rules' | 'apply' | null
 
 /**
- * The import-wizard additions to the Transactions toolbar: Import, Apply rules to uncategorized and Rules, plus
- * the dialogs they open. It keeps its own snapshot of the budget (refreshed on every change) because the page's cache is not shared.
+ * The import-wizard additions to the Transactions toolbar: Import, Apply rules to uncategorized and Rules, kept in one
+ * overflow menu, plus the dialogs they open. It keeps its own snapshot of the budget (refreshed on every change) because the page's cache is not shared.
  */
 const TransactionImportTools: FC<TransactionImportToolsProps> = ({
   transactions,
@@ -60,6 +60,9 @@ const TransactionImportTools: FC<TransactionImportToolsProps> = ({
   const [reloadTick, setReloadTick] = useState(0)
   const storeRef = useRef(store)
   const [panel, setPanel] = useState<Panel>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
   const [applyPlan, setApplyPlan] = useState<RecategorizePlan | null>(null)
   const [createReady, setCreateReady] = useState(false)
   const createUndo = useRef<UndoRecord | null>(null)
@@ -93,6 +96,31 @@ const TransactionImportTools: FC<TransactionImportToolsProps> = ({
       window.removeEventListener('budget-changed', refresh)
     }
   }, [fileStore, reloadTick])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setMenuOpen(false)
+      menuButtonRef.current?.focus()
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [menuOpen])
+
+  const runFromMenu = (action: () => void) => () => {
+    setMenuOpen(false)
+    // Dialogs return focus to whatever opened them, and the menu item is about to unmount.
+    menuButtonRef.current?.focus()
+    action()
+  }
 
   const adopt = useCallback(
     (next: BudgetStore | null) => {
@@ -250,20 +278,49 @@ const TransactionImportTools: FC<TransactionImportToolsProps> = ({
 
   return (
     <>
-      <button
-        type="button"
-        className="txn-filter-btn"
-        disabled={!loaded}
-        onClick={() => wizard.open({ multiple: true })}
-      >
-        <span className="txn-filter-btn-key">Import</span>
-      </button>
-      <button type="button" className="txn-filter-btn" disabled={!loaded} onClick={() => void openApply()}>
-        <span className="txn-filter-btn-key">{APPLY_BUTTON_LABEL}</span>
-      </button>
-      <button type="button" className="txn-filter-btn" onClick={() => void openRules()}>
-        <span className="txn-filter-btn-key">{MANAGE_RULES_LABEL}</span>
-      </button>
+      <div className="txn-more" ref={menuRef}>
+        <button
+          ref={menuButtonRef}
+          type="button"
+          className="txn-filter-btn txn-more-btn"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-label="More actions"
+          onClick={() => setMenuOpen(open => !open)}
+        >
+          <span aria-hidden="true">⋯</span>
+        </button>
+        {menuOpen && (
+          <div className="txn-more-menu" role="menu" aria-label="More actions">
+            <button
+              type="button"
+              role="menuitem"
+              className="txn-more-item"
+              disabled={!loaded}
+              onClick={runFromMenu(() => wizard.open({ multiple: true }))}
+            >
+              Import
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="txn-more-item"
+              disabled={!loaded}
+              onClick={runFromMenu(() => void openApply())}
+            >
+              {APPLY_BUTTON_LABEL}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="txn-more-item"
+              onClick={runFromMenu(() => void openRules())}
+            >
+              {MANAGE_RULES_LABEL}
+            </button>
+          </div>
+        )}
+      </div>
       {loadFailed && (
         <>
           <span className="txn-import-error" role="alert">

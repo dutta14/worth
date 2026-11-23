@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { FileStoreTestProvider } from '../../test/fileStoreTestUtils'
@@ -8,6 +8,12 @@ import { parseCSV } from '../../utils/csvUtils'
 import { MemoryFileStore } from '../../utils/memoryFileStore'
 import { RULES_PATH } from '../budget/import/importStorage'
 import Transactions, { resetTransactionCache } from './Transactions'
+
+const menuItem = (name: string): HTMLElement => {
+  const toggle = screen.getByRole('button', { name: 'More actions' })
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle)
+  return screen.getByRole('menuitem', { name })
+}
 
 const OCT = [
   'Date,Category,Amount,Description',
@@ -45,11 +51,17 @@ beforeEach(() => {
 })
 
 describe('Transactions import tools', () => {
-  it('shows Import, Apply rules and Rules in the toolbar', async () => {
+  it('keeps Import, Apply rules and Rules in one More actions menu', async () => {
+    const user = userEvent.setup()
     renderPage(await seed())
-    expect(await screen.findByRole('button', { name: 'Import' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Apply rules to uncategorized' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Rules' })).toBeInTheDocument()
+    await screen.findByRole('button', { name: 'More actions' })
+    expect(screen.queryByRole('button', { name: 'Import' })).not.toBeInTheDocument()
+    expect(menuItem('Import')).toBeInTheDocument()
+    expect(menuItem('Apply rules to uncategorized')).toBeInTheDocument()
+    expect(menuItem('Rules')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'More actions' })).toHaveFocus()
   })
 
   it('shows the import empty copy when there are no transactions', async () => {
@@ -90,7 +102,8 @@ describe('Transactions import tools', () => {
   it('applies the rules to uncategorized rows and shows the new category', async () => {
     const user = userEvent.setup()
     renderPage(await seed())
-    await user.click(await screen.findByRole('button', { name: 'Apply rules to uncategorized' }))
+    await screen.findByRole('button', { name: 'More actions' })
+    await user.click(menuItem('Apply rules to uncategorized'))
     await user.click(await screen.findByRole('button', { name: 'Apply rules' }))
     await screen.findByRole('heading', { name: 'Rules applied' })
     await user.click(screen.getByRole('button', { name: 'Done' }))
@@ -123,7 +136,7 @@ describe('Transactions import tools', () => {
     )
     renderPage(fileStore)
     await screen.findByRole('button', { name: /Edit category for STARBUCKS/i })
-    await user.click(screen.getByRole('button', { name: 'Apply rules to uncategorized' }))
+    await user.click(menuItem('Apply rules to uncategorized'))
     await user.click(await screen.findByRole('button', { name: 'Apply rules' }))
     await screen.findByRole('heading', { name: 'Rules applied' })
     await user.click(screen.getByRole('button', { name: 'Done' }))

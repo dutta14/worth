@@ -12,7 +12,6 @@ interface CheckInCardProps {
 }
 
 const MAX_LISTED_ACCOUNTS = 6
-const DETAILS_PATH = '/net-worth/dashboard/details'
 const SPREADSHEET_PATH = '/net-worth/dashboard/spreadsheet'
 const ACCOUNTS_PATH = '/net-worth/dashboard/manage'
 
@@ -43,12 +42,6 @@ const CheckInIcon: FC<IconProps> = ({ kind }) => (
         <path d="M12 16h.01" />
       </>
     )}
-    {kind === 'up-to-date' && (
-      <>
-        <circle cx="12" cy="12" r="10" />
-        <path d="m9 12 2 2 4-4" />
-      </>
-    )}
     {(kind === 'due' || kind === 'future-only') && (
       <>
         <circle cx="12" cy="12" r="10" />
@@ -68,7 +61,6 @@ const CheckInCard: FC<CheckInCardProps> = ({ state, today, onStart, onNavigate, 
   if (kind === 'partial' && reportingMonth)
     title = `${accountsLabel(missing.length)} missing for ${label(reportingMonth)}`
   else if (kind === 'due' && targetMonth) title = `${label(targetMonth)} balances are ready to record`
-  else if (kind === 'up-to-date' && reportingMonth) title = `${label(reportingMonth)} is complete`
   else if (kind === 'future-only') title = 'Your latest balances are dated in the future'
 
   // Announce only when the state changes after mount, never on load, focus, or day rollover.
@@ -80,7 +72,8 @@ const CheckInCard: FC<CheckInCardProps> = ({ state, today, onStart, onNavigate, 
     setAnnouncement(`${title}.`)
   }
 
-  if (kind === 'hidden') return null
+  // A complete month needs nothing from the user, so the strip stays out of the way.
+  if (kind === 'hidden' || kind === 'up-to-date') return null
 
   const lastMonth = reportingMonth ? label(reportingMonth) : ''
   let meta: ReactNode = null
@@ -94,13 +87,6 @@ const CheckInCard: FC<CheckInCardProps> = ({ state, today, onStart, onNavigate, 
         {lastMonth} ended {daysLabel(days)} ago.
       </p>
     )
-  } else if (kind === 'up-to-date') {
-    const count = status?.expected.length ?? 0
-    meta = (
-      <p className="checkin-card__meta">
-        {count === 1 ? 'Your active account has a balance.' : `All ${count} active accounts have a balance.`}
-      </p>
-    )
   }
 
   const futureNote =
@@ -110,7 +96,7 @@ const CheckInCard: FC<CheckInCardProps> = ({ state, today, onStart, onNavigate, 
         ? `Balances also exist for ${label(futureMonths[0])}, which is in the future.`
         : `Balances also exist for ${futureMonths.length} future months, starting ${label(futureMonths[0])}.`
 
-  const modifiers = [kind === 'up-to-date' ? 'ok' : kind === 'future-only' ? 'future' : kind, isStale ? 'stale' : '']
+  const modifiers = [kind === 'future-only' ? 'future' : kind, isStale ? 'stale' : '']
     .filter(Boolean)
     .map(m => ` checkin-card--${m}`)
     .join('')
@@ -156,11 +142,6 @@ const CheckInCard: FC<CheckInCardProps> = ({ state, today, onStart, onNavigate, 
         {kind === 'due' && targetMonth && (
           <button type="button" className="checkin-card__cta" onClick={() => onStart(targetMonth)}>
             Start {label(targetMonth)} check-in
-          </button>
-        )}
-        {kind === 'up-to-date' && (
-          <button type="button" className="checkin-card__link" onClick={() => onNavigate(DETAILS_PATH)}>
-            Review balances
           </button>
         )}
         {kind === 'future-only' && (

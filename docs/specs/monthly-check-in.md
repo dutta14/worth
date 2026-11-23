@@ -70,7 +70,7 @@ Every item below was read in the code on 2026-11-08.
 | In the reorder system? | **No in v1.** The strip renders above `.home-grid`, next to `SetupProgress` | It is a time-sensitive prompt that must not be buried by a user's order. It avoids touching `home-card-order`, the length-5 validator, and the empty-slot problem. Adding it later means index 5, a validator change to length 6, and a visible-order mapping |
 | Partial month and deltas | Latest-month badge; deltas hidden while partial; partial latest month not plotted on trend charts | Never show a number that implies a loss that did not happen (section 3.5) |
 | Snooze | `localStorage['checkin-snooze']`, browser-level UI preference | Same class as `onboarding-dismissed` and `home-card-order`; not financial data, so it stays out of the folder |
-| Demo | No special case | Demo data is complete, so the strip shows "up to date"; saves go to `MemoryFileStore` as for every other edit |
+| Demo | No special case | Demo data is complete, so the strip is hidden; saves go to `MemoryFileStore` as for every other edit |
 
 ### 3.2 Modules
 
@@ -202,7 +202,7 @@ Strip
 - AC-2: One missing account reads "1 account missing for October"; the pluralization rule is in section 6.
 - AC-3: The strip is hidden when there are no accounts, no valid balances, or no active accounts.
 - AC-4: `due`: latest complete month is before last month. The strip reads "{Month} balances are ready to record" with the CTA "Start {Month} check-in", where the month is the one after the latest recorded month.
-- AC-5: `up-to-date`: the strip reads "{Month} is complete" with the count of active accounts and a "Review balances" link. No snooze button.
+- AC-5: `up-to-date`: the strip is not rendered. It appears only when something needs doing.
 - AC-6: The staleness boundary is exact: last day of latest month plus 35 days is not stale, plus 36 days is stale. A stale strip uses the warning tone and the "Last balances are from..." line.
 - AC-7: The days figure uses local calendar days and is unchanged by a DST change in between.
 - AC-8: Future-dated months never become the latest month for the strip. If any exist, the strip adds the future-month note. If all months are future, it shows the `future-only` state.
@@ -252,7 +252,7 @@ Accessibility
 |---|---|---|
 | First time (no accounts or no balances) | Hidden; setup guide leads | Existing empty state |
 | Loading | Hidden until `dataLoaded`; no spinner | Existing |
-| Returning, up to date | Calm one-line "complete" | Normal |
+| Returning, up to date | No strip | Normal |
 | Partial | Warning tone, list, "Finish {Month}" | Badge, no change figures |
 | Due | Neutral, or warning when stale | Normal (latest month is complete) |
 | Snoozed | Hidden | Badge still shows when partial |
@@ -303,14 +303,14 @@ Class prefix `checkin-` for the strip, `partial-badge` for the chip. Tokens come
 </section>
 ```
 
-Modifier classes: `--partial`, `--due`, `--stale`, `--ok`, `--future`. Links to other routes ("Review balances", "Mark it inactive") use `<button>` with `navigate`, matching the existing `home-card-link` pattern.
+Modifier classes: `--partial`, `--due`, `--stale`, `--future`. Links to other routes ("Mark it inactive") use `<button>` with `navigate`, matching the existing `home-card-link` pattern.
 
 ### 5.2 Visual spec
 
 | Element | Spec |
 |---|---|
 | Container | `background: var(--color-surface)`; `border: 1px solid var(--color-border)`; `border-radius: var(--radius)`; padding `1rem 1.5rem`; `margin-bottom: 1.25rem` (equals `.home-grid` gap); same shadow as `.home-card`; no `min-height` (unlike `.home-card`'s 260px) |
-| Left edge | 3px solid `var(--accent)` (ok, due), `var(--color-warning)` (partial, stale). Decorative only; the icon and text carry the meaning |
+| Left edge | No accent bar. The standard 1px card border only; the icon and text carry the meaning |
 | Title | `var(--fs-lg)`, `var(--fw-semibold)`, `var(--color-text-heading)`, sentence case (not the uppercase card-label style), `margin: 0` |
 | Meta and note | `var(--fs-sm)`, `var(--color-text-muted)` (4.83:1 light, 6.57:1 dark on surface); stale meta uses `var(--color-warning-text)` |
 | Chips | `var(--fs-xs)`, `var(--color-text-secondary)` on `var(--color-surface-alt)` (7.06:1; muted would be 4.52:1), `1px solid var(--color-border)`, `var(--radius-pill)`, padding `0.125rem 0.625rem`, gap `0.375rem` |
@@ -380,23 +380,20 @@ Voice: plain, calm, specific. No exclamation marks. `{Month}` is the long month 
 |---|---|---|
 | Strip title, partial | `{n} account(s) missing for {Month}` | "2 accounts missing for October" |
 | Strip title, due | `{Month} balances are ready to record` | `{Month}` is the target month |
-| Strip title, up to date | `{Month} is complete` | |
 | Strip title, future-only | `Your latest balances are dated in the future` | |
 | Meta, partial/due, not stale | `{LastMonth} ended {d} day(s) ago.` | Only when `d > 0` |
 | Meta, stale | `Last balances are from {LastMonth}, {d} day(s) ago.` | Warning color |
 | Meta, partial, any | `Net worth for {Month} leaves these out until you add them.` | Shown with the list |
-| Meta, up to date | `All {n} active accounts have a balance.` | `n === 1`: "Your active account has a balance." |
 | Future note | `Balances also exist for {Month}, which is in the future.` | Several: "Balances also exist for {n} future months, starting {Month}." |
 | List overflow | `and {n} more` | After 6 chips |
 | List label (aria) | `Accounts missing for {Month}` | |
 | CTA, partial | `Finish {Month}` | |
 | CTA, due | `Start {Month} check-in` | |
-| Link, up to date | `Review balances` | To Details |
 | Link, future-only | `Review months` | To Spreadsheet |
 | Link, snooze | `Snooze for 7 days` | partial and due only |
 | Link, closed | `Account closed? Mark it inactive` | To Accounts tab |
 | Announcement, snooze | `Check-in snoozed for 7 days.` | Home live region |
-| Announcement, change | `{n} account(s) missing for {Month}.` / `{Month} is complete.` | Strip status, on change only |
+| Announcement, change | `{n} account(s) missing for {Month}.` | Strip status, on change only |
 | Net Worth badge | `Partial month` | |
 | Badge description | `{n} account(s) have no balance for {Month}. Net worth leaves them out.` | `aria-describedby` and `title` |
 | Hidden change | `Change hidden until {Month} is complete.` | Replaces delta text |
@@ -517,7 +514,7 @@ interface BalanceDetailsProps { /* existing */ startCheckInMonth?: MonthKey | nu
 - E2E-5: Snooze hides the strip; reload keeps it hidden; new month shows it again.
 - E2E-6: Keyboard-only run through strip -> Details -> Save; reload does not reopen the form.
 - E2E-7: Network assertion: no request other than existing static assets and `feature-flags.json`; data folder diff touches only `balances/*.csv`.
-- E2E-8: Demo mode shows "complete".
+- E2E-8: Demo mode shows no strip.
 
 **A11y assertions** (Playwright, no new dependency): heading level order, `section` has an accessible name, status region empty after load, focus ring visible on CTA, 44px target at 480px width, contrast checked once per theme against the values in 5.2, `prefers-reduced-motion` emulation yields no transition.
 

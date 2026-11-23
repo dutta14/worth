@@ -16,7 +16,7 @@
 | Greeting | Personalizes the dashboard with a time-based welcome. |
 | Setup guide restore link | Reopens the onboarding checklist after dismissal. |
 | Setup guide | Walks first-time users through the four setup tasks that unlock the dashboard. |
-| Check-in strip | Says whether the latest month is complete or the data is stale, and starts the monthly check-in. |
+| Check-in strip | Appears only when the latest month is missing balances or the data is stale, and starts the monthly check-in. Hidden when the month is complete. |
 | Net Worth card | Shows latest total net worth, month-over-month change, and FI/GW breakdown. |
 | Charts card | Shows compact balance-history charts with quick date filters. |
 | Goals card | Shows up to three goal summaries and FI/GW progress. |

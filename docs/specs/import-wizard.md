@@ -261,7 +261,7 @@ Both live in `budget/`, which `loadBudgetStore` does not list (2.3). Both use `s
 - `budgetStorage.ts` (MODIFIED): add `saveMonths(fileStore, store, monthKeys)`, which writes only the touched months plus `categories.json`. `saveBudgetStore` is unchanged.
 - Fallback categories are split by sign: "Uncategorized" (spending, expense group "others") and "Uncategorized income" (income, "income-others"). One mixed-sign category would be classified as an expense by the rule in 2.3 and would distort the savings rate. Zero amounts use the expense fallback (decision D1).
 - File-supplied category names are matched case-insensitively to existing names and use the existing spelling.
-- Transactions (MODIFIED): toolbar button "Apply rules to uncategorized", a category-editor action "Always categorize merchants like this as ...", and an Import button (E7). Apply edits category cells in the existing CSV text at the cell level (not via `buildCsv`, to avoid the 2.6 column loss) and then invalidates the Transactions cache with `resetTransactionCache`, because the fingerprint can miss same-length edits (risk R3).
+- Transactions (MODIFIED): toolbar overflow menu ("⋯ More actions") holding "Apply rules to uncategorized", "Rules" and "Import", a category-editor action "Always categorize merchants like this as ...", (E7). Apply edits category cells in the existing CSV text at the cell level (not via `buildCsv`, to avoid the 2.6 column loss) and then invalidates the Transactions cache with `resetTransactionCache`, because the fingerprint can miss same-length edits (risk R3).
 
 ### 3.8 Merge, dedupe and commit
 

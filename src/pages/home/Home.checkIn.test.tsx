@@ -138,10 +138,11 @@ describe('Home check-in strip', () => {
     expect(mockNavigate).toHaveBeenCalledExactlyOnceWith('/net-worth/dashboard/manage')
   })
 
-  it('shows the calm complete strip when the latest month is complete', async () => {
+  it('shows no strip when the latest month is complete', async () => {
     mockData = { accounts: nine, balances: entries('2026-10', 9) }
     renderHome()
-    expect(await screen.findByRole('heading', { level: 2, name: 'October is complete' })).toBeInTheDocument()
+    await screen.findByTestId('drag-slot-0')
+    expect(screen.queryByRole('heading', { level: 2, name: /is complete/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /snooze/i })).not.toBeInTheDocument()
   })
 
@@ -222,13 +223,6 @@ describe('Home check-in strip, snooze', () => {
     localStorage.setItem('checkin-snooze', JSON.stringify({ month: '2026-09', until: '2026-11-15' }))
     renderHome()
     await stripHeading()
-  })
-
-  it('does not hide the complete strip because of an old snooze for the same month', async () => {
-    localStorage.setItem('checkin-snooze', JSON.stringify({ month: '2026-10', until: '2026-11-15' }))
-    mockData = { accounts: nine, balances: entries('2026-10', 9) }
-    renderHome()
-    expect(await screen.findByRole('heading', { level: 2, name: 'October is complete' })).toBeInTheDocument()
   })
 
   it('still hides, announces, and moves focus when the snooze cannot be persisted', async () => {
