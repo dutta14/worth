@@ -271,13 +271,13 @@ test.describe.skip('Cross-page: Import/Export + Cross-tab + Dark Mode (#154)', (
       await page.goto(HOME + route)
       await page.waitForLoadState('domcontentloaded')
       const name = route.includes('goal')
-        ? /^Planning$/
+        ? /^Goals$/
         : route.includes('net-worth')
-          ? /^Wealth$/
+          ? /^Dashboard$/
           : route.includes('budget')
-            ? /^Cashflow$/
+            ? /^Overview$/
             : route.includes('taxes')
-              ? /^Planning$/
+              ? /^Taxes$/
               : /^Drive$/
       await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
     }

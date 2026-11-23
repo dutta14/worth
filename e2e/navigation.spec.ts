@@ -193,13 +193,13 @@ test.describe('Sidebar navigation, routing, and active state (#141)', () => {
 
     await nav.goto('/net-worth/allocation')
     await expect(page).toHaveURL(/#\/net-worth\/allocation$/)
-    await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Allocation' })).toBeVisible()
     // The sidebar's Wealth group should mark Allocation as active.
     await expect(new NavigationPage(page).subLink('Wealth', 'Allocation')).toHaveAttribute('aria-current', 'page')
 
     await nav.goto('/goal/calculator')
     await expect(page).toHaveURL(/#\/goal\/calculator$/)
-    await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'FIRE Calculator' })).toBeVisible()
 
     await nav.goto('/drive')
     await expect(page).toHaveURL(/#\/drive$/)
