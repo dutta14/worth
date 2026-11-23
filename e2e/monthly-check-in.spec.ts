@@ -499,7 +499,8 @@ test.describe('Monthly check-in: accessibility', () => {
 
     for (const locator of [home.checkInCta, home.checkInSnoozeBtn]) {
       const duration = await locator.evaluate(el => getComputedStyle(el).transitionDuration)
-      expect(duration.split(',').every(part => parseFloat(part) === 0)).toBe(true)
+      // The modern theme clamps durations to 0.01ms, which computes to 1e-05s, rather than 0.
+      expect(duration.split(',').every(part => parseFloat(part) <= 0.0001)).toBe(true)
     }
   })
 })

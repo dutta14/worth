@@ -325,9 +325,9 @@ describe('FlagAdminPane — override change with non-boolean type', () => {
   // The MODERN_DESIGN flag is the only one and it's boolean, so the boolean path is tested above.
   // These tests verify the rendering paths for the toggle.
 
-  it('renders toggle in off state for false default value', () => {
+  it('renders toggle in on state for true default value', () => {
     renderPane()
     const toggle = screen.getByRole('switch', { name: /Toggle modern-design/ })
-    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
   })
 })

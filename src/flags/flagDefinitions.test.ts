@@ -3,11 +3,11 @@ import featureFlags from '../../feature-flags.json'
 import { FLAGS } from './flagDefinitions'
 
 describe('flag definitions', () => {
-  it('defines modern-design as a temporary boolean flag that defaults to off', () => {
+  it('defines modern-design as a temporary boolean flag that defaults to on', () => {
     expect(FLAGS.MODERN_DESIGN).toMatchObject({
       id: 'modern-design',
       type: 'boolean',
-      default: false,
+      default: true,
       temporary: true,
     })
   })
