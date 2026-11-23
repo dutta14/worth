@@ -27,7 +27,6 @@ export class NetWorthPage {
   readonly spreadsheetTab: Locator
 
   // Tab navigation (Accounts / Allocation / Growth)
-  readonly tabBar: Locator
 
   // AccountsModal
   readonly modal: Locator
@@ -82,7 +81,6 @@ export class NetWorthPage {
     this.spreadsheetTab = page.getByRole('tab', { name: 'Spreadsheet' })
 
     // Tab navigation
-    this.tabBar = page.locator('nav[aria-label="Wealth sections"]')
 
     // AccountsModal
     this.modal = page.locator('.data-modal').first()
@@ -170,7 +168,8 @@ export class NetWorthPage {
     return this.chartsTypePicker.locator('button.tab-btn').nth(index)
   }
 
+  /** Sidebar sub-item under Wealth (Dashboard, Allocation, Growth or Review). */
   getTabLink(name: string): Locator {
-    return this.tabBar.locator('.tab-btn', { hasText: name })
+    return this.page.locator('#sidebar-group-net-worth').getByRole('link', { name, exact: true })
   }
 }

@@ -60,37 +60,41 @@ test.describe('Sidebar navigation, routing, and active state (#141)', () => {
     await nav.expectActive('Cashflow')
   })
 
-  test('4b. Transactions is a tab inside Cashflow and keeps Cashflow active in the sidebar', async ({ page }) => {
+  test('4b. Transactions is a sub-item of Cashflow and keeps Cashflow active in the sidebar', async ({ page }) => {
     const nav = new NavigationPage(page)
     await nav.goto('/')
     await nav.navTo('Cashflow')
 
-    await expect(page.getByRole('button', { name: 'Transactions', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Transactions', exact: true }).click()
+    const transactions = nav.subLink('Cashflow', 'Transactions')
+    await expect(transactions).toBeVisible()
+    await transactions.click()
 
     await expect(page).toHaveURL(/#\/transactions/)
     await expect(page.getByRole('heading', { level: 1, name: 'Cashflow' })).toBeVisible()
     await nav.expectActive('Cashflow')
-    await expect(page.getByRole('button', { name: 'Transactions', exact: true })).toBeFocused()
+    await expect(transactions).toHaveAttribute('aria-current', 'page')
+    await expect(transactions).toBeFocused()
 
-    await page.getByRole('button', { name: 'Overview', exact: true }).click()
+    const overview = nav.subLink('Cashflow', 'Overview')
+    await overview.click()
     await expect(page).toHaveURL(/#\/budget\/cashflow/)
-    await expect(page.getByRole('button', { name: 'Overview', exact: true })).toBeFocused()
+    await expect(overview).toHaveAttribute('aria-current', 'page')
+    await expect(overview).toBeFocused()
   })
 
-  test('5. Taxes is a tab inside Planning and keeps Planning active in the sidebar', async ({ page }) => {
+  test('5. Taxes is a sub-item of Planning and keeps Planning active in the sidebar', async ({ page }) => {
     const nav = new NavigationPage(page)
     await nav.goto('/')
     await nav.navTo('Planning')
 
-    const taxesTab = page.getByRole('navigation', { name: 'Planning sections' }).getByRole('link', { name: 'Taxes' })
-    await taxesTab.click()
+    const taxesLink = nav.subLink('Planning', 'Taxes')
+    await taxesLink.click()
 
     await expect(page).toHaveURL(/#\/taxes/)
     await expect(page.getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
     await nav.expectActive('Planning')
-    await expect(taxesTab).toHaveAttribute('aria-current', 'page')
-    await expect(taxesTab).toBeFocused()
+    await expect(taxesLink).toHaveAttribute('aria-current', 'page')
+    await expect(taxesLink).toBeFocused()
 
     // Spec 5 (enhanced): the sidebar toggle's accessible name must flip
     // when the sidebar collapses. Asserting toggleExpand becomes visible
@@ -190,8 +194,8 @@ test.describe('Sidebar navigation, routing, and active state (#141)', () => {
     await nav.goto('/net-worth/allocation')
     await expect(page).toHaveURL(/#\/net-worth\/allocation$/)
     await expect(page.getByRole('heading', { level: 1, name: 'Wealth' })).toBeVisible()
-    // The Wealth section nav should mark Allocation as active.
-    await expect(page.getByRole('link', { name: 'Allocation' })).toHaveAttribute('aria-current', 'page')
+    // The sidebar's Wealth group should mark Allocation as active.
+    await expect(new NavigationPage(page).subLink('Wealth', 'Allocation')).toHaveAttribute('aria-current', 'page')
 
     await nav.goto('/goal/calculator')
     await expect(page).toHaveURL(/#\/goal\/calculator$/)
@@ -215,13 +219,14 @@ test.describe('Sidebar navigation, routing, and active state (#141)', () => {
 
   /* ── Active state guarantees ───────────────────────────────── */
 
-  test('24. the active page link has aria-current="page" and the visual active class', async ({ page }) => {
+  test('24. the active group header has aria-current="true" and the visual active class', async ({ page }) => {
     const nav = new NavigationPage(page)
     await nav.goto('/')
     await nav.navTo('Cashflow')
 
     const budget = nav.link('Cashflow')
-    await expect(budget).toHaveAttribute('aria-current', 'page')
+    await expect(budget).toHaveAttribute('aria-current', 'true')
+    await expect(nav.subLink('Cashflow', 'Overview')).toHaveAttribute('aria-current', 'page')
     // Visual indicator uses the `active` className suffix on .sidebar-link.
     // This is a defense-in-depth check: aria-current is the contract,
     // class `active` is the styling hook. Both must move together.
@@ -250,7 +255,7 @@ test.describe('Sidebar navigation, routing, and active state (#141)', () => {
     await nav.link('Wealth').click()
     await nav.link('Cashflow').click()
 
-    await expect(page).toHaveURL(routeRegex('/budget'))
+    await expect(page).toHaveURL(routeRegex('/budget/cashflow'))
     await expect(page.getByRole('heading', { level: 1, name: 'Cashflow' })).toBeVisible()
     await nav.expectActive('Cashflow')
   })

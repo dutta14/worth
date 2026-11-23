@@ -238,29 +238,29 @@ describe('App', () => {
       </MemoryRouter>,
     )
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Cashflow' })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getByRole('button', { name: 'Cashflow' })).toHaveAttribute('aria-current', 'true')
     })
   })
 
-  it('highlights Cashflow in the sidebar for the Transactions route, which is a Cashflow tab', async () => {
+  it('highlights Cashflow in the sidebar for the Transactions route, which is a Cashflow section', async () => {
     render(
       <MemoryRouter initialEntries={['/transactions']}>
         <App />
       </MemoryRouter>,
     )
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Cashflow' })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getByRole('button', { name: 'Cashflow' })).toHaveAttribute('aria-current', 'true')
     })
   })
 
-  it('highlights Planning in the sidebar for the Taxes route, which is a Planning tab', async () => {
+  it('highlights Planning in the sidebar for the Taxes route, which is a Planning section', async () => {
     render(
       <MemoryRouter initialEntries={['/taxes']}>
         <App />
       </MemoryRouter>,
     )
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Planning' })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getByRole('button', { name: 'Planning' })).toHaveAttribute('aria-current', 'true')
     })
   })
 
@@ -349,6 +349,41 @@ describe('App', () => {
         expect(screen.queryByRole('navigation', { name: 'Main navigation' })).not.toBeInTheDocument()
       })
       expect(document.getElementById('main-content')).toHaveFocus()
+    })
+
+    it('closes the sidebar overlay when a section link is chosen on mobile', async () => {
+      setWidth(800)
+      render(
+        <MemoryRouter initialEntries={['/goal/plans']}>
+          <App />
+        </MemoryRouter>,
+      )
+      await userEvent.click(await screen.findByRole('link', { name: 'Taxes' }))
+
+      expect(await screen.findByTestId('page-taxes')).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument())
+    })
+
+    it('keeps the sidebar overlay open when a section group is only collapsed on mobile', async () => {
+      setWidth(800)
+      render(
+        <MemoryRouter initialEntries={['/goal/plans']}>
+          <App />
+        </MemoryRouter>,
+      )
+      await userEvent.click(await screen.findByRole('button', { name: 'Planning' }))
+
+      expect(screen.getByRole('button', { name: 'Planning' })).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeInTheDocument()
+    })
+
+    it('closes the sidebar overlay when a group header navigates on mobile', async () => {
+      setWidth(800)
+      renderApp()
+      await userEvent.click(await screen.findByRole('button', { name: 'Wealth' }))
+
+      expect(await screen.findByTestId('page-data')).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument())
     })
 
     it('does not move focus on initial render at 479px and below', async () => {

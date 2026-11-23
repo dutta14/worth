@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter } from 'react-router-dom'
 import Transactions, { resetTransactionCache } from './Transactions'
 import type { CategoryGroup } from '../budget/types'
 
@@ -123,40 +123,13 @@ beforeEach(() => {
 })
 
 describe('Transactions', () => {
-  it('shows the Cashflow tab bar with Transactions as the active tab', async () => {
+  it('shows the Cashflow heading without an in-page tab bar', async () => {
     renderTransactions()
 
     expect(await screen.findByRole('heading', { name: 'Cashflow' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Transactions' })).toHaveAttribute('aria-current', 'page')
-    for (const name of ['Overview', 'Spreadsheet', 'Groups']) {
-      expect(screen.getByRole('button', { name })).not.toHaveAttribute('aria-current')
+    for (const name of ['Overview', 'Spreadsheet', 'Groups', 'Transactions']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
-  })
-
-  it('focuses the Transactions tab when arriving from another Cashflow tab', async () => {
-    render(
-      <MemoryRouter initialEntries={[{ pathname: '/transactions', state: { focusCashflowTab: true } }]}>
-        <Transactions />
-      </MemoryRouter>,
-    )
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Transactions' })).toHaveFocus())
-  })
-
-  it('navigates to the matching Cashflow view when clicking another tab', async () => {
-    const user = userEvent.setup()
-    render(
-      <MemoryRouter initialEntries={['/transactions']}>
-        <Routes>
-          <Route path="/transactions" element={<Transactions />} />
-          <Route path="/budget/:view" element={<div>Budget view</div>} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await user.click(await screen.findByRole('button', { name: 'Spreadsheet' }))
-
-    expect(await screen.findByText('Budget view')).toBeInTheDocument()
   })
 
   it('renders grouped transactions with daily totals, result count, and a download link', async () => {

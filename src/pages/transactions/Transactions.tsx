@@ -1,16 +1,11 @@
 import { FC, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { loadBudgetStore, saveBudgetStore, saveCSVForMonth } from '../budget/utils/budgetStorage'
 import { parseCSV } from '../budget/utils/csvParser'
 import type { Transaction } from '../budget/types'
 import type { BudgetStore } from '../budget/types'
 import { useFileStore } from '../../contexts/FileStoreContext'
-import CashflowTabs, {
-  CASHFLOW_TAB_FOCUS_STATE,
-  shouldFocusCashflowTab,
-  type CashflowTab,
-} from '../../components/CashflowTabs'
 import { createRuleEntryLabel } from '../budget/import/ruleMessages'
 import { isFallbackCategory } from '../budget/import/recategorize'
 import TransactionImportTools, { type RuleSource } from './components/TransactionImportTools'
@@ -304,12 +299,6 @@ const DatePickerFlyout: FC<DatePickerFlyoutProps> = ({ value, onSelect, onCancel
 
 const Transactions: FC = () => {
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const focusTabsOnMount = shouldFocusCashflowTab(location.state)
-  const handleSelectTab = (tab: CashflowTab) => {
-    if (tab !== 'transactions') navigate(`/budget/${tab}`, { state: CASHFLOW_TAB_FOCUS_STATE })
-  }
   const paramFrom = searchParams.get('from') ?? ''
   const paramTo = searchParams.get('to') ?? ''
   const { fileStore } = useFileStore()
@@ -1022,7 +1011,6 @@ const Transactions: FC = () => {
           <div className="txn-header-top">
             <div className="txn-header-title-block">
               <h1 className="txn-title">Cashflow</h1>
-              <CashflowTabs active="transactions" onSelect={handleSelectTab} focusActiveOnMount={focusTabsOnMount} />
               <p className="txn-header-meta">Loading…</p>
             </div>
           </div>
@@ -1037,7 +1025,6 @@ const Transactions: FC = () => {
         <div className="txn-header-top">
           <div className="txn-header-title-block">
             <h1 className="txn-title">Cashflow</h1>
-            <CashflowTabs active="transactions" onSelect={handleSelectTab} focusActiveOnMount={focusTabsOnMount} />
             <p className="txn-header-meta">
               {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''}
             </p>

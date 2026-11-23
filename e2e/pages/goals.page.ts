@@ -8,11 +8,8 @@ export class GoalsPage {
   readonly headerActions: Locator
   readonly newGoalBtn: Locator
 
-  // Tab Bar
-  readonly tabBar: Locator
-  readonly plansTab: Locator
+  // Planning sections live in the sidebar, not on the page
   readonly calculatorTab: Locator
-  readonly activeTab: Locator
 
   // Mini Grid / List
   readonly miniGrid: Locator
@@ -138,10 +135,7 @@ export class GoalsPage {
     this.headerActions = page.locator('.goal-header-actions')
     this.newGoalBtn = page.getByRole('button', { name: 'New Goal' })
 
-    this.tabBar = page.locator('nav[aria-label="Planning sections"]')
-    this.plansTab = page.locator('.tab-btn', { hasText: 'Plans' })
-    this.calculatorTab = page.locator('.tab-btn', { hasText: 'Calculator' })
-    this.activeTab = page.locator('.tab-btn.active')
+    this.calculatorTab = page.locator('#sidebar-group-goal').getByRole('link', { name: 'FIRE Calculator', exact: true })
 
     this.miniGrid = page.locator('.goals-mini-grid')
     this.miniList = page.locator('.goals-mini-list')

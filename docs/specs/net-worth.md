@@ -14,7 +14,7 @@
 | Area / feature | One-line purpose |
 |---|---|
 | Page header | Confirms the user is in Net Worth and explains the page job. |
-| Section tabs | Switches between Accounts, Allocation, and Growth. |
+| Sections | Dashboard, Allocation, Growth and Review are sub-items of Wealth in the sidebar. |
 | Header actions | Imports, exports, resets, and opens account management. |
 | Empty states | Guides first-time setup when accounts or balances are missing. |
 | Accounts manager | Manages account details, groups, filters, and bulk updates. |
@@ -67,13 +67,13 @@
 - **Notes:** These views depend on the same accounts and balances entered on the Accounts tab.
 
 ## Feature specs
-### Page header and section tabs
-- **What it is:** The top of the page with **Net Worth**, the subtitle **Track balances across your accounts over time**, and tabs for **Accounts**, **Allocation**, and **Growth**.
+### Page header and sections
+- **What it is:** The top of the page with the **Wealth** title. Its sections, **Dashboard**, **Allocation**, **Growth** and **Review**, are sub-items of Wealth in the sidebar (see `docs/specs/navigation.md`); the page header only holds controls for the current section.
 - **Why it exists:** It orients the user and separates the three major jobs on the page.
 - **Who sees it:** Always visible.
 - **Data shown:** Page title, subtitle, and active section.
-- **Actions available:** Switch between **Accounts**, **Allocation**, and **Growth**.
-- **Default state:** **Accounts** is selected first.
+- **Actions available:** Move between sections from the sidebar.
+- **Default state:** **Dashboard** (`/net-worth/dashboard`) opens first.
 - **Other states:** Allocation and Growth can show a brief **Loading…** state when first opened.
 - **Rules:** The page keeps all three views under one Net Worth destination.
 - **Edge cases:** None of the three views require a separate page load in the user experience.

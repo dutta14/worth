@@ -52,6 +52,8 @@ export interface GwGoal {
 export interface NavigationProps {
   currentPage: PageType
   setCurrentPage: (page: PageType) => void
+  /** Navigates to a path and, on mobile, closes the sidebar. Defaults to the router's navigate. */
+  navigateTo?: (path: string) => void
 }
 
 export type PageRenderer = {

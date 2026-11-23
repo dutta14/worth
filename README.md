@@ -90,6 +90,8 @@ Go back Home. You'll see the net worth summary, mini charts, goals peek, and all
 
 ## Features, by page
 
+Planning, Wealth, and Cashflow are accordions in the left sidebar. Click a heading to expand it and pick a section (for example Goals, Allocation, or Transactions). Views inside a page, such as Breakdown and My Allocation, stay on the page.
+
 ### Home
 
 ![Home dashboard with summary cards](./docs/screenshots/home-light.png)
@@ -115,11 +117,11 @@ Your dashboard. A quick read on where things stand right now, without opening si
 Two modes live here: concrete plans and a more abstract FI calculator. One keeps you honest about named goals. The other answers the older, quieter question of when work becomes optional.
 
 **How to use it**
-- Use the Plans tab for savings or investment goals with target amounts and dates
+- Open Goals under Planning in the sidebar for savings or investment goals with target amounts and dates
 - Duplicate a goal when you want to try a more conservative or more aggressive version
 - Reorder goals so the ones that matter this year stay near the top
 - Mix and match goals to see how they stack together
-- Use the Calculator tab to estimate years to financial independence from savings rate and expenses
+- Open FIRE Calculator under Planning to estimate years to financial independence from savings rate and expenses
 
 **One tip:** Create one practical goal and one aspirational one. A near-term emergency fund and a long-term FI target make the page useful in two different time horizons.
 
@@ -129,7 +131,7 @@ Two modes live here: concrete plans and a more abstract FI calculator. One keeps
 
 ![Net Worth page with accounts and growth chart](./docs/screenshots/networth.png)
 
-This is the spine of the app. The Accounts tab gives you the raw history, Allocation turns it into portfolio shape, and Growth lets you connect balances to income, expenses, and savings rate.
+This is the spine of the app. The Dashboard gives you the raw history, Allocation turns it into portfolio shape, and Growth lets you connect balances to income, expenses, and savings rate.
 
 **How to use it**
 - In Accounts, add accounts and enter monthly balances over time
@@ -139,13 +141,13 @@ This is the spine of the app. The Accounts tab gives you the raw history, Alloca
 - Filter the accounts table when you want to isolate cash, retirement, debt, or other slices
 - In Allocation, create custom ratio tabs for your ideal asset mix
 - In Growth, log yearly income, expenses, and savings to keep the balance history grounded in behavior
-- Open the Review tab for a one-page look at a single year (net worth change, income, expenses, savings rate, top spending groups, goal progress), then print it, save it as a PDF, or download it as a CSV
+- Open Review under Wealth for a one-page look at a single year (net worth change, income, expenses, savings rate, top spending groups, goal progress), then print it, save it as a PDF, or download it as a CSV
 
-**One tip:** Use Accounts for what happened, Allocation for what you want, and Growth for why the gap exists. The three tabs make more sense when you think of them as history, target, and explanation.
+**One tip:** Use Accounts for what happened, Allocation for what you want, and Growth for why the gap exists. The three sections make more sense when you think of them as history, target, and explanation.
 
-![Allocation tab with ratio targets](./docs/screenshots/allocation.png)
+![Allocation section with ratio targets](./docs/screenshots/allocation.png)
 
-![Growth tab with income, expenses, and savings rate](./docs/screenshots/growth.png)
+![Growth section with income, expenses, and savings rate](./docs/screenshots/growth.png)
 
 ---
 

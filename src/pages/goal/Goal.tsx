@@ -13,7 +13,6 @@ import { useEditingState } from './hooks/useEditingState'
 import { useGrowthSettings } from '../../hooks/useGrowthSettings'
 import GrowthSettingsPanel from '../../components/GrowthSettingsPanel'
 import MonthPicker from '../../components/MonthPicker'
-import PlanningTabs from '../../components/PlanningTabs'
 import { useLeverageSettings } from '../../hooks/useLeverage'
 import { useData } from '../../contexts/DataContext'
 
@@ -47,7 +46,6 @@ const Goal: FC = () => {
   const leverageStartMonth = leverageSettings.chartStart || allMonths[0] || ''
   const subPath = location.pathname.replace('/goal', '').replace(/^\//, '') || 'plans'
   const isDetailView = /^plans\/\d+$/.test(subPath)
-  const activeTab = isDetailView ? 'plans' : subPath
   const { formData, setFormData, error, setError, handleInputChange, populateFromGoal, resetForm } = useFormData()
   const { editingGoalId, stopEditing } = useEditingState()
   const [showForm, setShowForm] = useState(false)
@@ -114,7 +112,6 @@ const Goal: FC = () => {
               ? (goals.find(g => String(g.id) === subPath.replace('plans/', ''))?.goalName ?? 'Planning')
               : 'Planning'}
           </h1>
-          <PlanningTabs goalsActive={activeTab === 'plans'} />
           {(subPath === 'calculator' || isDetailView) && (
             <div className="goal-header-actions">
               {isDetailView && (

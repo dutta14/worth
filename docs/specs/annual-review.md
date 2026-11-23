@@ -19,7 +19,7 @@
 | M-1 | For every row in the worked-examples table (section 4.8) the selector returns the exact stated output.                                                                                             | Unit tests `selectAnnualReview.test.ts`, fixtures W1 to W10.                                            |
 | M-2 | For a fixture where Growth tab and Annual Review share a definition (no net-positive refund categories, no orphan balances), the two pages show identical net worth, income, expenses and savings. | Parity unit test calling the Growth tab pure helpers and the new selector on the same fixture.          |
 | M-3 | A user with 12 months of balances and transactions gets a full review in under 3 clicks from Home (Wealth, Review, pick year) and the page is readable with no setup.                              | Playwright test; manual stopwatch check against demo data.                                              |
-| M-4 | Printing (`emulateMedia({ media: 'print' })`) hides sidebar, tab bar and controls, forces a white background in dark mode, and never splits a figure or table row.                                 | Playwright print test plus a manual Chrome print preview (US Letter).                                   |
+| M-4 | Printing (`emulateMedia({ media: 'print' })`) hides the sidebar (which holds the section links) and controls, forces a white background in dark mode, and never splits a figure or table row.                                 | Playwright print test plus a manual Chrome print preview (US Letter).                                   |
 | M-5 | The CSV opens in a spreadsheet with the documented columns and no formula-injection.                                                                                                               | Unit test on `buildReviewCsv`; manual open in Numbers/Excel.                                            |
 | M-6 | Zero network requests are made by the page.                                                                                                                                                        | Playwright `page.on('request')` assertion that no request leaves the app origin while the review loads. |
 
@@ -31,8 +31,8 @@ Everything below was checked in the repo on 2026-11-08. Nothing in this spec is 
 
 - The sidebar has Home, Planning (`goal`), Wealth (`net-worth`), Cashflow (`budget`), plus Drive, Settings and User Guide: `src/components/SidebarNavigation.tsx`.
 - Router is `HashRouter` (`src/main.tsx`); the app is served at `/worth/` (`vite.config.js` `base`). Routes are declared in `src/App.tsx`; Wealth is `/net-worth/*` rendering `src/pages/data/Data.tsx`. `currentPage` is `net-worth` for any path that starts with `/net-worth`, so a new child route highlights Wealth with no `App.tsx` change.
-- Wealth tabs are `NavLink`s in `<nav className="tab-bar" aria-label="Wealth sections">`: Dashboard, Allocation, Growth (`Data.tsx` around lines 497 to 506). Growth is `/net-worth/growth/savings` or `/income` and renders the lazy `src/pages/tools/components/SavingsGrowthTracker.tsx`. `activeTab` is derived from `location.pathname` (`Data.tsx` line 217).
-- Planning uses `PlanningTabs` (`src/components/PlanningTabs.tsx`, `NavLink`s plus a focus-on-mount state flag). Cashflow uses `CashflowTabs` (button based, `aria-current`). Both reuse `src/styles/SectionTabs.css`. Wealth does not use `SectionTabs`.
+- Wealth sections (Dashboard, Allocation, Growth, Review) are sub-items of the Wealth accordion in the sidebar (`src/components/sidebarNavConfig.ts`, rendered by `SidebarNavigation.tsx`; see `docs/specs/navigation.md`). Before that change they were `NavLink`s in an in-page `<nav className="tab-bar" aria-label="Wealth sections">` in `Data.tsx`. Growth is `/net-worth/growth/savings` or `/income` and renders the lazy `src/pages/tools/components/SavingsGrowthTracker.tsx`. `activeTab` is derived from `location.pathname` (`Data.tsx` line 217).
+- Planning and Cashflow sections are likewise sidebar sub-items. The in-page `PlanningTabs`, `CashflowTabs` and `SectionTabs.css` no longer exist.
 - `.data-page` is `height: 100vh; overflow-y: hidden` and `.data-scroll-area` is the scroller (`src/styles/Data.css`). Anything under Wealth will be clipped to one screen when printed unless overridden.
 
 **Print today.** The only print rule is `@media print { .navbar { display: none } body { background-color: white } }` in `styles/app.css` (line 114). `.navbar` is not rendered by the current sidebar (`nav.sidebar`, `position: fixed`), so printing any page today includes the sidebar. No component stylesheet in `src/styles` contains `@media print`.
@@ -69,7 +69,7 @@ Everything below was checked in the repo on 2026-11-08. Nothing in this spec is 
 
 ### 3.1 Placement (decision)
 
-**A new tab "Review" under Wealth, route `/net-worth/review/:year?` (browser URL `https://anindya.dev/worth/#/net-worth/review/2025`).** Tab order: Dashboard, Allocation, Growth, Review.
+**A new section "Review" under Wealth (a sub-item of the Wealth accordion in the sidebar), route `/net-worth/review/:year?` (browser URL `https://anindya.dev/worth/#/net-worth/review/2025`).** Sub-item order: Dashboard, Allocation, Growth, Review.
 
 Why not the alternatives:
 
@@ -290,7 +290,7 @@ New flag `ANNUAL_REVIEW = defineFlag('annual-review', { type: 'boolean', default
 
 Navigation and years
 
-- AC-1: Wealth shows a fourth tab "Review" after Growth; it links to `/net-worth/review`, and Wealth stays highlighted in the sidebar.
+- AC-1: The Wealth group in the sidebar shows a fourth sub-item "Review" after Growth; it links to `/net-worth/review`, carries `aria-current="page"` on review routes, and the Wealth header stays highlighted.
 - AC-2: `/net-worth/review` redirects (replace) to `/net-worth/review/{defaultYear}` per 3.4. A param that is not exactly four digits redirects to `/net-worth/review`.
 - AC-3: The year `<select>` lists `getAvailableYears` descending, shows the route year as selected, and changing it navigates with replace and announces "Showing the review for {year}." in a polite live region. A route year that is not in the list is still rendered (and typically shows the empty state).
 - AC-4: The selected year survives reload and is part of the copied URL.
@@ -332,7 +332,7 @@ States
 
 Print and CSV
 
-- AC-25: In print media the sidebar, sidebar overlay and toggle, skip link, demo banner, Wealth header and tabs, year select, buttons, and in-app links are hidden; the review title, period and all sections remain (M-4).
+- AC-25: In print media the sidebar, sidebar overlay and toggle, skip link, demo banner, Wealth header, year select, buttons, and in-app links are hidden; the review title, period and all sections remain (M-4).
 - AC-26: In print media the background is white and text is dark even when `body.dark` is set, and chart strokes use the light palette.
 - AC-27: No section, figure, or table row is split across pages; table headers repeat.
 - AC-28: "Download CSV" saves `worth-annual-review-{year}.csv` with the layout in 4.9; the file round-trips through `parseCSV` (`csvUtils`) into the same cells; text cells that start with `=`, `+`, `-` (non-numeric), `@`, tab or CR are prefixed with a single quote.
@@ -514,7 +514,7 @@ Year change: content swaps immediately (no fade). Spending bar widths animate `w
 
 ### 5.7 Accessibility notes (WCAG 2.1 AA)
 
-- Tab order: Wealth tabs, year select, Print, Download CSV, in-note links (spreadsheet, Growth, Cashflow Groups), "Show monthly values". Nothing else is focusable. Satisfies 2.1.1, 2.4.3, 2.4.7.
+- Tab order: year select, Print, Download CSV, in-note links (spreadsheet, Growth, Cashflow Groups), "Show monthly values". Nothing else is focusable. Satisfies 2.1.1, 2.4.3, 2.4.7.
 - Names and roles (4.1.2): select labelled by a visible `<label>`; buttons have visible text; `aria-expanded` and `aria-controls` on the toggle; the chart SVG is `aria-hidden` with the figcaption summary plus table (1.1.1, 1.3.1). Summary example: "Net worth rose from $400,000 in December 2024 to $460,000 in December 2025."
 - Do not convey direction by color (1.4.1); text contrast 4.5:1 for normal text (1.4.3) using existing muted text tokens (light: `#6b7280` on `#ffffff` is 4.8:1; verify `--color-text-muted` on `--color-surface-alt` in dark mode during QA); non-text contrast 3:1 for the chart line and points against surface (1.4.11), checked in both modes.
 - Live region `role="status"` for year change and download (4.1.3). Loading uses `role="status"`; the sections carry `aria-busy="true"` while loading.
@@ -527,7 +527,7 @@ Voice: plain, calm, direct. No exclamation marks, no praise, no shaming. Money i
 
 | Surface                     | String                                                                                                                                          | Notes                                                                                             |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Tab                         | Review                                                                                                                                          | Wealth tab; aria name same                                                                        |
+| Sidebar sub-item            | Review                                                                                                                                          | Under Wealth; aria name same                                                                      |
 | Search item                 | Annual Review (hint: "Your year in money: net worth, savings, spending")                                                                        | keywords: annual review, year in review, year end, yearly, savings rate, top spending, print, csv |
 | Page title                  | Annual Review {year}                                                                                                                            | `h2`                                                                                              |
 | Subtitle                    | Your year in money, built from the files in your folder.                                                                                        |                                                                                                   |
@@ -639,8 +639,8 @@ Spec of `formatDelta`: rounds once with `Intl.NumberFormat` (not `toFixed`), ret
 - **Parity test (M-2):** fixture without net-positive refund categories; compare `netWorth` and `cashflow` with the Growth tab helpers (extract `getYearEndNetWorths` input/outputs by rendering `SavingsGrowthTracker` with a mocked store, or add a tiny export in slice 1 if rendering proves brittle).
 - **Component tests** (Testing Library, role queries): header (label, select options, live announcement on change), each section's states, notes rendering for every `ReviewNote` code, empty and loading, "Show monthly values" toggles `aria-expanded` and visibility, buttons disabled when empty, Download calls the Blob path (mock `URL.createObjectURL`), print button calls `window.print`.
 - **CSV tests:** exact string for W1 (the sample in 4.9), quoting of commas and newlines, injection prefix cases, empty-value rows for W3.
-- **Tests that must be updated:** `src/pages/data/NetWorthTabs.test.tsx` and `Data.test.tsx` (tab list now varies by flag; add flag-on and flag-off cases and keep existing assertions on Dashboard/Allocation/Growth), `src/search/searchIndex.test.ts` (new flagged entry; no existing count assertions break), `src/search/useSearchIndexData` tests if present, `FlagAdminPane.test.tsx` (lists `FLAGS` entries; check it does not assume a single flag), `SavingsGrowthTracker.test.tsx` and `.branches.test.tsx` (import swap only), `Guide.test.tsx` (TOC), `DataContext.test.tsx` (isLoaded), `e2e/pages/net-worth.page.ts` tab helpers keep working.
-- **Playwright:** (1) with flag override and seeded balances/CSVs, open Wealth, click Review, pick 2025, assert headline values; (2) empty year shows "Not enough data for 2024"; (3) incomplete December shows the missing account and no change value; (4) keyboard-only: Tab to the select, change year with arrow keys, Tab to Print and Download, assert order and that the download event filename is `worth-annual-review-2025.csv`; (5) print: `await page.emulateMedia({ media: 'print' })`, assert `.sidebar`, `nav[aria-label="Wealth sections"]`, `#ar-year`, and Print button are hidden, `h2` "Annual Review 2025" visible, and, with dark mode on, `getComputedStyle(document.body).backgroundColor === 'rgb(255, 255, 255)'`; also `page.pdf()` assertion is out (Chromium-only API, flaky); (6) no requests outside the origin (M-6).
+- **Tests that must be updated:** `Data.test.tsx` and `Data.routes.test.tsx` (the section list now lives in `SidebarNavigation.test.tsx` and `sidebarNavConfig.test.ts`), `src/search/searchIndex.test.ts` (new flagged entry; no existing count assertions break), `src/search/useSearchIndexData` tests if present, `FlagAdminPane.test.tsx` (lists `FLAGS` entries; check it does not assume a single flag), `SavingsGrowthTracker.test.tsx` and `.branches.test.tsx` (import swap only), `Guide.test.tsx` (TOC), `DataContext.test.tsx` (isLoaded), `e2e/pages/net-worth.page.ts` `getTabLink` keeps working against the sidebar.
+- **Playwright:** (1) with flag override and seeded balances/CSVs, open Wealth, click Review, pick 2025, assert headline values; (2) empty year shows "Not enough data for 2024"; (3) incomplete December shows the missing account and no change value; (4) keyboard-only: Tab to the select, change year with arrow keys, Tab to Print and Download, assert order and that the download event filename is `worth-annual-review-2025.csv`; (5) print: `await page.emulateMedia({ media: 'print' })`, assert `.sidebar`, `#ar-year`, and Print button are hidden, `h2` "Annual Review 2025" visible, and, with dark mode on, `getComputedStyle(document.body).backgroundColor === 'rgb(255, 255, 255)'`; also `page.pdf()` assertion is out (Chromium-only API, flaky); (6) no requests outside the origin (M-6).
 - **A11y checks:** repo has no axe dependency; use role/name/`aria-expanded`/live-region assertions as other specs do. Manual VoiceOver pass (Safari is unsupported by the app, so Chrome plus VoiceOver) on: year change announcement, figure caption, table navigation. Adding `@axe-core/playwright` is a separate decision (O-9).
 - **Docs:** README Wealth section and Guide paragraph; CONTRIBUTING tree and flag note; `docs/README.md` spec list.
 

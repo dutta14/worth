@@ -399,7 +399,7 @@ The page lives at `/taxes` and renders inside the main app shell.
 
 ## Navigation
 - The page is mounted at **`/taxes`**.
-- Users reach it from the main sidebar via the **Taxes** navigation button.
+- Users reach it from the main sidebar: **Taxes** is a sub-item of the **Planning** accordion.
 - From the page, users can:
   - Switch between tax years with the header arrows
   - Open the global **Drive** view from the app shell footer to access document folders

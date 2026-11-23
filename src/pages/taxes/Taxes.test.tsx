@@ -94,13 +94,13 @@ afterEach(() => {
    ═══════════════════════════════════════════════════════════════ */
 
 describe('Taxes', () => {
-  describe('Planning tabs', () => {
-    it('shows the Planning heading with Taxes as the active tab', async () => {
+  describe('page header', () => {
+    it('shows the Planning heading without an in-page section tab bar', async () => {
       renderTaxes('/taxes')
 
       expect(await screen.findByRole('heading', { level: 1, name: 'Planning' })).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: 'Taxes' })).toHaveAttribute('aria-current', 'page')
-      expect(screen.getByRole('link', { name: 'Goals' })).toHaveAttribute('href', '/goal/plans')
+      expect(screen.queryByRole('navigation', { name: 'Planning sections' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Goals' })).not.toBeInTheDocument()
     })
   })
 

@@ -1,5 +1,5 @@
 import { FC, KeyboardEvent, useEffect, useState, useRef, lazy, Suspense } from 'react'
-import { NavLink, useLocation, useNavigate, Routes, Route, Navigate } from 'react-router-dom'
+import { useLocation, useNavigate, Routes, Route, Navigate } from 'react-router-dom'
 import { useGoals } from '../../contexts/GoalsContext'
 import { useSettings } from '../../contexts/SettingsContext'
 import { useData } from '../../contexts/DataContext'
@@ -519,20 +519,6 @@ const Data: FC = () => {
         <div className="data-header-left">
           <h1>Wealth</h1>
         </div>
-        <nav className="tab-bar" aria-label="Wealth sections">
-          <NavLink to="/net-worth/dashboard" className={() => `tab-btn${activeTab === 'accounts' ? ' active' : ''}`}>
-            Dashboard
-          </NavLink>
-          <NavLink to="/net-worth/allocation" className={({ isActive }) => `tab-btn${isActive ? ' active' : ''}`}>
-            Allocation
-          </NavLink>
-          <NavLink to="/net-worth/growth" className={({ isActive }) => `tab-btn${isActive ? ' active' : ''}`}>
-            Growth
-          </NavLink>
-          <NavLink to="/net-worth/review" className={() => `tab-btn${activeTab === 'review' ? ' active' : ''}`}>
-            Review
-          </NavLink>
-        </nav>
         <div className="data-header-right">
           {activeTab === 'accounts' && hasAccounts && (
             <div className="tab-bar" role="tablist" aria-label="Data view" onKeyDown={handleDataViewTabKeyDown}>

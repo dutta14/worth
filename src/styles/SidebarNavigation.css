@@ -141,6 +141,93 @@ body.dark .sidebar-link.active {
   outline-offset: -2px;
 }
 
+/* ── Accordion groups (Planning, Wealth, Cashflow) ── */
+.sidebar-menu,
+.sidebar-footer-menu {
+  flex-shrink: 0;
+}
+
+.sidebar-chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: transform 0.15s ease;
+}
+
+.sidebar-group.expanded > .sidebar-link .sidebar-chevron {
+  transform: rotate(90deg);
+}
+
+/* The active child carries the highlight while a group is open, so its header only takes the stronger text colour. */
+.sidebar .sidebar-group.expanded > .sidebar-link.active {
+  background: none;
+  box-shadow: none;
+}
+
+.sidebar .sidebar-group.expanded > .sidebar-link.active:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+body.dark .sidebar .sidebar-group.expanded > .sidebar-link.active:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Accordion groups get a little extra air; short viewports fall back to compact rows so the sidebar does not scroll. */
+.sidebar .sidebar-group {
+  margin-top: 0.25rem;
+}
+
+.sidebar {
+  --nav-row-height: 2.125rem;
+}
+
+/* Headers and children share one row height so the accordion reads as a single rhythm. */
+.sidebar .sidebar-group > .sidebar-link,
+.sidebar .sidebar-subitem .sidebar-sublink {
+  box-sizing: border-box;
+  min-height: var(--nav-row-height);
+  padding-top: 0;
+  padding-bottom: 0;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-sublist {
+  list-style: none;
+  margin: 0.15rem 0 0.35rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+/* 4px link padding + 18px icon + 8px gap aligns child labels with the header label. */
+.sidebar .sidebar-subitem .sidebar-sublink {
+  padding-left: 30px;
+  padding-right: 0.75rem;
+  font-size: var(--fs-sm);
+  text-decoration: none;
+}
+
+@media (max-height: 820px) {
+  .sidebar .sidebar-group {
+    margin-top: 0;
+  }
+
+  .sidebar {
+    --nav-row-height: 1.8rem;
+  }
+
+  .sidebar-sublist {
+    margin: 0.15rem 0 0.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-chevron {
+    transition: none;
+  }
+}
+
 .sidebar-toggle {
   margin-bottom: 0;
   --sidebar-toggle-color: var(--color-text-muted);

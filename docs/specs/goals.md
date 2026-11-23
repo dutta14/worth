@@ -13,7 +13,7 @@
 ## What this page includes
 | Area / feature | One-line purpose |
 |---|---|
-| Header and tabs | Switches between Plans and Calculator. |
+| Header | Shows the **Planning** title and page actions. Sections (Goals, Leverage, Pay Down, FIRE Calculator, Taxes) are sub-items of Planning in the sidebar. |
 | Plans header actions | Opens Mix & Match and new-goal creation. |
 | Goal toolbar | Filters plans, counts results, enters compare mode, and switches grid/list view. |
 | Goal cards | Shows compact progress summaries for each plan. |
@@ -62,21 +62,21 @@
 
 ## Feature specs
 ### Header and top-level navigation
-- **What it is:** The top of the Goals page with tabs for **Plans** and **Calculator**.
+- **What it is:** The top of the Planning page with the page title and actions. Switching between **Goals** and the **FIRE Calculator** happens in the sidebar (see `docs/specs/navigation.md`), not in the header.
 - **Why it exists:** It separates saved plans from the standalone planning tool.
 - **Who sees it:** Always visible on the Goals page.
 - **Data shown:** Page title **Goals**, the active tab, and top-level actions.
-- **Actions available:** Switch tabs, open **Mix & Match**, and click **+ New Goal**.
-- **Default state:** **Plans** is selected first.
-- **Other states:** The **Calculator** tab can briefly show **Loading…** before the tool appears.
+- **Actions available:** Open **Mix & Match** and click **+ New Goal**.
+- **Default state:** **Goals** (`/goal/plans`) is the default section.
+- **Other states:** The **FIRE Calculator** section can briefly show **Loading…** before the tool appears.
 - **Rules:** **Mix & Match** only appears when the user has at least one FI goal and at least one GW goal.
-- **Edge cases:** The user can reach the calculator without leaving Goals.
+- **Edge cases:** The user can reach the calculator without leaving Planning.
 - **Related workflows:** Create a new goal; Run what-if analysis.
 
 ### Goal toolbar
 - **What it is:** The control row above the plan cards.
 - **Why it exists:** It helps the user count, filter, compare, and change the browsing layout.
-- **Who sees it:** Users on the **Plans** tab.
+- **Who sees it:** Users on the **Goals** section.
 - **Data shown:** Count labels such as **N goals** or **2 of 5**, filter pills, **Compare** or **Exit Compare**, **Grid view**, **List view**, and compare guidance text.
 - **Actions available:** Apply or clear filters, enter compare mode, exit compare mode, and switch between grid and list view.
 - **Default state:** No filters, standard browse mode, and the current saved layout.
@@ -181,13 +181,13 @@
 - **Edge cases:** Milestone labels can include growth-rate changes, **Primary**, **Partner**, and **F.I.R.E.**
 - **Related workflows:** Run what-if analysis.
 
-### Calculator tab
-- **What it is:** The FI calculator experience embedded under the **Calculator** tab.
+### FIRE Calculator section
+- **What it is:** The FI calculator experience at `/goal/calculator`, the **FIRE Calculator** sub-item under Planning.
 - **Why it exists:** It gives the user a faster what-if tool separate from saved plans.
-- **Who sees it:** Users who switch to **Calculator**.
+- **Who sees it:** Users who open **FIRE Calculator** from the sidebar.
 - **Data shown:** The calculator interface and a brief **Loading…** fallback while it opens.
 - **Actions available:** Use the calculator without leaving Goals.
-- **Default state:** Hidden until the user selects the tab.
+- **Default state:** Hidden until the user opens the section.
 - **Other states:** Loading fallback, then the full calculator.
 - **Rules:** The calculator is part of the Goals destination, not a separate top-level page.
 - **Edge cases:** None beyond the brief loading state.
