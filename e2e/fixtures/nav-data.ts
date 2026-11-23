@@ -76,8 +76,33 @@ export const NAV_PATHS: Record<PrimaryNavLink | 'Drive', string> = {
   Home: '/',
   Planning: '/goal/plans',
   Wealth: '/net-worth/dashboard',
-  Cashflow: '/budget',
+  Cashflow: '/budget/cashflow',
   Drive: '/drive',
+}
+
+/** Sidebar accordion groups and the sub-items each one holds, in sidebar order. */
+export const NAV_GROUP_CHILDREN = {
+  Planning: ['Goals', 'Leverage', 'Pay Down', 'FIRE Calculator', 'Taxes'],
+  Wealth: ['Dashboard', 'Allocation', 'Growth', 'Review'],
+  Cashflow: ['Overview', 'Spreadsheet', 'Groups', 'Transactions'],
+} as const
+export type NavGroupName = keyof typeof NAV_GROUP_CHILDREN
+
+/** Hash path of each sidebar sub-item. */
+export const SUB_PATHS: Record<string, string> = {
+  Goals: '/goal/plans',
+  Leverage: '/goal/leverage',
+  'Pay Down': '/goal/paydown',
+  'FIRE Calculator': '/goal/calculator',
+  Taxes: '/taxes',
+  Dashboard: '/net-worth/dashboard',
+  Allocation: '/net-worth/allocation',
+  Growth: '/net-worth/growth',
+  Review: '/net-worth/review',
+  Overview: '/budget/cashflow',
+  Spreadsheet: '/budget/spreadsheet',
+  Groups: '/budget/groups',
+  Transactions: '/transactions',
 }
 
 /** The h1 text rendered on each route (regex tolerates the dynamic Home greeting). */

@@ -19,6 +19,11 @@ interface FeaturesByPageProps {
 const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
   <section className="guide-section" id="features-by-page">
     <h2>Features, by page</h2>
+    <p>
+      Planning, Wealth, and Cashflow open into their sections in the sidebar. Click a heading to expand it, then pick a
+      section such as Goals, Allocation, or Transactions. Switches inside a page, like Breakdown and My Allocation, stay
+      on the page.
+    </p>
 
     <section className="guide-subsection" id="feature-home">
       <h3>Home</h3>
@@ -54,11 +59,14 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
       </p>
       <h4>How to use it</h4>
       <ul className="guide-bullet-list">
-        <li>Use the Plans tab for savings or investment goals with target amounts and dates.</li>
+        <li>Open Goals under Planning for savings or investment goals with target amounts and dates.</li>
         <li>Duplicate a goal when you want to try a more conservative or more aggressive version.</li>
         <li>Reorder goals so the ones that matter this year stay near the top.</li>
         <li>Mix and match goals to see how they stack together.</li>
-        <li>Use the Calculator tab to estimate years to financial independence from savings rate and expenses.</li>
+        <li>
+          Open FIRE Calculator under Planning to estimate years to financial independence from savings rate and
+          expenses.
+        </li>
       </ul>
       <p>
         <strong>One tip:</strong> Create one practical goal and one aspirational one. A near-term emergency fund and a
@@ -70,8 +78,8 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
       <h3>Wealth</h3>
       <GuideFigure src={screenshots.netWorth} alt="Wealth page with accounts and growth chart" />
       <p>
-        This is the spine of the app. The Accounts tab gives you the raw history, Allocation turns it into portfolio
-        shape, and Growth lets you connect balances to income, expenses, and savings rate.
+        This is the spine of the app. The Dashboard gives you the raw history, Allocation turns it into portfolio shape,
+        and Growth lets you connect balances to income, expenses, and savings rate.
       </p>
       <h4>How to use it</h4>
       <ul className="guide-bullet-list">
@@ -87,15 +95,15 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>In Allocation, create custom ratio tabs for your ideal asset mix.</li>
         <li>In Growth, log yearly income, expenses, and savings to keep the balance history grounded in behavior.</li>
         <li>
-          The Review tab shows one year at a glance. Pick a year to see net worth, income, expenses, savings rate, top
-          spending groups, and goal progress on one page, then print it, save it as a PDF, or download it as a CSV.
-          Anything missing from your files is listed under Things to know. Each year card on the Growth tab also links
-          straight to that year's review.
+          Review shows one year at a glance. Pick a year to see net worth, income, expenses, savings rate, top spending
+          groups, and goal progress on one page, then print it, save it as a PDF, or download it as a CSV. Anything
+          missing from your files is listed under Things to know. Each year card in Growth also links straight to that
+          year's review.
         </li>
       </ul>
       <p>
         <strong>One tip:</strong> Use Accounts for what happened, Allocation for what you want, and Growth for why the
-        gap exists. The three tabs make more sense when you think of them as history, target, and explanation.
+        gap exists. The three sections make more sense when you think of them as history, target, and explanation.
       </p>
     </section>
 
@@ -127,7 +135,7 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>
           Rules sort transactions for you. A rule says that a description containing, say, Starbucks belongs in Dining.
           The first matching rule wins, rules run on every import, and you can reorder, turn off or delete them from
-          Rules on the Transactions tab.
+          Rules in Transactions.
         </li>
       </ul>
       <p>
@@ -140,23 +148,23 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
       <h3>Transactions</h3>
       <GuideFigure src={screenshots.transactions} alt="Transactions page with filtering and categorization" />
       <p>
-        Transactions is a tab inside Cashflow, next to Overview, Spreadsheet, and Groups. It is for the raw stream of
-        money in and out, with filtering and categorization that helps you clean things up before they become a
-        reporting habit.
+        Transactions sits under Cashflow in the sidebar, next to Overview, Spreadsheet, and Groups. It is for the raw
+        stream of money in and out, with filtering and categorization that helps you clean things up before they become
+        a reporting habit.
       </p>
       <h4>How to use it</h4>
       <ul className="guide-bullet-list">
-        <li>Open the Transactions tab to review the raw list apart from the yearly rollups.</li>
+        <li>Open Transactions under Cashflow to review the raw list apart from the yearly rollups.</li>
         <li>Filter the list when you want to isolate one account, merchant, or category pattern.</li>
         <li>Categorize or recategorize items before they pollute your longer-term summaries.</li>
         <li>Use it as the place for cleanup work, not just for reading totals.</li>
         <li>
-          The ⋯ More actions menu on this tab has Import, Rules and Apply rules to uncategorized. Open a row&apos;s
+          The ⋯ More actions menu on this page has Import, Rules and Apply rules to uncategorized. Open a row&apos;s
           category menu and choose Always categorize merchants like this to create a rule from it.
         </li>
       </ul>
       <p>
-        <strong>One tip:</strong> Treat the Transactions tab as the inbox and the other Cashflow tabs as the monthly
+        <strong>One tip:</strong> Treat Transactions as the inbox and the other Cashflow sections as the monthly
         summary. One is where you fix the raw data, the other is where you look for meaning.
       </p>
     </section>

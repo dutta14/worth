@@ -5,7 +5,6 @@ import { currentMonthKey, useBudgetTargets } from './hooks/useBudgetTargets'
 import { useImportWizard } from './import/hooks/useImportWizard'
 import { BudgetViewMode, TimePeriod } from './types'
 import BudgetHeader from './components/BudgetHeader'
-import { CASHFLOW_TAB_FOCUS_STATE, shouldFocusCashflowTab } from '../../components/CashflowTabs'
 import ManualTransactionEntry from './components/ManualTransactionEntry'
 import BudgetSummary from './components/BudgetSummary'
 import BudgetTable from './components/BudgetTable'
@@ -65,7 +64,7 @@ const Budget: FC = () => {
   const navigate = useNavigate()
   const wizard = useImportWizard(
     { store, commitImport, undoImport, blocked: importBlocked, reload },
-    { onViewTransactions: () => navigate('/transactions', { state: CASHFLOW_TAB_FOCUS_STATE }) },
+    { onViewTransactions: () => navigate('/transactions') },
   )
   const budgetPath = location.pathname.replace(/\/+$/, '')
   const viewMode: BudgetViewMode = budgetPath.endsWith('/groups')
@@ -137,9 +136,6 @@ const Budget: FC = () => {
         timePeriod={timePeriod}
         onPrevYear={() => setSelectedYear(y => y - 1)}
         onNextYear={() => setSelectedYear(y => y + 1)}
-        onSetViewMode={mode => navigate(`/budget/${mode}`)}
-        onOpenTransactions={() => navigate('/transactions', { state: CASHFLOW_TAB_FOCUS_STATE })}
-        focusTabsOnMount={shouldFocusCashflowTab(location.state)}
         onSetTimePeriod={setTimePeriod}
       />
 

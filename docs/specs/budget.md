@@ -14,7 +14,7 @@
 | Area / feature | One-line purpose |
 |---|---|
 | Header and year navigation | Switch years and change how budget data is viewed. |
-| View controls | Switch between the Overview, Spreadsheet, Groups, and Transactions tabs, plus M/Q/H time grouping and an Aggregated/Detailed toggle inside Spreadsheet. |
+| View controls | Switch between Overview, Spreadsheet, Groups and Transactions from the Cashflow group in the sidebar, plus M/Q/H time grouping and an Aggregated/Detailed toggle inside Spreadsheet. |
 | Upload controls | Import one CSV, bulk import multiple CSVs, and optionally open the PDF → CSV lab tool. |
 | CSV format help | Show the expected import format and examples. |
 | Manual transaction entry | Add a single transaction directly without importing a file. |
@@ -79,19 +79,19 @@
 
 ## Feature specs
 ### Header and year navigation
-- **What it is:** The top bar with the **Cashflow** title (the sidebar label and page `<h1>`), the **Overview / Spreadsheet / Groups / Transactions** tabs, the **M / Q / H** toggle, and previous and next year buttons.
+- **What it is:** The top bar with the **Cashflow** title (the sidebar label and page `<h1>`), the **M / Q / H** toggle, and previous and next year buttons.
 - **Why it exists:** It gives the user the main controls for moving around the page.
 - **Who sees it:** Always visible.
 - **Data shown:** Page title and selected year.
-- **Actions available:** Previous year, next year, change tab, and change time grouping. Importing, adding a transaction, and the CSV format help live in the **⋯ More actions** menu inside Spreadsheet.
+- **Actions available:** Previous year, next year, and change time grouping. The Overview, Spreadsheet, Groups and Transactions sections are sub-items of Cashflow in the sidebar. Importing, adding a transaction, and the CSV format help live in the **⋯ More actions** menu inside Spreadsheet.
 - **Default state:** Selected year starts at the current year and the page opens on **Overview** (`/budget` redirects to `/budget/cashflow`).
-- **Other states:** The **M / Q / H** toggle is hidden on the **Groups** tab. **Transactions** leaves the page and opens `/transactions`.
+- **Other states:** The **M / Q / H** toggle is hidden on the **Groups** section. **Transactions** is a separate page at `/transactions`, also under Cashflow in the sidebar.
 - **Rules:** Budget years can be browsed forward and backward, including future years.
 - **Edge cases:** Simply visiting a new year can make that year available for manual entry even before any transactions exist.
 - **Related workflows:** Import a monthly CSV; Bulk import multiple CSVs; Reorganize expense categories.
 
 ### View controls
-- **What it is:** The tabs **Overview** (`/budget/cashflow`), **Spreadsheet** (`/budget/spreadsheet`), **Groups** (`/budget/groups`), and **Transactions** (`/transactions`), the **M / Q / H** toggle, and, inside Spreadsheet, the **Income / Expenses** tabs and the **Aggregated / Detailed** toggle.
+- **What it is:** The sidebar sub-items **Overview** (`/budget/cashflow`), **Spreadsheet** (`/budget/spreadsheet`), **Groups** (`/budget/groups`), and **Transactions** (`/transactions`), the **M / Q / H** toggle, and, inside Spreadsheet, the **Income / Expenses** tabs and the **Aggregated / Detailed** toggle.
 - **Why it exists:** It lets the user switch between summary tables, transaction tables, charts, and group management at different time grains.
 - **Who sees it:** Always visible.
 - **Data shown:** Active selection state only.

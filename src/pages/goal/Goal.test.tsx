@@ -194,22 +194,19 @@ describe('Goal page routing', () => {
     renderGoal('/goal')
 
     expect(screen.getByRole('heading', { name: 'Planning', level: 1 })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Goals' }).className).toContain('active')
     expect(screen.getByTestId('goals-section')).toBeInTheDocument()
   })
 
-  it('renders the calculator tab and growth settings at /goal/calculator', () => {
+  it('renders the calculator and growth settings at /goal/calculator', () => {
     renderGoal('/goal/calculator')
 
-    expect(screen.getByRole('link', { name: 'FIRE Calculator' }).className).toContain('active')
     expect(screen.getByTestId('fi-calculator')).toBeInTheDocument()
     expect(screen.getByTestId('growth-settings-panel')).toBeInTheDocument()
   })
 
-  it('renders the leverage tab month picker at /goal/leverage', () => {
+  it('renders the leverage month picker at /goal/leverage', () => {
     renderGoal('/goal/leverage')
 
-    expect(screen.getByRole('link', { name: 'Leverage' }).className).toContain('active')
     expect(screen.getByTestId('month-picker')).toBeInTheDocument()
   })
 
@@ -224,11 +221,11 @@ describe('Goal page routing', () => {
     })
   })
 
-  it('renders detail view at /goal/plans/:id and keeps the header navigation visible', () => {
+  it('renders detail view at /goal/plans/:id with the goal name as the heading', () => {
     renderGoal('/goal/plans/1')
 
     expect(screen.getByRole('heading', { name: 'Alpha', level: 1 })).toBeInTheDocument()
-    expect(screen.getByRole('navigation', { name: 'Planning sections' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Planning sections' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open goal drawer' })).toBeInTheDocument()
     expect(screen.getByTestId('goal-detail')).toBeInTheDocument()
   })

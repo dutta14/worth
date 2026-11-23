@@ -24,7 +24,7 @@ test.describe('Annual Review', () => {
     const nav = new NavigationPage(page)
 
     await page.goto('/worth/#/net-worth/dashboard')
-    await expect(review.tabBar.getByRole('link')).toHaveText(['Dashboard', 'Allocation', 'Growth', 'Review'])
+    await expect(review.wealthLinks).toHaveText(['Dashboard', 'Allocation', 'Growth', 'Review'])
     await review.reviewTab.click()
 
     await expect(page).toHaveURL(/#\/net-worth\/review\/2025$/)
@@ -296,7 +296,7 @@ test.describe('Annual Review CSV and keyboard', () => {
     await review.goto('/2025')
     await expect(review.title).toHaveText('Annual Review 2025')
 
-    await review.reviewTab.focus()
+    await page.locator('#main-content').focus()
     await page.keyboard.press('Tab')
     await expect(review.yearSelect).toBeFocused()
     await page.keyboard.press('Tab')
@@ -347,7 +347,7 @@ test.describe('Annual Review print and privacy', () => {
       await page.emulateMedia({ media: 'print' })
 
       await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeHidden()
-      await expect(review.tabBar).toBeHidden()
+      await expect(review.reviewTab).toBeHidden()
       await expect(review.yearSelect).toBeHidden()
       await expect(review.printBtn).toBeHidden()
       await expect(review.downloadBtn).toBeHidden()

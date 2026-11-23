@@ -390,31 +390,30 @@ describe('Budget view mode toggle', () => {
     mockUseBudget.monthsWithData = new Set(['2025-01'])
   })
 
-  it('navigates to the spreadsheet route when clicking Spreadsheet button', async () => {
-    const user = userEvent.setup()
-    renderBudget('/budget/cashflow')
-
-    await user.click(screen.getByRole('button', { name: 'Spreadsheet' }))
+  it('renders the spreadsheet view on /budget/spreadsheet', async () => {
+    renderBudget('/budget/spreadsheet')
 
     expect(await screen.findByTestId('budget-aggregated')).toBeInTheDocument()
   })
 
-  it('navigates to the cashflow route when clicking Overview button', async () => {
-    const user = userEvent.setup()
-    renderBudget('/budget/spreadsheet')
-
-    await user.click(screen.getByRole('button', { name: 'Overview' }))
+  it('renders the overview on /budget/cashflow', async () => {
+    renderBudget('/budget/cashflow')
 
     expect(await screen.findByTestId('cashflow-bar-chart')).toBeInTheDocument()
   })
 
-  it('navigates to the groups route when clicking Groups button', async () => {
-    const user = userEvent.setup()
-    renderBudget('/budget/cashflow')
-
-    await user.click(screen.getByRole('button', { name: 'Groups' }))
+  it('renders the category groups view on /budget/groups', async () => {
+    renderBudget('/budget/groups')
 
     expect(await screen.findByTestId('category-group-manager')).toBeInTheDocument()
+  })
+
+  it('does not render an in-page first-level tab bar', () => {
+    renderBudget('/budget/cashflow')
+
+    for (const name of ['Overview', 'Spreadsheet', 'Groups', 'Transactions']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+    }
   })
 
   it('calls setSpreadsheetMode with "aggregated" when clicking Aggregated button', async () => {

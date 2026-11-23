@@ -1,13 +1,23 @@
 import { Page, Locator, expect } from '@playwright/test'
-import { APP_BASE, hashUrl, NAV_PATHS, PAGE_HEADINGS, PrimaryNavLink } from '../fixtures/nav-data'
+import {
+  APP_BASE,
+  hashUrl,
+  NAV_PATHS,
+  NavGroupName,
+  PAGE_HEADINGS,
+  PrimaryNavLink,
+  SUB_PATHS,
+} from '../fixtures/nav-data'
 
 export type NavName = PrimaryNavLink | 'Drive'
 
 /**
  * Page object for the sidebar / primary-navigation flows (#141, 61a).
  *
- * All locators are accessible-name based. `aria-current="page"` is the
- * canonical active-state assertion — never the `active` CSS class.
+ * All locators are accessible-name based. `aria-current` is the canonical
+ * active-state assertion, never the `active` CSS class: Home, Drive and the
+ * current sub-item carry "page"; the accordion group header holding the
+ * current route carries "true".
  */
 export class NavigationPage {
   readonly page: Page
@@ -40,6 +50,31 @@ export class NavigationPage {
     return this.sidebar.getByRole('button', { name, exact: true })
   }
 
+  /** Locator for a sub-item link inside an expanded accordion group (Planning, Wealth or Cashflow). */
+  subLink(group: NavGroupName, label: string): Locator {
+    return this.groupList(group).getByRole('link', { name: label, exact: true })
+  }
+
+  /** The child list a group header controls; only rendered while the group is expanded. */
+  groupList(group: NavGroupName): Locator {
+    const id = { Planning: 'goal', Wealth: 'net-worth', Cashflow: 'budget' }[group]
+    return this.sidebar.locator(`#sidebar-group-${id}`)
+  }
+
+  /** Open an accordion group if it is collapsed. */
+  async expandGroup(group: NavGroupName): Promise<void> {
+    const header = this.link(group)
+    if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click()
+    await expect(header).toHaveAttribute('aria-expanded', 'true')
+  }
+
+  /** Open a group and click one of its sub-items, then wait for the URL to match. */
+  async navToSub(group: NavGroupName, label: string): Promise<void> {
+    await this.expandGroup(group)
+    await this.subLink(group, label).click()
+    await expect(this.page).toHaveURL(routeRegex(SUB_PATHS[label]))
+  }
+
   /** Click a nav link and wait until URL + heading reflect the new page. */
   async navTo(name: NavName): Promise<void> {
     await this.link(name).click()
@@ -53,11 +88,13 @@ export class NavigationPage {
   }
 
   /**
-   * Assert exactly one nav link has `aria-current="page"`, and it is the
-   * one named `name`.
+   * Assert the nav item named `name` is the active one: a group header reads
+   * `aria-current="true"`, Home and Drive read `"page"`, and no other
+   * top-level item carries `aria-current`.
    */
   async expectActive(name: NavName): Promise<void> {
-    await expect(this.link(name)).toHaveAttribute('aria-current', 'page')
+    const isGroup = name === 'Planning' || name === 'Wealth' || name === 'Cashflow'
+    await expect(this.link(name)).toHaveAttribute('aria-current', isGroup ? 'true' : 'page')
     for (const other of (['Home', 'Planning', 'Wealth', 'Cashflow', 'Drive'] as NavName[]).filter(n => n !== name)) {
       await expect(this.link(other)).not.toHaveAttribute('aria-current', /.*/)
     }

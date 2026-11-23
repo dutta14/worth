@@ -1,7 +1,6 @@
 import { FC } from 'react'
 import { TimePeriod, BudgetViewMode } from '../types'
 import YearNav from '../../../components/YearNav'
-import CashflowTabs from '../../../components/CashflowTabs'
 
 interface BudgetHeaderProps {
   selectedYear: number
@@ -9,9 +8,6 @@ interface BudgetHeaderProps {
   timePeriod: TimePeriod
   onPrevYear: () => void
   onNextYear: () => void
-  onSetViewMode: (mode: BudgetViewMode) => void
-  onOpenTransactions: () => void
-  focusTabsOnMount?: boolean
   onSetTimePeriod: (period: TimePeriod) => void
 }
 
@@ -21,19 +17,11 @@ const BudgetHeader: FC<BudgetHeaderProps> = ({
   timePeriod,
   onPrevYear,
   onNextYear,
-  onSetViewMode,
-  onOpenTransactions,
-  focusTabsOnMount,
   onSetTimePeriod,
 }) => (
   <div className="budget-header">
     <div className="budget-header-left">
       <h1 className="budget-title">Cashflow</h1>
-      <CashflowTabs
-        focusActiveOnMount={focusTabsOnMount}
-        active={viewMode}
-        onSelect={tab => (tab === 'transactions' ? onOpenTransactions() : onSetViewMode(tab))}
-      />
     </div>
     <div className="budget-header-right">
       {viewMode !== 'groups' && (

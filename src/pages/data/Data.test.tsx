@@ -121,12 +121,12 @@ beforeEach(() => {
 describe('Data page integration', () => {
   // --- Tab routing ---
 
-  it('renders the Dashboard tab as active by default', () => {
+  it('renders the Dashboard view tabs by default', () => {
     mockAccounts = [...twoAccounts]
     mockBalances = [...twoBalances]
     renderData()
-    const accountsTab = screen.getByRole('link', { name: 'Dashboard' })
-    expect(accountsTab).toHaveClass('active')
+    expect(screen.getByRole('tablist', { name: 'Data view' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Wealth sections' })).not.toBeInTheDocument()
   })
 
   it('renders the Charts view as the default data view within accounts', () => {
@@ -530,16 +530,16 @@ describe('Data page integration', () => {
     expect(within(dialog).getByRole('radio', { name: 'Copy from last month' })).toBeInTheDocument()
   })
 
-  // --- Nav tabs ---
+  // --- Section navigation ---
 
-  it('renders all three navigation tabs', () => {
+  it('renders no in-page links to the Wealth sections, which live in the sidebar', () => {
     mockAccounts = [...twoAccounts]
     mockBalances = [...twoBalances]
     renderData()
 
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Allocation' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Growth' })).toBeInTheDocument()
+    for (const name of ['Dashboard', 'Allocation', 'Growth', 'Review']) {
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
+    }
   })
 
   // --- Page header ---

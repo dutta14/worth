@@ -9,6 +9,7 @@ Internal documentation for worth. The user-facing README lives at the repo root.
   - `feature-flags-architecture.md` — flag resolution, rollout, override model
   - `goal-drawer.md` — goal detail drawer spec
   - `goals-page-redesign.md` — Goals page IA + visual redesign
+  - `navigation.md` — sidebar accordions: first-level sections in the sidebar, second-level views in page
   - **Shipped features** (each was built in PR-sized slices behind a temporary feature flag, since removed; see each spec's Status line):
     - `data-safety-net.md` — built and shipped: flush pending writes, visible save failures, corrupt-file protection, external-change detection, `_backups/` (priority 1)
     - `monthly-check-in.md` — guided monthly balance update, missing/stale data detection, "Partial month" handling (priority 2); built and shipped

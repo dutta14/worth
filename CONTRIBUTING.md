@@ -33,7 +33,8 @@ src/
 ├── main.tsx                 # React entry point
 ├── types.ts                 # Shared types (PageType, FinancialGoal, GwGoal, etc.)
 ├── components/              # Shared UI components
-│   ├── SidebarNavigation    # Main nav with goal list, multi-select, settings
+│   ├── SidebarNavigation    # Main nav; Planning, Wealth and Cashflow are accordions
+│   ├── sidebarNavConfig     # Single source of truth for accordion groups, children and route matching
 │   ├── SidebarToggle        # Mobile sidebar toggle
 │   ├── SearchModal          # Global search (⌘K) with indexed navigation
 │   ├── ErrorBoundary        # Top-level error boundary with fallback UI

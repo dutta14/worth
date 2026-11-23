@@ -74,9 +74,9 @@ test.describe('Keyboard navigation, focus, ErrorBoundary, perf (#144)', () => {
     await expect(kb.goalsLink).toBeFocused()
 
     await page.keyboard.press('Enter')
-    await expect(page).toHaveURL(/#\/goal$/)
+    await expect(page).toHaveURL(/#\/goal\/plans$/)
     await expect(page.getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
-    await expect(kb.goalsLink).toHaveAttribute('aria-current', 'page')
+    await expect(kb.goalsLink).toHaveAttribute('aria-current', 'true')
   })
 
   /* ── 23. Focus is visible on interactive elements ─────────── */
@@ -119,7 +119,7 @@ test.describe('Keyboard navigation, focus, ErrorBoundary, perf (#144)', () => {
   test('31. SPA navigation moves focus to target page heading', async ({ page }) => {
     // ADAPTATION: app has no explicit SPA focus-management code, so
     // focus typically stays on the clicked sidebar link (which now
-    // carries `aria-current="page"`). The minimum contract — focus is
+    // carries `aria-current="true"` as the active group header). The minimum contract — focus is
     // not lost to document.body — still holds. We assert: activeEl is
     // not BODY, and is either the clicked sidebar link, an <h1>, or
     // inside <main>.
@@ -127,14 +127,14 @@ test.describe('Keyboard navigation, focus, ErrorBoundary, perf (#144)', () => {
     await kb.goto('/')
 
     await kb.goalsLink.click()
-    await expect(page).toHaveURL(/#\/goal$/)
+    await expect(page).toHaveURL(/#\/goal\/plans$/)
     await expect(page.getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
 
     const info = await kb.getActiveElementInfo()
     expect(info.tag).not.toBe('BODY')
 
     const onClickedLink =
-      info.inSidebar && info.tag === 'BUTTON' && info.text === 'Planning' && info.ariaCurrent === 'page'
+      info.inSidebar && info.tag === 'BUTTON' && info.text === 'Planning' && info.ariaCurrent === 'true'
     const onHeading = info.tag === 'H1'
     // Tighten: if focus is inside <main>, only accept it on an
     // interactive element (button / link / input / heading). A random
@@ -253,7 +253,7 @@ test.describe('Keyboard navigation, focus, ErrorBoundary, perf (#144)', () => {
 
     await expect(page).toHaveURL(/#\/budget(?:\/cashflow)?$/)
     await expect(page.getByRole('heading', { level: 1, name: 'Cashflow' })).toBeVisible()
-    await expect(kb.budgetLink).toHaveAttribute('aria-current', 'page')
+    await expect(kb.budgetLink).toHaveAttribute('aria-current', 'true')
   })
 
   /* ── 40. Page transition perf < 500ms (warm-up discarded) ── */

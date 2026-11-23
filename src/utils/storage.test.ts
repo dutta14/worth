@@ -301,3 +301,18 @@ describe('corrupt data recovery', () => {
     expect(getStorageItem('flag-rollout-cache', null)).toBeNull()
   })
 })
+
+describe('sidebar-open-groups', () => {
+  it('round-trips an array of group ids', () => {
+    setStorageItem('sidebar-open-groups', ['goal', 'budget'])
+    expect(getStorageItem('sidebar-open-groups', [])).toEqual(['goal', 'budget'])
+  })
+
+  it('returns the fallback for a non-array value or non-string entries', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    localStorage.setItem('sidebar-open-groups', '"goal"')
+    expect(getStorageItem('sidebar-open-groups', [])).toEqual([])
+    localStorage.setItem('sidebar-open-groups', '[1, 2]')
+    expect(getStorageItem('sidebar-open-groups', [])).toEqual([])
+  })
+})

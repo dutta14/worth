@@ -176,15 +176,10 @@ test.describe('Responsive / mobile viewport (#143)', () => {
     // SVG child, wider than the 375px viewport).
     await seedFullYearBudget(page)
     const resp = new ResponsivePage(page)
-    await resp.gotoMobile('/budget')
+    await resp.gotoMobile('/budget/cashflow')
 
     await resp.dismissOverlay()
     await expect(resp.sidebar).toBeHidden()
-
-    // Default `viewMode` from useBudget is 'aggregated', which doesn't
-    // render the Sankey. Switch to the Overview view via the in-page
-    // button (BudgetHeader.tsx:90) to mount CashflowSankey.
-    await page.getByRole('button', { name: 'Overview', exact: true }).click()
 
     const scroll = page.locator('.cashflow-sankey-scroll')
     await expect(scroll).toBeVisible()

@@ -2,7 +2,7 @@ import type { Locator, Page } from '@playwright/test'
 
 export class AnnualReviewPage {
   readonly page: Page
-  readonly tabBar: Locator
+  readonly wealthLinks: Locator
   readonly reviewTab: Locator
   readonly title: Locator
   readonly period: Locator
@@ -14,8 +14,8 @@ export class AnnualReviewPage {
 
   constructor(page: Page) {
     this.page = page
-    this.tabBar = page.getByRole('navigation', { name: 'Wealth sections' })
-    this.reviewTab = this.tabBar.getByRole('link', { name: 'Review' })
+    this.wealthLinks = page.locator('#sidebar-group-net-worth').getByRole('link')
+    this.reviewTab = this.wealthLinks.filter({ hasText: /^Review$/ })
     this.title = page.getByRole('heading', { level: 2, name: /^Annual Review/ })
     this.period = page.locator('.ar-period')
     this.yearSelect = page.getByLabel('Year', { exact: true })

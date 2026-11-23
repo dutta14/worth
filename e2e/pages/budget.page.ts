@@ -73,13 +73,10 @@ export class BudgetPage {
     this.nextYearBtn = page.locator('.budget-year-btn[title="Next year"]')
     this.yearLabel = page.locator('.budget-year-label')
 
-    this.cashflowBtn = page.locator('.budget-header-left .tab-bar .tab-btn', {
-      hasText: /^Overview$/,
-    })
-    this.spreadsheetBtn = page.locator('.budget-header-left .tab-bar .tab-btn', {
-      hasText: /^Spreadsheet$/,
-    })
-    this.groupsBtn = page.locator('.budget-header-left .tab-bar .tab-btn', { hasText: /^Groups$/ })
+    const cashflowNav = page.getByRole('navigation', { name: 'Main navigation' }).locator('#sidebar-group-budget')
+    this.cashflowBtn = cashflowNav.getByRole('link', { name: 'Overview', exact: true })
+    this.spreadsheetBtn = cashflowNav.getByRole('link', { name: 'Spreadsheet', exact: true })
+    this.groupsBtn = cashflowNav.getByRole('link', { name: 'Groups', exact: true })
 
     this.uploadDropDown = page.locator('.budget-overflow-btn')
     this.uploadMenu = page.locator('.budget-upload-menu')
@@ -134,7 +131,7 @@ export class BudgetPage {
       spreadsheet: 'Spreadsheet',
       groups: 'Groups',
     }
-    await this.page.locator('.budget-header-left .tab-bar').locator('.tab-btn', { hasText: labels[mode] }).click()
+    await this.page.locator('#sidebar-group-budget').getByRole('link', { name: labels[mode], exact: true }).click()
   }
 
   async setSpreadsheetMode(mode: 'aggregated' | 'detailed') {

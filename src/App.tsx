@@ -125,24 +125,33 @@ const AppShell: FC = () => {
   const layoutRef = useRef<HTMLDivElement>(null)
   const prevSidebarOpenRef = useRef(sidebarOpen)
   const focusMainOnCloseRef = useRef(false)
-  const handleNavigate = (page: PageType): void => {
-    setCurrentPage(page)
+  const closeSidebarOnMobile = (focusMain: boolean): void => {
     if (isMobile) {
-      focusMainOnCloseRef.current = isNarrow
+      focusMainOnCloseRef.current = focusMain
       setSidebarOpen(false)
     }
   }
+  const handleNavigate = (page: PageType): void => {
+    setCurrentPage(page)
+    closeSidebarOnMobile(isNarrow)
+  }
+  const handleNavigateTo = (path: string): void => {
+    navigate(path)
+    // Sub-item links unmount when the sidebar collapses to the rail, at any mobile width.
+    closeSidebarOnMobile(true)
+  }
 
-  // At 479px and below the focused control unmounts when the sidebar toggles, so hand focus to its successor.
+  // When the focused control unmounts as the sidebar toggles, hand focus to its successor.
   useEffect(() => {
     if (prevSidebarOpenRef.current === sidebarOpen) return
     prevSidebarOpenRef.current = sidebarOpen
     const focusMain = focusMainOnCloseRef.current
     focusMainOnCloseRef.current = false
-    if (!isNarrow) return
     if (focusMain && !sidebarOpen) {
       document.getElementById('main-content')?.focus()
-    } else {
+      return
+    }
+    if (isNarrow) {
       layoutRef.current?.querySelector<HTMLButtonElement>('.sidebar-toggle')?.focus()
     }
   }, [sidebarOpen, isNarrow])
@@ -150,7 +159,9 @@ const AppShell: FC = () => {
     <div className="app-layout" ref={layoutRef}>
       <SkipLink />
       <ModernDesignToggle />
-      {(sidebarOpen || !isNarrow) && <SidebarNavigation currentPage={currentPage} setCurrentPage={handleNavigate} />}
+      {(sidebarOpen || !isNarrow) && (
+        <SidebarNavigation currentPage={currentPage} setCurrentPage={handleNavigate} navigateTo={handleNavigateTo} />
+      )}
       {isMobile && sidebarOpen && <div onClick={() => setSidebarOpen(false)} className="sidebar-overlay" />}
       <main
         id="main-content"
