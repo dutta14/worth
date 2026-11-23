@@ -185,7 +185,7 @@ test.describe('Sidebar accordion navigation', () => {
     await nav.subLink('Planning', 'Taxes').click()
     await expect(page).toHaveURL(/#\/taxes$/)
     await expect(nav.sidebar).toHaveCount(0)
-    await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Taxes' })).toBeVisible()
 
     await nav.toggleExpand.click()
     await expect(nav.subLink('Planning', 'Taxes')).toHaveAttribute('aria-current', 'page')
