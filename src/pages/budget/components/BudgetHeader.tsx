@@ -1,6 +1,7 @@
 import { FC } from 'react'
 import { TimePeriod, BudgetViewMode } from '../types'
 import YearNav from '../../../components/YearNav'
+import { getNavTitle } from '../../../components/sidebarNavConfig'
 
 interface BudgetHeaderProps {
   selectedYear: number
@@ -21,7 +22,7 @@ const BudgetHeader: FC<BudgetHeaderProps> = ({
 }) => (
   <div className="budget-header">
     <div className="budget-header-left">
-      <h1 className="budget-title">Cashflow</h1>
+      <h1 className="budget-title">{getNavTitle('budget', `/budget/${viewMode}`)}</h1>
     </div>
     <div className="budget-header-right">
       {viewMode !== 'groups' && (

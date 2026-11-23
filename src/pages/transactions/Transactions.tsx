@@ -1010,7 +1010,7 @@ const Transactions: FC = () => {
         <header className="txn-header">
           <div className="txn-header-top">
             <div className="txn-header-title-block">
-              <h1 className="txn-title">Cashflow</h1>
+              <h1 className="txn-title">Transactions</h1>
               <p className="txn-header-meta">Loading…</p>
             </div>
           </div>
@@ -1024,7 +1024,7 @@ const Transactions: FC = () => {
       <header className="txn-header">
         <div className="txn-header-top">
           <div className="txn-header-title-block">
-            <h1 className="txn-title">Cashflow</h1>
+            <h1 className="txn-title">Transactions</h1>
             <p className="txn-header-meta">
               {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''}
             </p>

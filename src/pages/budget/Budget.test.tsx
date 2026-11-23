@@ -318,7 +318,7 @@ describe('Budget with data', () => {
 
     await openMoreActions(user)
     await user.click(screen.getByRole('menuitem', { name: 'CSV Format Help' }))
-    await user.click(screen.getByText('Cashflow'))
+    await user.click(screen.getByRole('heading', { level: 1 }))
 
     expect(document.querySelector('.budget-format-help-panel')).not.toBeInTheDocument()
   })

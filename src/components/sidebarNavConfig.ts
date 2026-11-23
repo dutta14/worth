@@ -117,5 +117,12 @@ export const getNavGroup = (id: PageType): NavGroup | undefined => NAV_GROUPS.fi
 
 export const isNavGroupId = (value: string): value is NavGroupId => NAV_GROUPS.some(group => group.id === value)
 
+/** The page heading: the active sub-item's label, so it matches the sidebar entry the user chose. */
+export const getNavTitle = (groupId: NavGroupId, pathname: string): string => {
+  const group = NAV_GROUPS.find(g => g.id === groupId)
+  if (!group) return ''
+  return group.children.find(child => child.isActive(pathname))?.label ?? group.label
+}
+
 export const getActiveChildId = (group: NavGroup, pathname: string): string | undefined =>
   group.children.find(child => child.isActive(pathname))?.id

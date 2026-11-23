@@ -23,9 +23,13 @@ function renderHeader(overrides: Partial<React.ComponentProps<typeof BudgetHeade
 }
 
 describe('BudgetHeader', () => {
-  it('renders the Cashflow title', () => {
-    renderHeader()
-    expect(screen.getByRole('heading', { name: 'Cashflow' })).toBeInTheDocument()
+  it.each([
+    ['cashflow', 'Overview'],
+    ['spreadsheet', 'Spreadsheet'],
+    ['groups', 'Groups'],
+  ] as const)('titles the %s view "%s" to match its sidebar entry', (viewMode, title) => {
+    renderHeader({ viewMode })
+    expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument()
   })
 
   it('displays the selected year', () => {

@@ -13,6 +13,7 @@ import AccountsModal from './AccountsModal'
 import BalanceSpreadsheet from './BalanceSpreadsheet'
 import BalanceCharts from './BalanceCharts'
 import BalanceDetails from './BalanceDetails'
+import { getNavTitle } from '../../components/sidebarNavConfig'
 import '../../styles/Data.css'
 
 const Allocation = lazy(() => import('../allocation/Allocation'))
@@ -517,7 +518,7 @@ const Data: FC = () => {
 
       <div className="data-header">
         <div className="data-header-left">
-          <h1>Wealth</h1>
+          <h1>{getNavTitle('net-worth', location.pathname)}</h1>
         </div>
         <div className="data-header-right">
           {activeTab === 'accounts' && hasAccounts && (

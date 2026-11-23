@@ -39,9 +39,9 @@ function renderGoal(initialRoute = '/goal') {
 /* ─── Page header ─── */
 
 describe('Goal page header', () => {
-  it('renders the Planning heading', () => {
+  it('renders the Goals heading', () => {
     renderGoal()
-    expect(screen.getByRole('heading', { level: 1, name: 'Planning' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Goals' })).toBeInTheDocument()
   })
 
   it('does not render an in-page section tab bar, since sections live in the sidebar', () => {

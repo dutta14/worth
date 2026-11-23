@@ -20,6 +20,7 @@ import FICalculator from '../tools/components/FICalculator'
 import '../../styles/Goal.css'
 import LeverageGoal from './components/LeverageGoal'
 import PayDown from './components/PayDown'
+import { getNavTitle } from '../../components/sidebarNavConfig'
 
 const Goal: FC = () => {
   const {
@@ -109,8 +110,9 @@ const Goal: FC = () => {
         <div className="goal-header">
           <h1>
             {isDetailView
-              ? (goals.find(g => String(g.id) === subPath.replace('plans/', ''))?.goalName ?? 'Planning')
-              : 'Planning'}
+              ? (goals.find(g => String(g.id) === subPath.replace('plans/', ''))?.goalName ??
+                getNavTitle('goal', location.pathname))
+              : getNavTitle('goal', location.pathname)}
           </h1>
           {(subPath === 'calculator' || isDetailView) && (
             <div className="goal-header-actions">

@@ -51,9 +51,9 @@ beforeEach(() => {
 /* ─── Page header ─── */
 
 describe('Wealth page header', () => {
-  it('renders the Wealth heading', () => {
+  it('renders the Dashboard heading', () => {
     renderData()
-    expect(screen.getByRole('heading', { level: 1, name: 'Wealth' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument()
   })
 
   it('does not render an in-page section tab bar, since sections live in the sidebar', () => {

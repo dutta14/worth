@@ -82,7 +82,7 @@ test.describe('SearchModal — Cmd+K lifecycle and focus trap (#142)', () => {
 
     await expect(search.dialog).toBeHidden()
     await expect(page).toHaveURL(/#\/net-worth$/)
-    await expect(page.getByRole('heading', { level: 1, name: 'Wealth' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
   })
 
   /* ── Escape close ───────────────────────────────────────────── */

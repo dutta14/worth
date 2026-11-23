@@ -566,10 +566,10 @@ test.describe.skip('Cross-page: Import/Export + Cross-tab + Dark Mode (#154)', (
 
     const routes: { path: string; heading: RegExp }[] = [
       { path: '#/', heading: /Good (morning|afternoon|evening)/ },
-      { path: '#/goal', heading: /^Planning$/ },
-      { path: '#/net-worth', heading: /^Wealth$/ },
-      { path: '#/budget', heading: /^Cashflow$/ },
-      { path: '#/taxes', heading: /^Planning$/ },
+      { path: '#/goal', heading: /^Goals$/ },
+      { path: '#/net-worth', heading: /^Dashboard$/ },
+      { path: '#/budget', heading: /^Overview$/ },
+      { path: '#/taxes', heading: /^Taxes$/ },
       { path: '#/drive', heading: /^Drive$/ },
     ]
     for (const { path, heading } of routes) {

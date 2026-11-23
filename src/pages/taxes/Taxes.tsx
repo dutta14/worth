@@ -187,7 +187,7 @@ const Taxes: FC = () => {
   return (
     <div className="tax-page">
       <div className="tax-header">
-        <h1 className="tax-heading">Planning</h1>
+        <h1 className="tax-heading">Taxes</h1>
         <YearNav
           selectedYear={selectedYear}
           onPrevYear={() => setSelectedYear(y => y - 1)}

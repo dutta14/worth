@@ -70,7 +70,7 @@ test.describe('Sidebar navigation, routing, and active state (#141)', () => {
     await transactions.click()
 
     await expect(page).toHaveURL(/#\/transactions/)
-    await expect(page.getByRole('heading', { level: 1, name: 'Cashflow' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
     await nav.expectActive('Cashflow')
     await expect(transactions).toHaveAttribute('aria-current', 'page')
     await expect(transactions).toBeFocused()
@@ -91,7 +91,7 @@ test.describe('Sidebar navigation, routing, and active state (#141)', () => {
     await taxesLink.click()
 
     await expect(page).toHaveURL(/#\/taxes/)
-    await expect(page.getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible()
     await nav.expectActive('Planning')
     await expect(taxesLink).toHaveAttribute('aria-current', 'page')
     await expect(taxesLink).toBeFocused()
@@ -193,13 +193,13 @@ test.describe('Sidebar navigation, routing, and active state (#141)', () => {
 
     await nav.goto('/net-worth/allocation')
     await expect(page).toHaveURL(/#\/net-worth\/allocation$/)
-    await expect(page.getByRole('heading', { level: 1, name: 'Wealth' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
     // The sidebar's Wealth group should mark Allocation as active.
     await expect(new NavigationPage(page).subLink('Wealth', 'Allocation')).toHaveAttribute('aria-current', 'page')
 
     await nav.goto('/goal/calculator')
     await expect(page).toHaveURL(/#\/goal\/calculator$/)
-    await expect(page.getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible()
 
     await nav.goto('/drive')
     await expect(page).toHaveURL(/#\/drive$/)
@@ -256,7 +256,7 @@ test.describe('Sidebar navigation, routing, and active state (#141)', () => {
     await nav.link('Cashflow').click()
 
     await expect(page).toHaveURL(routeRegex('/budget/cashflow'))
-    await expect(page.getByRole('heading', { level: 1, name: 'Cashflow' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
     await nav.expectActive('Cashflow')
   })
 
@@ -269,7 +269,7 @@ test.describe('Sidebar navigation, routing, and active state (#141)', () => {
     await page.waitForLoadState('domcontentloaded')
 
     await expect(page).toHaveURL(routeRegex('/goal/plans'))
-    await expect(page.getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible()
     await nav.expectActive('Planning')
   })
 
