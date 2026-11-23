@@ -1,4 +1,4 @@
-import { FC, useState, useMemo, useEffect, useRef } from 'react'
+import { FC, useState, useMemo, useEffect } from 'react'
 import { FinancialGoal } from '../../../types'
 import GoalCardActions from './GoalCardActions'
 import { calculateGoalMetrics, getFiTarget, projectFIDate, projectFIDateWithDrawdown } from '../utils/goalCalculations'
@@ -173,7 +173,6 @@ const GoalDetailedCard: FC<GoalDetailedCardProps> = ({
   const [expenseOverride, setExpenseOverride] = useState<number | null>(goal.annualSpending ?? null)
   const [editingExpense, setEditingExpense] = useState(false)
   const [expenseInputValue, setExpenseInputValue] = useState('')
-  const lastSavingsOverrideRef = useRef<number | null | undefined>(undefined)
 
   const { accounts, balances, allMonths } = useData()
   const { fileStore } = useFileStore()
@@ -404,10 +403,9 @@ const GoalDetailedCard: FC<GoalDetailedCardProps> = ({
     if (fiGoal <= 0) return { state: 'no-goal' as const }
     if (fiTotal >= fiGoal) return { state: 'reached' as const }
     if (!hasBudgetData) return { state: 'no-budget' as const }
-    if (budgetAnnualSavings <= 0) return { state: 'not-reachable' as const }
 
+    // Zero savings is allowed: the existing balance may still compound to the goal on its own.
     const fiAnnualSavings = Math.max(0, budgetAnnualSavings - gwMonthlySavings * 12)
-    if (fiAnnualSavings <= 0) return { state: 'not-reachable' as const }
 
     // End of life from goalEndYear
     const endOfLife = goal.goalEndYear ? new Date(goal.goalEndYear) : null
@@ -527,12 +525,10 @@ const GoalDetailedCard: FC<GoalDetailedCardProps> = ({
     return Math.max(0, monthlySavings - gwMonthlySavings)
   }, [expenseOverride, budgetAnnualIncome, gwMonthlySavings])
 
+  // Re-report on goal change too: the parent's reset must never leave a stale value (a 0 would otherwise be dropped).
   useEffect(() => {
-    if (!onSavingsOverrideChange) return
-    if (lastSavingsOverrideRef.current === nextSavingsOverride) return
-    lastSavingsOverrideRef.current = nextSavingsOverride
-    onSavingsOverrideChange(nextSavingsOverride)
-  }, [nextSavingsOverride, onSavingsOverrideChange])
+    onSavingsOverrideChange?.(nextSavingsOverride)
+  }, [nextSavingsOverride, onSavingsOverrideChange, goal.id])
 
   // Persist projected FI date to goal so list cards can read it directly
   // Use fiProjectedMonth (the displayed value from the chart) rather than projection.date
