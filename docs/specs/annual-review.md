@@ -630,7 +630,7 @@ Spec of `formatDelta`: rounds once with `Intl.NumberFormat` (not `toFixed`), ret
 4. **Print and CSV.** `AnnualReview.css` print block, document title handling, `reviewCsv.ts`, buttons.
 5. **E2E, docs, enable.** Playwright specs, Guide, README, CONTRIBUTING, demo-data screenshot optional, then set the flag to 100% and remove it (both done 2026-11-22).
    - Landed: `e2e/annual-review.spec.ts` (page object and fixtures alongside), Guide, README, CONTRIBUTING and this spec. Demo mode needed no seed changes (it already carries balances, goals and budget CSVs).
-   - Decided: the owner raised the flag from 0% to 100% and removed it on 2026-11-22, so the docs describe the feature as a permanent one. O-12 (Growth year cards linking to the review) stays a follow-up.
+   - Decided: the owner raised the flag from 0% to 100% and removed it on 2026-11-22, so the docs describe the feature as a permanent one. O-12 (Growth year cards linking to the review) shipped as a follow-up: each Growth year card has a "View review" link to `/net-worth/review/:year`.
    - Deviations from the plan in 7.4: the keyboard test changes the year by typing it into the focused select, because Chrome on macOS opens the list on an arrow key instead of changing the value; the chart is an `<svg role="img">` whose `aria-label` is the summary sentence (backed by the monthly table) rather than a `figcaption`; the no-outside-requests test ignores the shell's own flag-registry and web-font requests.
 
 ### 7.4 Test plan

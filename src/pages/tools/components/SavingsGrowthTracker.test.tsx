@@ -115,6 +115,44 @@ describe('SavingsGrowthTracker', () => {
     expect(cards[2]).toHaveAttribute('data-testid', 'year-card-2022')
   })
 
+  it.each(['/net-worth/growth/savings', '/net-worth/growth/income'])(
+    "links each year card to that year's review on %s",
+    route => {
+      mockUseData.mockReturnValue({
+        accounts: [
+          {
+            id: 1,
+            name: 'Checking',
+            type: 'liquid',
+            owner: 'primary',
+            status: 'active',
+            goalType: 'gw',
+            nature: 'asset',
+            allocation: 'cash',
+          },
+        ],
+        balances: [
+          { id: 1, accountId: 1, month: '2023-12', balance: 75000 },
+          { id: 2, accountId: 1, month: '2024-12', balance: 100000 },
+        ],
+        allMonths: ['2023-12', '2024-12'],
+        setAccounts: vi.fn(),
+        setBalances: vi.fn(),
+      })
+
+      renderTracker(route)
+
+      expect(screen.getByRole('link', { name: 'View review for 2024' })).toHaveAttribute(
+        'href',
+        '/net-worth/review/2024',
+      )
+      expect(screen.getByRole('link', { name: 'View review for 2023' })).toHaveAttribute(
+        'href',
+        '/net-worth/review/2023',
+      )
+    },
+  )
+
   it('renders savings metrics and net worth in each year card', async () => {
     vi.mocked(loadBudgetStore).mockResolvedValue({
       csvs: { '2024-01': { csv: 'csv-data', month: '2024-01', uploadedAt: '' } },

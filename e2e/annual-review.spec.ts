@@ -36,6 +36,18 @@ test.describe('Annual Review', () => {
     await expect(page).toHaveTitle('Annual Review 2025 - worth')
   })
 
+  test('opens the review for a year from its Growth card', async ({ page }) => {
+    await seedAnnualReview(page)
+    const review = new AnnualReviewPage(page)
+
+    await page.goto('/worth/#/net-worth/growth/savings')
+    await page.getByRole('link', { name: 'View review for 2024' }).click()
+
+    await expect(page).toHaveURL(/#\/net-worth\/review\/2024$/)
+    await expect(review.title).toHaveText('Annual Review 2024')
+    await expect(review.yearSelect).toHaveValue('2024')
+  })
+
   test('shows the headline figures for the default year in every section', async ({ page }) => {
     await seedAnnualReview(page)
     const review = new AnnualReviewPage(page)

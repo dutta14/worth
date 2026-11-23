@@ -89,7 +89,8 @@ const FeaturesByPage: FC<FeaturesByPageProps> = ({ screenshots }) => (
         <li>
           The Review tab shows one year at a glance. Pick a year to see net worth, income, expenses, savings rate, top
           spending groups, and goal progress on one page, then print it, save it as a PDF, or download it as a CSV.
-          Anything missing from your files is listed under Things to know.
+          Anything missing from your files is listed under Things to know. Each year card on the Growth tab also links
+          straight to that year's review.
         </li>
       </ul>
       <p>
