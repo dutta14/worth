@@ -111,7 +111,7 @@ describe('sidebarNavConfig', () => {
       ['net-worth', '/net-worth', 'Dashboard'],
       ['net-worth', '/net-worth/allocation', 'Allocation'],
       ['net-worth', '/net-worth/growth/income', 'Growth'],
-      ['net-worth', '/net-worth/review/2025', 'Review'],
+      ['net-worth', '/net-worth/review/2025', 'Annual Review'],
       ['budget', '/budget/cashflow', 'Overview'],
       ['budget', '/budget/spreadsheet', 'Spreadsheet'],
       ['budget', '/budget/groups', 'Groups'],

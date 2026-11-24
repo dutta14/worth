@@ -29,6 +29,7 @@ spending,group_5,Health,6000.00,usd,7.69,
 spending,other,All other groups,10000.00,usd,12.82,2 groups
 goals,goal_12_start,Retire at 55,15.00,percent,,FI balance 300000.00 usd of 2000000.00 usd target
 goals,goal_12_end,Retire at 55,19.00,percent,,FI balance 380000.00 usd of 2000000.00 usd target
+goals,goal_12_gw_balance,Retire at 55: GW balance,80000.00,usd,,
 `
 
 const netWorth = (overrides: Partial<NetWorthReview>): AnnualReview['netWorth'] => ({
@@ -235,10 +236,20 @@ describe('buildReviewCsv', () => {
           target: 500000,
           startBalance: null,
           endBalance: 100000,
+          endGwBalance: 0,
           startPct: null,
           endPct: 20,
         },
-        { goalId: 8, name: 'Car', target: 30000, startBalance: null, endBalance: null, startPct: null, endPct: null },
+        {
+          goalId: 8,
+          name: 'Car',
+          target: 30000,
+          startBalance: null,
+          endBalance: null,
+          endGwBalance: null,
+          startPct: null,
+          endPct: null,
+        },
       ],
     })
 
@@ -250,6 +261,25 @@ describe('buildReviewCsv', () => {
       'FI balance 100000.00 usd of 500000.00 usd target',
     ])
     expect(rowFor(review, 'goal_8_end')?.slice(3, 7)).toEqual(['', 'percent', '', 'Not available'])
+  })
+
+  it('writes the GW balance row per goal, 0.00 for none and blank when unavailable', () => {
+    const [goal] = makeReview().goals
+    const review = makeReview({
+      goals: [
+        { ...goal, goalId: 7, endGwBalance: 0 },
+        { ...goal, goalId: 8, endGwBalance: null },
+      ],
+    })
+
+    expect(rowFor(review, 'goal_7_gw_balance')?.slice(2, 7)).toEqual([
+      `${goal.name}: GW balance`,
+      '0.00',
+      'usd',
+      '',
+      '',
+    ])
+    expect(rowFor(review, 'goal_8_gw_balance')?.slice(3, 7)).toEqual(['', 'usd', '', 'Not available'])
   })
 
   it('writes the same note sentences the page shows, numbered in order', () => {
@@ -302,7 +332,16 @@ describe('buildReviewCsv', () => {
     it('protects note and label cells too', () => {
       const review = makeReview({
         goals: [
-          { goalId: 3, name: '=HYPERLINK("x")', target: 100, startBalance: 1, endBalance: 2, startPct: 1, endPct: 2 },
+          {
+            goalId: 3,
+            name: '=HYPERLINK("x")',
+            target: 100,
+            startBalance: 1,
+            endBalance: 2,
+            endGwBalance: 0,
+            startPct: 1,
+            endPct: 2,
+          },
         ],
       })
 

@@ -1,10 +1,11 @@
-import { FC } from 'react'
+import { FC, useEffect, useId, useRef, useState } from 'react'
+import YearNav from '../../../components/YearNav'
+import '../../../styles/Budget.css'
 
 interface ReviewHeaderProps {
   /** Null while the route has not named a year yet. */
   year: number | null
   years: number[]
-  period: string | null
   disabled: boolean
   /** Print and Download are off while loading and when there is nothing to export. */
   actionsDisabled: boolean
@@ -18,56 +19,92 @@ const yearOptions = (years: number[], year: number): number[] => [...new Set([..
 const ReviewHeader: FC<ReviewHeaderProps> = ({
   year,
   years,
-  period,
   disabled,
   actionsDisabled,
   onYearChange,
   onPrint,
   onDownload,
-}) => (
-  <header className="ar-header">
-    <div className="ar-header__titles">
-      <h2 className="ar-title">
-        Annual Review
-        {year !== null && (
-          <>
-            {' '}
-            <span>{year}</span>
-          </>
-        )}
-      </h2>
-      <p className="ar-subtitle">Your year in money, built from the files in your folder.</p>
-      {period && <p className="ar-period">{period}</p>}
-    </div>
+}) => {
+  const [open, setOpen] = useState(false)
+  const disclosure = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const actionsId = useId()
+  const options = year === null ? [] : yearOptions(years, year)
+  const index = year === null ? -1 : options.indexOf(year)
+  const previous = options[index + 1]
+  const next = index > 0 ? options[index - 1] : undefined
+
+  useEffect(() => {
+    if (!open) return
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !disclosure.current?.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [open])
+
+  const runAction = (action: () => void) => {
+    setOpen(false)
+    trigger.current?.focus()
+    action()
+  }
+
+  return (
     <div className="ar-controls">
-      <label htmlFor="ar-year" className="ar-label">
-        Year
-      </label>
-      <select
-        id="ar-year"
-        className="ar-select"
-        value={year ?? ''}
-        disabled={disabled || year === null}
-        onChange={event => onYearChange(Number(event.target.value))}
+      {year !== null && (
+        <YearNav
+          selectedYear={year}
+          disablePrev={disabled || previous === undefined}
+          disableNext={disabled || next === undefined}
+          onPrevYear={() => previous !== undefined && onYearChange(previous)}
+          onNextYear={() => next !== undefined && onYearChange(next)}
+        />
+      )}
+      <div
+        ref={disclosure}
+        className="ar-actions"
+        onBlur={event => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
+        }}
+        onKeyDown={event => {
+          if (event.key !== 'Escape' || !open) return
+          event.preventDefault()
+          event.stopPropagation()
+          setOpen(false)
+          trigger.current?.focus()
+        }}
       >
-        {year === null ? (
-          <option value="">Select a year</option>
-        ) : (
-          yearOptions(years, year).map(y => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))
-        )}
-      </select>
-      <button type="button" className="ar-btn" disabled={actionsDisabled} onClick={onPrint}>
-        Print or save as PDF
-      </button>
-      <button type="button" className="ar-btn" disabled={actionsDisabled} onClick={onDownload}>
-        Download CSV
-      </button>
+        <button
+          ref={trigger}
+          type="button"
+          className="action-btn"
+          aria-expanded={open}
+          aria-controls={actionsId}
+          onClick={() => setOpen(value => !value)}
+        >
+          More actions
+        </button>
+        <div id={actionsId} className="ar-actions__panel" hidden={!open}>
+          <button
+            type="button"
+            className="ar-btn"
+            disabled={actionsDisabled || disabled}
+            onClick={() => runAction(onPrint)}
+          >
+            Print or save as PDF
+          </button>
+          <button
+            type="button"
+            className="ar-btn"
+            disabled={actionsDisabled || disabled}
+            onClick={() => runAction(onDownload)}
+          >
+            Download CSV
+          </button>
+        </div>
+      </div>
     </div>
-  </header>
-)
+  )
+}
 
 export default ReviewHeader

@@ -13,13 +13,41 @@ const renderSection = (review: AnnualReview = makeReview(), hasGoals = true) =>
   )
 
 describe('ReviewGoals', () => {
-  it('shows each goal with its year-end progress and change from the start of the year', () => {
+  it('shows each goal with its year-end progress and change, without naming the December baseline', () => {
     renderSection()
 
     expect(screen.getByRole('region', { name: 'Goal progress at year end' })).toBeInTheDocument()
     const item = screen.getByRole('listitem')
-    expect(item).toHaveTextContent('Retire at 55: 19.0% at the end of 2025; up 4.0 points from the start of the year')
-    expect(within(item).getByText('FI balance $380,000 of $2,000,000 target')).toBeInTheDocument()
+    expect(item).toHaveTextContent('Retire at 55: 19.0% at the end of 2025; ↗Up 4.0 points')
+    expect(item).not.toHaveTextContent('start of the year')
+    expect(within(item).getByText('↗')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(item).getByText('Up')).toHaveClass('sr-only')
+  })
+
+  it('shows both the FI balance against its target and the GW balance', () => {
+    renderSection()
+
+    const item = screen.getByRole('listitem')
+    expect(within(item).getByText('FI balance').closest('div')).toHaveTextContent(
+      'FI balance$380,000of $2,000,000 target',
+    )
+    expect(within(item).getByText('GW balance').closest('div')).toHaveTextContent('GW balance$80,000')
+  })
+
+  it('names a non-December baseline month', () => {
+    const base = makeReview()
+    renderSection(makeReview({ netWorth: { ...base.netWorth, start: { ...base.netWorth.start, month: '2025-03' } } }))
+
+    expect(screen.getByRole('listitem')).toHaveTextContent('↗Up 4.0 points from Mar 2025')
+  })
+
+  it('says the change is not available when the start progress is missing', () => {
+    const goal = { ...makeReview().goals[0], startPct: null }
+    renderSection(makeReview({ goals: [goal] }))
+
+    expect(screen.getByRole('listitem')).toHaveTextContent(
+      'Retire at 55: 19.0% at the end of 2025; Change is not available',
+    )
   })
 
   it('footnotes that progress is measured against today’s targets', () => {
@@ -28,12 +56,21 @@ describe('ReviewGoals', () => {
     expect(screen.getByText('Progress is measured against each goal as it is set today.')).toBeInTheDocument()
   })
 
-  it('reads Not available for a goal whose anchors are missing, with no balance line', () => {
-    const goal = { ...makeReview().goals[0], startBalance: null, endBalance: null, startPct: null, endPct: null }
+  it('reads Not available for a goal whose anchors are missing, including both balances', () => {
+    const goal = {
+      ...makeReview().goals[0],
+      startBalance: null,
+      endBalance: null,
+      endGwBalance: null,
+      startPct: null,
+      endPct: null,
+    }
     renderSection(makeReview({ goals: [goal] }))
 
-    expect(screen.getByRole('listitem')).toHaveTextContent('Retire at 55: Not available')
-    expect(screen.queryByText(/FI balance/)).not.toBeInTheDocument()
+    const item = screen.getByRole('listitem')
+    expect(item).toHaveTextContent('Retire at 55: Not available')
+    expect(within(item).getByText('FI balance').closest('div')).toHaveTextContent('Not available')
+    expect(within(item).getByText('GW balance').closest('div')).toHaveTextContent('Not available')
   })
 
   it('lists several goals in order', () => {
@@ -44,9 +81,7 @@ describe('ReviewGoals', () => {
 
     const items = screen.getAllByRole('listitem')
     expect(items).toHaveLength(2)
-    expect(items[1]).toHaveTextContent(
-      'Buy a home: 50.0% at the end of 2025; down 10.0 points from the start of the year',
-    )
+    expect(items[1]).toHaveTextContent('Buy a home: 50.0% at the end of 2025; ↘Down 10.0 points')
   })
 
   it('says no goals existed when the user has goals but none by the end of the year', () => {

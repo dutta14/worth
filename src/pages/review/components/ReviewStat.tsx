@@ -1,11 +1,10 @@
-import { FC } from 'react'
+import { FC, ReactNode } from 'react'
 
 interface ReviewStatProps {
   label: string
-  value: string
+  value: ReactNode
   sub?: string | null
-  /** Prior-year comparison line, already worded. */
-  prior?: string | null
+  prior?: ReactNode
 }
 
 const ReviewStat: FC<ReviewStatProps> = ({ label, value, sub, prior }) => (

@@ -5,6 +5,8 @@ export type NavGroupId = Extract<PageType, 'goal' | 'net-worth' | 'budget'>
 export interface NavChild {
   id: string
   label: string
+  /** Page heading when it should read differently from the sidebar entry. */
+  title?: string
   path: string
   isActive: (pathname: string) => boolean
 }
@@ -82,7 +84,13 @@ export const NAV_GROUPS: ReadonlyArray<NavGroup> = [
         isActive: prefixMatcher(WEALTH_PREFIXES[0]),
       },
       { id: 'growth', label: 'Growth', path: '/net-worth/growth', isActive: prefixMatcher(WEALTH_PREFIXES[1]) },
-      { id: 'review', label: 'Review', path: '/net-worth/review', isActive: prefixMatcher(WEALTH_PREFIXES[2]) },
+      {
+        id: 'review',
+        label: 'Review',
+        title: 'Annual Review',
+        path: '/net-worth/review',
+        isActive: prefixMatcher(WEALTH_PREFIXES[2]),
+      },
     ],
   },
   {
@@ -117,11 +125,12 @@ export const getNavGroup = (id: PageType): NavGroup | undefined => NAV_GROUPS.fi
 
 export const isNavGroupId = (value: string): value is NavGroupId => NAV_GROUPS.some(group => group.id === value)
 
-/** The page heading: the active sub-item's label, so it matches the sidebar entry the user chose. */
+/** The page heading: the active sub-item's title or label, so it matches the sidebar entry the user chose. */
 export const getNavTitle = (groupId: NavGroupId, pathname: string): string => {
   const group = NAV_GROUPS.find(g => g.id === groupId)
   if (!group) return ''
-  return group.children.find(child => child.isActive(pathname))?.label ?? group.label
+  const active = group.children.find(child => child.isActive(pathname))
+  return active ? (active.title ?? active.label) : group.label
 }
 
 export const getActiveChildId = (group: NavGroup, pathname: string): string | undefined =>

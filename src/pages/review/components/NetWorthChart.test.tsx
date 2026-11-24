@@ -1,145 +1,97 @@
-import { act, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react'
+import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeSeries } from '../../../test/reviewFixtures'
 import NetWorthChart from './NetWorthChart'
 
+let hoveredLabel: string | undefined
+
+// jsdom cannot drive Recharts' hover, so the tooltip renderer is invoked directly with a chosen label.
+vi.mock('recharts', async importOriginal => {
+  const actual = await importOriginal<typeof import('recharts')>()
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: ReactNode }) =>
+      isValidElement(children)
+        ? cloneElement(children as ReactElement<{ width: number; height: number }>, { width: 600, height: 240 })
+        : null,
+    Tooltip: ({ content }: { content: (props: { active: boolean; label?: string }) => ReactNode }) => (
+      <div data-testid="tooltip">{content({ active: hoveredLabel !== undefined, label: hoveredLabel })}</div>
+    ),
+  }
+})
+
 const SUMMARY = 'Net worth rose from $400,000 in December 2024 to $460,000 in December 2025.'
+const SERIES = makeSeries(2025, { 1: 100000, 2: 110000, 3: 99000, 4: 99000, 7: 120000 })
+
+const tooltipAfterHovering = (label: string) => {
+  hoveredLabel = label
+  render(<NetWorthChart series={SERIES} summary={SUMMARY} />)
+  return screen.getByTestId('tooltip')
+}
 
 describe('NetWorthChart', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    vi.restoreAllMocks()
+  beforeEach(() => {
+    hoveredLabel = undefined
   })
 
-  it('is an image named by its text summary', () => {
+  it('is a group named by its text summary', () => {
     render(<NetWorthChart series={makeSeries(2025, { 6: 430000, 12: 460000 })} summary={SUMMARY} />)
 
-    expect(screen.getByRole('img', { name: SUMMARY })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: SUMMARY })).toBeInTheDocument()
   })
 
-  it('draws nothing when no month has a balance', () => {
-    render(<NetWorthChart series={makeSeries(2025)} summary={SUMMARY} />)
-
-    expect(screen.queryByRole('img')).not.toBeInTheDocument()
-  })
-
-  it('plots one point per month with data, without interpolating across gaps', () => {
+  it('draws one line without dots for sparse data, bridging the gaps', () => {
     const { container } = render(
       <NetWorthChart series={makeSeries(2025, { 1: 100, 2: 110, 6: 120, 12: 130 })} summary={SUMMARY} />,
     )
 
-    expect(container.querySelectorAll('circle')).toHaveLength(4)
-    expect(container.querySelectorAll('polyline')).toHaveLength(3)
+    expect(container.querySelectorAll('.recharts-line-curve')).toHaveLength(1)
+    expect(container.querySelectorAll('.recharts-line-dot')).toHaveLength(0)
   })
 
-  it('draws incomplete months as hollow points and complete months as filled ones', () => {
-    const { container } = render(
-      <NetWorthChart series={makeSeries(2025, { 11: 100, 12: 120 }, [12])} summary={SUMMARY} />,
-    )
-
-    const points = [...container.querySelectorAll('circle')]
-    expect(points.map(p => p.classList.contains('ar-chart__point--hollow'))).toEqual([false, true])
+  it('shows nothing when no month is hovered', () => {
+    expect(tooltipAfterHovering('')).toBeEmptyDOMElement()
   })
 
-  it('labels all twelve months and dollar values on the axes', () => {
-    const { container } = render(
-      <NetWorthChart series={makeSeries(2025, { 1: 400000, 12: 460000 })} summary={SUMMARY} />,
-    )
+  it('shows the month, net worth and a green rise against the previous month', () => {
+    const tooltip = tooltipAfterHovering('Feb')
 
-    const labels = [...container.querySelectorAll('text')].map(t => t.textContent)
-    expect(labels).toEqual(expect.arrayContaining(['Jan', 'Jun', 'Dec', '$400K', '$460K']))
+    expect(tooltip).toHaveTextContent('Feb 2025')
+    expect(tooltip).toHaveTextContent('$110,000')
+    expect(tooltip.querySelector('.ar-tooltip__change--up')).toHaveTextContent('+$10,000 (+10.0%)')
   })
 
-  it('uses the default width where nothing can be measured, with a viewBox equal to the svg size', () => {
-    render(<NetWorthChart series={makeSeries(2025, { 1: 1, 12: 2 })} summary={SUMMARY} />)
+  it('shows a red fall against the previous month', () => {
+    const tooltip = tooltipAfterHovering('Mar')
 
-    const svg = screen.getByRole('img')
-    expect(svg).toHaveAttribute('width', '640')
-    expect(svg.getAttribute('viewBox')).toBe(`0 0 640 ${svg.getAttribute('height')}`)
+    expect(tooltip.querySelector('.ar-tooltip__change--down')).toHaveTextContent('-$11,000 (-10.0%)')
   })
 
-  it('draws a zero line for a net worth that crosses zero', () => {
-    const { container } = render(<NetWorthChart series={makeSeries(2025, { 1: -20000, 12: 5000 })} summary={SUMMARY} />)
+  it('says No change, with no up or down styling, when the change rounds to zero', () => {
+    const tooltip = tooltipAfterHovering('Apr')
+    const change = tooltip.querySelector('.ar-tooltip__change')
 
-    expect(container.querySelector('.ar-chart__zero')).toBeInTheDocument()
+    expect(change).toHaveTextContent('No change')
+    expect(change).not.toHaveClass('ar-tooltip__change--up')
+    expect(change).not.toHaveClass('ar-tooltip__change--down')
   })
 
-  it('labels negative axis values with a minus sign', () => {
-    const { container } = render(
-      <NetWorthChart series={makeSeries(2025, { 1: -20000, 12: -5000 })} summary={SUMMARY} />,
-    )
+  it('shows no change for the first month', () => {
+    const tooltip = tooltipAfterHovering('Jan')
 
-    expect([...container.querySelectorAll('text')].some(t => t.textContent === '-$20K')).toBe(true)
+    expect(tooltip).toHaveTextContent('$100,000')
+    expect(tooltip.querySelector('.ar-tooltip__change')).toBeNull()
   })
 
-  describe('sizing to its container', () => {
-    const stubWidth = (width: number) => vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(width)
-    const labelsOf = (container: HTMLElement) => [...container.querySelectorAll('text')].map(t => t.textContent)
+  it('shows no change when the previous month has no balance', () => {
+    const tooltip = tooltipAfterHovering('Jul')
 
-    it('draws at the measured width so the text keeps its real size', () => {
-      stubWidth(360)
-      render(<NetWorthChart series={makeSeries(2025, { 1: 400000, 12: 460000 })} summary={SUMMARY} />)
+    expect(tooltip).toHaveTextContent('$120,000')
+    expect(tooltip.querySelector('.ar-tooltip__change')).toBeNull()
+  })
 
-      expect(screen.getByRole('img')).toHaveAttribute('width', '360')
-      expect(screen.getByRole('img').getAttribute('viewBox')).toMatch(/^0 0 360 /)
-    })
-
-    it('thins the month labels to every third on a narrow container', () => {
-      stubWidth(320)
-      const { container } = render(
-        <NetWorthChart series={makeSeries(2025, { 1: 400000, 12: 460000 })} summary={SUMMARY} />,
-      )
-
-      const months = labelsOf(container).filter(l => /^[A-Z][a-z]{2}$/.test(l ?? ''))
-      expect(months).toEqual(['Jan', 'Apr', 'Jul', 'Oct'])
-    })
-
-    it('shows all twelve month labels on a wide container', () => {
-      stubWidth(1000)
-      const { container } = render(
-        <NetWorthChart series={makeSeries(2025, { 1: 400000, 12: 460000 })} summary={SUMMARY} />,
-      )
-
-      expect(labelsOf(container).filter(l => /^[A-Z][a-z]{2}$/.test(l ?? ''))).toHaveLength(12)
-    })
-
-    it('redraws when the container is resized', () => {
-      stubWidth(1000)
-      let notify: () => void = () => {}
-      vi.stubGlobal(
-        'ResizeObserver',
-        class {
-          constructor(callback: () => void) {
-            notify = callback
-          }
-          observe() {}
-          disconnect() {}
-        },
-      )
-      render(<NetWorthChart series={makeSeries(2025, { 1: 400000, 12: 460000 })} summary={SUMMARY} />)
-      expect(screen.getByRole('img')).toHaveAttribute('width', '1000')
-
-      stubWidth(500)
-      act(() => notify())
-
-      expect(screen.getByRole('img')).toHaveAttribute('width', '500')
-    })
-
-    it('stops observing when unmounted', () => {
-      stubWidth(500)
-      const disconnect = vi.fn()
-      vi.stubGlobal(
-        'ResizeObserver',
-        class {
-          observe() {}
-          disconnect = disconnect
-        },
-      )
-      const { unmount } = render(<NetWorthChart series={makeSeries(2025, { 1: 1, 12: 2 })} summary={SUMMARY} />)
-
-      unmount()
-
-      expect(disconnect).toHaveBeenCalled()
-    })
+  it('shows no tooltip for a month without a balance', () => {
+    expect(tooltipAfterHovering('Jun')).toBeEmptyDOMElement()
   })
 })

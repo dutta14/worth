@@ -137,4 +137,49 @@ describe('snapshotGoals', () => {
     ).goals
     expect(s).toMatchObject({ startBalance: null, endBalance: null, startPct: null, endPct: null })
   })
+
+  describe('endGwBalance', () => {
+    const gwSnap = (
+      accounts: ReturnType<typeof makeAccounts>,
+      balances: ReturnType<typeof balancesFor>,
+      end: NetWorthAnchor = anchor('2025-12'),
+    ) => snapshotGoals(2025, [goal], '1990-01', GROWTH, accounts, balances, anchor('2024-12'), end).goals[0]
+
+    it('sums GW accounts at the end month only, leaving FI accounts out', () => {
+      expect(snap()[0].endGwBalance).toBeCloseTo(target * 5, 1)
+    })
+
+    it('counts inactive GW accounts so a past year does not depend on today’s status', () => {
+      const s = gwSnap(makeAccounts({ goalType: 'gw' }, { goalType: 'gw', status: 'inactive' }, { goalType: 'fi' }), [
+        ...balancesFor(1, { '2024-12': 999, '2025-12': 1000 }),
+        ...balancesFor(2, { '2025-12': 250.5 }),
+        ...balancesFor(3, { '2025-12': 7 }),
+      ])
+      expect(s.endGwBalance).toBe(1250.5)
+    })
+
+    it('is null when the end anchor is missing', () => {
+      const s = gwSnap(makeAccounts({ goalType: 'gw' }), balancesFor(1, { '2025-12': 1000 }), anchor(null, 'missing'))
+      expect(s.endGwBalance).toBeNull()
+    })
+
+    it('is null when the end anchor is incomplete', () => {
+      const s = gwSnap(
+        makeAccounts({ goalType: 'gw' }),
+        balancesFor(1, { '2025-12': 1000 }),
+        anchor('2025-12', 'incomplete'),
+      )
+      expect(s.endGwBalance).toBeNull()
+    })
+
+    it('is 0 when there are no GW accounts', () => {
+      const s = gwSnap(makeAccounts({ goalType: 'fi' }), balancesFor(1, { '2025-12': 1000 }))
+      expect(s.endGwBalance).toBe(0)
+    })
+
+    it('is 0 when GW accounts have no balance in the end month', () => {
+      const s = gwSnap(makeAccounts({ goalType: 'gw' }), balancesFor(1, { '2024-12': 1000 }))
+      expect(s.endGwBalance).toBe(0)
+    })
+  })
 })

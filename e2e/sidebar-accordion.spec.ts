@@ -8,6 +8,9 @@ import { NAV_GROUP_CHILDREN, NavGroupName, SUB_PATHS } from './fixtures/nav-data
  * sub-items are the first-level sections of each page. Second-level controls stay in the page.
  */
 
+/** Sub-items whose page heading is longer than the sidebar label. */
+const HEADING_OVERRIDES: Record<string, string> = { Review: 'Annual Review' }
+
 /** Like `seedNav`, but only resets storage on the first load of a tab so reloads keep persisted UI state. */
 async function seedOnce(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -61,7 +64,9 @@ test.describe('Sidebar accordion navigation', () => {
       for (const label of NAV_GROUP_CHILDREN[group]) {
         await nav.subLink(group, label).click()
         await expect(page).toHaveURL(new RegExp(`#${SUB_PATHS[label].replace('/', '\\/')}`))
-        await expect(page.getByRole('heading', { level: 1, name: label, exact: true })).toBeVisible()
+        await expect(
+          page.getByRole('heading', { level: 1, name: HEADING_OVERRIDES[label] ?? label, exact: true }),
+        ).toBeVisible()
         await expect(nav.subLink(group, label)).toHaveAttribute('aria-current', 'page')
         await expect(page.locator('[aria-current="page"]')).toHaveCount(1)
         await nav.expectActive(group)

@@ -1,5 +1,4 @@
 import { render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { makeReview, makeSeries } from '../../../test/reviewFixtures'
@@ -23,10 +22,8 @@ describe('ReviewNetWorth', () => {
     renderSection()
 
     expect(screen.getByRole('region', { name: 'Net worth' })).toBeInTheDocument()
-    expect(within(stat('Net worth change')).getByText('Up $60,000')).toBeInTheDocument()
-    expect(
-      within(stat('Net worth change')).getByText('15.0% from $400,000 in Dec 2024 to $460,000 in Dec 2025'),
-    ).toBeInTheDocument()
+    expect(stat('Net worth change').querySelector('.ar-stat__value')).toHaveTextContent('Up $60,000')
+    expect(within(stat('Net worth change')).getByText('15.0%')).toBeInTheDocument()
     expect(within(stat('Starting net worth')).getByText('$400,000')).toBeInTheDocument()
     expect(within(stat('Starting net worth')).getByText('Dec 2024')).toBeInTheDocument()
     expect(within(stat('Ending net worth')).getByText('$460,000')).toBeInTheDocument()
@@ -37,8 +34,10 @@ describe('ReviewNetWorth', () => {
       makeReview({ netWorth: netWorth({ change: -3200, changePct: -0.8, end: { ...netWorth().end, total: 396800 } }) }),
     )
 
-    expect(screen.getByText('Down $3,200')).toBeInTheDocument()
-    expect(screen.getByText(/^-0\.8% from/)).toBeInTheDocument()
+    const value = stat('Net worth change').querySelector('.ar-stat__value') as HTMLElement
+    expect(value).toHaveTextContent('Down $3,200')
+    expect(within(value).getByText('Down')).toHaveClass('sr-only')
+    expect(within(stat('Net worth change')).getByText('-0.8%')).toBeInTheDocument()
   })
 
   it('says No change when the change rounds to zero', () => {
@@ -58,7 +57,7 @@ describe('ReviewNetWorth', () => {
       }),
     )
 
-    expect(screen.getByText('Up $460,000')).toBeInTheDocument()
+    expect(stat('Net worth change').querySelector('.ar-stat__value')).toHaveTextContent('Up $460,000')
     expect(screen.getByText('Percent change not available')).toBeInTheDocument()
   })
 
@@ -77,8 +76,8 @@ describe('ReviewNetWorth', () => {
 
     expect(within(stat('Starting net worth')).getByText('-$20,000')).toBeInTheDocument()
     expect(within(stat('Ending net worth')).getByText('-$5,000')).toBeInTheDocument()
-    expect(screen.getByText('Up $15,000')).toBeInTheDocument()
-    expect(screen.getByText(/^75\.0% from -\$20,000 in Dec 2024 to -\$5,000 in Dec 2025$/)).toBeInTheDocument()
+    expect(stat('Net worth change').querySelector('.ar-stat__value')).toHaveTextContent('Up $15,000')
+    expect(within(stat('Net worth change')).getByText('75.0%')).toBeInTheDocument()
   })
 
   it('shows Not available for the change when an anchor month is incomplete, and keeps the chart', () => {
@@ -96,7 +95,7 @@ describe('ReviewNetWorth', () => {
     expect(within(stat('Net worth change')).getByText('Not available')).toBeInTheDocument()
     expect(within(stat('Ending net worth')).getByText('Dec 2025, incomplete')).toBeInTheDocument()
     expect(
-      screen.getByRole('img', { name: 'Net worth change is not available for 2025. 2 of 12 months have balances.' }),
+      screen.getByRole('group', { name: 'Net worth change is not available for 2025. 2 of 12 months have balances.' }),
     ).toBeInTheDocument()
   })
 
@@ -111,13 +110,19 @@ describe('ReviewNetWorth', () => {
       }),
     )
 
-    expect(screen.getByText('24.0% from $50,000 in Mar 2025 to $460,000 in Dec 2025')).toBeInTheDocument()
+    expect(within(stat('Starting net worth')).getByText('Mar 2025')).toBeInTheDocument()
+    expect(within(stat('Net worth change')).getByText('24.0%')).toBeInTheDocument()
+    expect(
+      screen.getByRole('group', { name: /from \$50,000 in March 2025 to \$460,000 in December 2025/ }),
+    ).toBeInTheDocument()
   })
 
   it('shows the prior-year comparison under the change when the prior year exists', () => {
     renderSection(makeReview({ prior: { netWorthChange: 55000, income: null, expenses: null, savingsRate: null } }))
 
-    expect(within(stat('Net worth change')).getByText('vs. 2024: up $5,000')).toBeInTheDocument()
+    const prior = stat('Net worth change').querySelector('.ar-stat__prior') as HTMLElement
+    expect(prior).toHaveTextContent('vs. 2024: ↗Up $5,000')
+    expect(within(prior).getByText('Up')).toHaveClass('sr-only')
   })
 
   it('shows no net worth prior-year line for a year in progress, since a part year is not comparable', () => {
@@ -137,45 +142,21 @@ describe('ReviewNetWorth', () => {
     expect(screen.queryByText(/^vs\. /)).not.toBeInTheDocument()
   })
 
-  describe('chart and monthly values', () => {
-    it('describes the chart in words', () => {
-      renderSection()
+  it('describes the chart in words', () => {
+    renderSection()
 
-      expect(
-        screen.getByRole('img', {
-          name: 'Net worth rose from $400,000 in December 2024 to $460,000 in December 2025.',
-        }),
-      ).toBeInTheDocument()
-    })
+    expect(
+      screen.getByRole('group', {
+        name: 'Net worth rose from $400,000 in December 2024 to $460,000 in December 2025.',
+      }),
+    ).toBeInTheDocument()
+  })
 
-    it('keeps the monthly table available to assistive technology while it is collapsed', () => {
-      renderSection()
+  it('has no monthly values toggle or table', () => {
+    renderSection()
 
-      const toggle = screen.getByRole('button', { name: 'Show monthly values' })
-      expect(toggle).toHaveAttribute('aria-expanded', 'false')
-      expect(toggle).toHaveAttribute('aria-controls', screen.getByRole('table').id)
-      expect(screen.getByRole('table')).toHaveClass('sr-only')
-    })
-
-    it('reveals and hides the table with the toggle', async () => {
-      const user = userEvent.setup()
-      renderSection()
-
-      await user.click(screen.getByRole('button', { name: 'Show monthly values' }))
-      expect(screen.getByRole('button', { name: 'Hide monthly values' })).toHaveAttribute('aria-expanded', 'true')
-      expect(screen.getByRole('table')).not.toHaveClass('sr-only')
-
-      await user.click(screen.getByRole('button', { name: 'Hide monthly values' }))
-      expect(screen.getByRole('button', { name: 'Show monthly values' })).toHaveAttribute('aria-expanded', 'false')
-      expect(screen.getByRole('table')).toHaveClass('sr-only')
-    })
-
-    it('lists the twelve months with the same values as the chart', () => {
-      renderSection()
-
-      expect(screen.getAllByRole('row')).toHaveLength(13)
-      expect(screen.getByRole('row', { name: /^Jun 2025/ })).toHaveTextContent('$430,000')
-    })
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
   describe('a year without balances', () => {
@@ -195,7 +176,7 @@ describe('ReviewNetWorth', () => {
       expect(within(stat('Net worth change')).getByText('Not available')).toBeInTheDocument()
       expect(screen.getByText(/No balances for 2025/)).toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'Go to Wealth' })).toHaveAttribute('href', '/net-worth/dashboard')
-      expect(screen.queryByRole('img')).not.toBeInTheDocument()
+      expect(screen.queryByRole('group')).not.toBeInTheDocument()
       expect(screen.queryByRole('button')).not.toBeInTheDocument()
     })
   })

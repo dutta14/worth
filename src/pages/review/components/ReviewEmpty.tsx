@@ -9,9 +9,9 @@ interface ReviewEmptyProps {
 
 const ReviewEmpty: FC<ReviewEmptyProps> = ({ year, noDataAnywhere }) => (
   <section className="ar-empty" aria-labelledby="ar-empty-h">
-    <h3 id="ar-empty-h" className="ar-empty__title">
+    <h2 id="ar-empty-h" className="ar-empty__title">
       {noDataAnywhere ? 'Nothing to review yet' : `Not enough data for ${year}`}
-    </h3>
+    </h2>
     <p className="ar-empty__body">
       Add month-end balances in Wealth or import transactions in Cashflow, then come back.
     </p>

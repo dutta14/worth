@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -46,11 +46,15 @@ const renderPage = (route: string, history: string[] = [route]) =>
 const useBalances = (balances: ReturnType<typeof balancesFor>, isLoaded = true) =>
   mockUseData.mockReturnValue({ accounts, balances, allMonths: [], isLoaded })
 
-const yearSelect = () => screen.getByRole('combobox', { name: 'Year' })
-const optionTexts = (select: HTMLElement) =>
-  within(select)
-    .getAllByRole('option')
-    .map(o => o.textContent)
+const prevYear = () => screen.getByRole('button', { name: 'Previous year' })
+const nextYear = () => screen.getByRole('button', { name: 'Next year' })
+const delta = (text: string) => (_: string, el: Element | null) =>
+  !!el?.classList.contains('ar-delta') && el.textContent?.replace(/^[↗↘]/, '') === text
+const findHeadline = () => screen.findByText('Net worth', { selector: 'dt' })
+const openActions = async (user: ReturnType<typeof userEvent.setup>) => {
+  const trigger = await screen.findByRole('button', { name: 'More actions' })
+  if (trigger.getAttribute('aria-expanded') !== 'true') await user.click(trigger)
+}
 const liveRegion = () => document.querySelector('.ar-live') as HTMLElement
 
 beforeEach(() => {
@@ -72,7 +76,8 @@ describe('AnnualReview routing', () => {
     renderPage('/net-worth/review')
 
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/review/2025'))
-    expect(await screen.findByRole('heading', { level: 2, name: 'Annual Review 2025' })).toBeInTheDocument()
+    expect(await findHeadline()).toBeInTheDocument()
+    await waitFor(() => expect(document.title).toBe('Annual Review 2025 - worth'))
   })
 
   it.each(['abc', '25', '20255', '2025x'])(
@@ -87,7 +92,7 @@ describe('AnnualReview routing', () => {
   it('keeps the route year in the URL so it survives a reload', async () => {
     renderPage('/net-worth/review/2024')
 
-    expect(await screen.findByRole('heading', { level: 2, name: 'Annual Review 2024' })).toBeInTheDocument()
+    expect(await findHeadline()).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/review/2024')
   })
 })
@@ -99,22 +104,24 @@ describe('AnnualReview loading state', () => {
 
     expect(await screen.findByText('Loading your review...')).toBeInTheDocument()
     expect(screen.getAllByRole('status').some(el => el.textContent === 'Loading your review...')).toBe(true)
-    expect(yearSelect()).toBeDisabled()
+    expect(prevYear()).toBeDisabled()
+    expect(nextYear()).toBeDisabled()
     expect(document.querySelector('.ar-body')).toHaveAttribute('aria-busy', 'true')
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { level: 3 })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
   })
 
-  it('shows the title without a year and a disabled placeholder select while no year is chosen', async () => {
+  it('shows no year navigation, headline or review content while no year is chosen', async () => {
     useBalances(FULL_YEARS, false)
     renderPage('/net-worth/review')
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 0))
     })
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Annual Review' })).toBeInTheDocument()
-    expect(yearSelect()).toBeDisabled()
-    expect(optionTexts(yearSelect())).toEqual(['Select a year'])
+    expect(screen.queryByRole('button', { name: 'Previous year' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Next year' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Net worth', { selector: 'dt' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'More actions' })).toBeInTheDocument()
   })
 
   it('replaces the loading message with the page and clears aria-busy when ready', async () => {
@@ -122,52 +129,88 @@ describe('AnnualReview loading state', () => {
 
     await waitFor(() => expect(screen.queryByText('Loading your review...')).not.toBeInTheDocument())
     expect(document.querySelector('.ar-body')).toHaveAttribute('aria-busy', 'false')
-    expect(yearSelect()).toBeEnabled()
+    expect(prevYear()).toBeEnabled()
   })
 })
 
 describe('AnnualReview header', () => {
-  it('shows the title, subtitle and a period line for a complete year', async () => {
+  it('shows the Net worth headline with the ending total and the routed year, without a subtitle or period line', async () => {
     renderPage('/net-worth/review/2025')
 
-    expect(await screen.findByRole('heading', { level: 2, name: 'Annual Review 2025' })).toBeInTheDocument()
-    expect(screen.getByText('Your year in money, built from the files in your folder.')).toBeInTheDocument()
-    expect(screen.getByText('January to December 2025')).toBeInTheDocument()
+    const label = await findHeadline()
+    expect(label.nextElementSibling).toHaveTextContent('$460,000')
+    expect(screen.getByText('2025')).toBeInTheDocument()
+    expect(screen.queryByText('Your year in money, built from the files in your folder.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^January to December/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
   })
 
-  it('names the in-progress period for the current year', async () => {
-    useBalances(balancesFor(1, { '2025-12': 460000, '2026-10': 483000 }))
-    renderPage('/net-worth/review/2026')
-
-    expect(await screen.findByText('January to October 2026, year in progress')).toBeInTheDocument()
-  })
-
-  it('names the real months when the starting balance month is the nearest one', async () => {
-    useBalances(balancesFor(1, { '2025-03': 50000, '2025-12': 62000 }))
-    renderPage('/net-worth/review/2025')
-
-    expect(await screen.findByText('Mar 2025 to Dec 2025')).toBeInTheDocument()
-  })
-
-  it('labels the year select and lists the years with data, newest first, with the route year selected', async () => {
+  it('shows "Not available" in the headline when the ending net worth cannot be used', async () => {
+    useBalances([])
+    await store.writeJSON('budget/categories.json', { version: 1, years: [2024], categoryGroups: GROUPS })
+    await store.writeCSV('transactions/2024/2024-01.csv', [
+      ['Date', 'Category', 'Amount'],
+      ['2024-01-15', 'Paycheck', '1000'],
+    ])
     renderPage('/net-worth/review/2024')
 
-    await waitFor(() => expect(yearSelect()).toBeEnabled())
-    expect(optionTexts(yearSelect())).toEqual(['2026', '2025', '2024', '2023'])
-    expect(yearSelect()).toHaveValue('2024')
+    const label = await findHeadline()
+    expect(label.nextElementSibling).toHaveTextContent('Not available')
   })
 
-  it('still lists and renders a route year that has no data, with the empty state', async () => {
+  it('steps the year navigation between adjacent years with data, newest at the end', async () => {
+    renderPage('/net-worth/review/2024')
+
+    await waitFor(() => expect(prevYear()).toBeEnabled())
+    expect(screen.getByText('2024')).toBeInTheDocument()
+    expect(nextYear()).toBeEnabled()
+  })
+
+  it('disables Previous year on the oldest year and Next year on the newest year', async () => {
+    const { unmount } = renderPage('/net-worth/review/2023')
+    await findHeadline()
+    expect(prevYear()).toBeDisabled()
+    expect(nextYear()).toBeEnabled()
+    unmount()
+
+    renderPage('/net-worth/review/2026')
+    await waitFor(() => expect(prevYear()).toBeEnabled())
+    expect(nextYear()).toBeDisabled()
+  })
+
+  it('still renders a route year that has no data, with the empty state, and steps to the nearest year with data', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderPage('/net-worth/review/2019')
 
-    expect(await screen.findByRole('heading', { level: 3, name: 'Not enough data for 2019' })).toBeInTheDocument()
-    expect(optionTexts(yearSelect())).toEqual(['2026', '2025', '2024', '2023', '2019'])
-    expect(yearSelect()).toHaveValue('2019')
-    expect(screen.queryByText(/^January to December/)).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Not enough data for 2019' })).toBeInTheDocument()
+    expect(screen.getByText('2019')).toBeInTheDocument()
+    expect(prevYear()).toBeDisabled()
+    expect(screen.queryByText('Net worth', { selector: 'dt' })).not.toBeInTheDocument()
+
+    await user.click(nextYear())
+    expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/review/2023')
+  })
+
+  it('keeps Print and Download behind a collapsed More actions button until it is opened', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderPage('/net-worth/review/2025')
+
+    const trigger = await screen.findByRole('button', { name: 'More actions' })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: 'Print or save as PDF' })).not.toBeInTheDocument()
+
+    await user.click(trigger)
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Print or save as PDF' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Download CSV' })).toBeInTheDocument()
   })
 
   it('offers Print and Download buttons, enabled once the review is ready', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderPage('/net-worth/review/2025')
+    await findHeadline()
+    await openActions(user)
 
     const print = await screen.findByRole('button', { name: 'Print or save as PDF' })
     await waitFor(() => expect(print).toBeEnabled())
@@ -190,25 +233,25 @@ describe('AnnualReview year changes and live region', () => {
     await waitFor(() => expect(liveRegion()).toHaveTextContent('Review for 2025 is ready.'))
   })
 
-  it('navigates with replace and announces the new year when the select changes', async () => {
+  it('navigates and announces the new year when Previous year is pressed', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderPage('/net-worth/review/2025')
     await waitFor(() => expect(liveRegion()).toHaveTextContent('Review for 2025 is ready.'))
 
-    await user.selectOptions(yearSelect(), '2024')
+    await user.click(prevYear())
 
     expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/review/2024')
-    expect(await screen.findByRole('heading', { level: 2, name: 'Annual Review 2024' })).toBeInTheDocument()
+    expect(await findHeadline()).toBeInTheDocument()
     await waitFor(() => expect(liveRegion()).toHaveTextContent('Showing the review for 2024.'))
-    expect(yearSelect()).toHaveValue('2024')
+    expect(screen.getByText('2024')).toBeInTheDocument()
   })
 
   it('replaces the history entry, so Back leaves the review instead of stepping through years', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderPage('/net-worth/review/2025', ['/start', '/net-worth/review/2025'])
-    await waitFor(() => expect(yearSelect()).toBeEnabled())
+    await waitFor(() => expect(prevYear()).toBeEnabled())
 
-    await user.selectOptions(yearSelect(), '2024')
+    await user.click(prevYear())
     expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/review/2024')
     await user.click(screen.getByRole('button', { name: 'back' }))
 
@@ -229,22 +272,19 @@ describe('AnnualReview year changes and live region', () => {
 })
 
 describe('AnnualReview keyboard order', () => {
-  it('tabs from the year select to Print and Download, then the monthly values toggle and the in-page links, and nothing else', async () => {
+  it('tabs from Previous and Next year to More actions, then the in-page links, and nothing else', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderPage('/net-worth/review/2025')
-    await screen.findByRole('button', { name: 'Show monthly values' })
+    await findHeadline()
 
     await user.tab()
-    expect(yearSelect()).toHaveFocus()
+    expect(prevYear()).toHaveFocus()
 
     await user.tab()
-    expect(screen.getByRole('button', { name: 'Print or save as PDF' })).toHaveFocus()
+    expect(nextYear()).toHaveFocus()
 
     await user.tab()
-    expect(screen.getByRole('button', { name: 'Download CSV' })).toHaveFocus()
-
-    await user.tab()
-    expect(screen.getByRole('button', { name: 'Show monthly values' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'More actions' })).toHaveFocus()
 
     await user.tab()
     expect(screen.getByRole('link', { name: 'Go to Cashflow' })).toHaveFocus()
@@ -256,13 +296,30 @@ describe('AnnualReview keyboard order', () => {
     expect(screen.getByRole('button', { name: 'back' })).toHaveFocus()
   })
 
-  it('moves from the select to the Wealth and Cashflow links in the empty state', async () => {
+  it('moves from More actions into Print and Download when the menu is open', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderPage('/net-worth/review/2019')
-    await screen.findByRole('heading', { level: 3, name: 'Not enough data for 2019' })
+    renderPage('/net-worth/review/2025')
+    await findHeadline()
 
     await user.tab()
-    expect(yearSelect()).toHaveFocus()
+    await user.tab()
+    await user.tab()
+    await user.keyboard('{Enter}')
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Print or save as PDF' })).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Download CSV' })).toHaveFocus()
+  })
+
+  it('moves from the year navigation and More actions to the Wealth and Cashflow links in the empty state', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderPage('/net-worth/review/2019')
+    await screen.findByRole('heading', { level: 2, name: 'Not enough data for 2019' })
+
+    await user.tab()
+    expect(nextYear()).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'More actions' })).toHaveFocus()
     await user.tab()
     expect(screen.getByRole('link', { name: 'Go to Wealth' })).toHaveFocus()
     await user.tab()
@@ -274,7 +331,7 @@ describe('AnnualReview empty states', () => {
   it('says there is not enough data for a year with nothing in it, with links to Wealth and Cashflow', async () => {
     renderPage('/net-worth/review/2019')
 
-    expect(await screen.findByRole('heading', { level: 3, name: 'Not enough data for 2019' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Not enough data for 2019' })).toBeInTheDocument()
     expect(
       screen.getByText('Add month-end balances in Wealth or import transactions in Cashflow, then come back.'),
     ).toBeInTheDocument()
@@ -285,23 +342,24 @@ describe('AnnualReview empty states', () => {
   it('treats a future year as empty', async () => {
     renderPage('/net-worth/review/2030')
 
-    expect(await screen.findByRole('heading', { level: 3, name: 'Not enough data for 2030' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Not enough data for 2030' })).toBeInTheDocument()
   })
 
   it('says there is nothing to review yet when no year has any data', async () => {
     useBalances([])
     renderPage('/net-worth/review')
 
-    expect(await screen.findByRole('heading', { level: 3, name: 'Nothing to review yet' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Nothing to review yet' })).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('/net-worth/review/2026')
-    expect(optionTexts(yearSelect())).toEqual(['2026'])
+    expect(prevYear()).toBeDisabled()
+    expect(nextYear()).toBeDisabled()
   })
 
-  it('keeps the select enabled so another year can be picked', async () => {
+  it('keeps the year navigation enabled so another year can be picked', async () => {
     renderPage('/net-worth/review/2019')
-    await screen.findByRole('heading', { level: 3, name: 'Not enough data for 2019' })
+    await screen.findByRole('heading', { level: 2, name: 'Not enough data for 2019' })
 
-    expect(yearSelect()).toBeEnabled()
+    expect(nextYear()).toBeEnabled()
   })
 })
 
@@ -309,11 +367,16 @@ describe('AnnualReview with data', () => {
   it('renders the sections with the figures from the selector and no empty-state text', async () => {
     renderPage('/net-worth/review/2025')
 
-    await screen.findByText('January to December 2025')
-    const sections = screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)
+    await findHeadline()
+    const sections = screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)
     expect(sections).toEqual(['Net worth', 'Income and savings', 'Goal progress at year end'])
-    expect(screen.getByText('Up $60,000')).toBeInTheDocument()
-    expect(screen.getByText('15.0% from $400,000 in Dec 2024 to $460,000 in Dec 2025')).toBeInTheDocument()
+    expect(screen.getByText(delta('Up $60,000'))).toBeInTheDocument()
+    expect(screen.getByText('15.0%')).toBeInTheDocument()
+    expect(
+      screen.getByRole('group', {
+        name: 'Net worth rose from $400,000 in December 2024 to $460,000 in December 2025.',
+      }),
+    ).toBeInTheDocument()
     expect(screen.queryByText(/Not enough data|Nothing to review/)).not.toBeInTheDocument()
   })
 
@@ -321,7 +384,8 @@ describe('AnnualReview with data', () => {
     useBalances(balancesFor(1, { '2025-12': 460000, '2026-10': 483000 }))
     renderPage('/net-worth/review/2026')
 
-    expect(await screen.findByText('Up $23,000')).toBeInTheDocument()
+    expect(await screen.findByText(delta('Up $23,000'))).toBeInTheDocument()
+    expect(screen.getByText('Up', { selector: '.sr-only' })).toBeInTheDocument()
     expect(screen.getByText('2026 is still in progress. This review covers January to October.')).toBeInTheDocument()
   })
 
@@ -329,7 +393,7 @@ describe('AnnualReview with data', () => {
     useBalances(balancesFor(1, { '2024-12': -20000, '2025-12': -5000 }))
     renderPage('/net-worth/review/2025')
 
-    expect(await screen.findByText('Up $15,000')).toBeInTheDocument()
+    expect(await screen.findByText(delta('Up $15,000'))).toBeInTheDocument()
     expect(screen.getAllByText('-$20,000').length).toBeGreaterThan(0)
     expect(screen.getAllByText('-$5,000').length).toBeGreaterThan(0)
   })
@@ -364,7 +428,7 @@ describe('AnnualReview with data', () => {
     }
     renderPage('/net-worth/review/2024')
 
-    expect(await screen.findByText('January to December 2024')).toBeInTheDocument()
+    expect(await screen.findByText(/No goals|Income and savings/, { selector: 'h2, p' })).toBeInTheDocument()
     expect(screen.queryByText(/Not enough data/)).not.toBeInTheDocument()
   })
 })
@@ -384,12 +448,12 @@ describe('AnnualReview error state', () => {
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('The review could not be built. Your files were not changed.')
     expect(screen.queryByText('Loading your review...')).not.toBeInTheDocument()
-    expect(yearSelect()).toBeEnabled()
+    expect(prevYear()).toBeEnabled()
 
     failing = false
     await user.click(within(alert).getByRole('button', { name: 'Try again' }))
 
-    await screen.findByText('January to December 2025')
+    await findHeadline()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -410,13 +474,13 @@ describe('AnnualReview error state', () => {
     expect(reload).toHaveBeenCalled()
   })
 
-  it('keeps the year select disabled in the error state when the route has no year', async () => {
+  it('shows no year navigation in the error state when the route has no year', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(store, 'readJSON').mockRejectedValue(new Error('boom'))
     renderPage('/net-worth/review')
 
     await screen.findByRole('alert')
-    expect(yearSelect()).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Previous year' })).not.toBeInTheDocument()
   })
 })
 
@@ -429,11 +493,17 @@ describe('AnnualReview print and CSV', () => {
     return { createObjectURL, revokeObjectURL, click }
   }
 
+  const clickDownload = async (user: ReturnType<typeof userEvent.setup>) => {
+    await openActions(user)
+    fireEvent.click(screen.getByRole('button', { name: 'Download CSV' }))
+  }
+
   it('disables Print and Download while loading', async () => {
     useBalances(FULL_YEARS, false)
     renderPage('/net-worth/review/2025')
 
     await screen.findByText('Loading your review...')
+    await openActions(userEvent.setup({ advanceTimers: vi.advanceTimersByTime }))
     expect(screen.getByRole('button', { name: 'Print or save as PDF' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Download CSV' })).toBeDisabled()
   })
@@ -441,7 +511,8 @@ describe('AnnualReview print and CSV', () => {
   it('disables Print and Download for a year with no data, and shows no print footer', async () => {
     renderPage('/net-worth/review/2019')
 
-    await screen.findByRole('heading', { level: 3, name: 'Not enough data for 2019' })
+    await screen.findByRole('heading', { level: 2, name: 'Not enough data for 2019' })
+    await openActions(userEvent.setup({ advanceTimers: vi.advanceTimersByTime }))
     expect(screen.getByRole('button', { name: 'Print or save as PDF' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Download CSV' })).toBeDisabled()
     expect(document.querySelector('.ar-print-footer')).toBeNull()
@@ -453,6 +524,7 @@ describe('AnnualReview print and CSV', () => {
     renderPage('/net-worth/review/2025')
 
     await screen.findByRole('alert')
+    await openActions(userEvent.setup({ advanceTimers: vi.advanceTimersByTime }))
     expect(screen.getByRole('button', { name: 'Print or save as PDF' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Download CSV' })).toBeDisabled()
   })
@@ -462,7 +534,9 @@ describe('AnnualReview print and CSV', () => {
     const print = vi.spyOn(window, 'print').mockImplementation(() => {})
     renderPage('/net-worth/review/2025')
 
-    await user.click(await screen.findByRole('button', { name: 'Print or save as PDF' }))
+    await findHeadline()
+    await openActions(user)
+    await user.click(screen.getByRole('button', { name: 'Print or save as PDF' }))
 
     expect(print).toHaveBeenCalledTimes(1)
   })
@@ -472,7 +546,9 @@ describe('AnnualReview print and CSV', () => {
     const { createObjectURL, revokeObjectURL, click } = stubDownload()
     renderPage('/net-worth/review/2025')
 
-    await user.click(await screen.findByRole('button', { name: 'Download CSV' }))
+    await findHeadline()
+    await openActions(user)
+    await user.click(screen.getByRole('button', { name: 'Download CSV' }))
 
     expect(createObjectURL).toHaveBeenCalledTimes(1)
     const blob = (createObjectURL.mock.calls[0] as unknown as [Blob])[0]
@@ -494,9 +570,12 @@ describe('AnnualReview print and CSV', () => {
     })
     renderPage('/net-worth/review/2025')
 
-    await user.click(await screen.findByRole('button', { name: 'Download CSV' }))
+    await findHeadline()
+    await openActions(user)
+    await user.click(screen.getByRole('button', { name: 'Download CSV' }))
 
     expect(liveRegion()).toHaveTextContent('The CSV file could not be created. Your files were not changed.')
+    await openActions(user)
     expect(screen.getByRole('button', { name: 'Download CSV' })).toBeEnabled()
   })
 
@@ -504,11 +583,11 @@ describe('AnnualReview print and CSV', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     stubDownload()
     renderPage('/net-worth/review/2025')
-    const button = await screen.findByRole('button', { name: 'Download CSV' })
+    await findHeadline()
 
-    await user.click(button)
+    await clickDownload(user)
     expect(liveRegion()).toHaveTextContent('Downloaded worth-annual-review-2025.csv.')
-    await user.click(button)
+    await clickDownload(user)
 
     expect(liveRegion()).toBeEmptyDOMElement()
     await waitFor(() => expect(liveRegion()).toHaveTextContent('Downloaded worth-annual-review-2025.csv.'))
@@ -523,10 +602,10 @@ describe('AnnualReview print and CSV', () => {
       revokeObjectURL: vi.fn(),
     })
     renderPage('/net-worth/review/2025')
-    const button = await screen.findByRole('button', { name: 'Download CSV' })
+    await findHeadline()
 
-    await user.click(button)
-    await user.click(button)
+    await clickDownload(user)
+    await clickDownload(user)
 
     expect(liveRegion()).toBeEmptyDOMElement()
     await waitFor(() => expect(liveRegion()).toHaveTextContent('The CSV file could not be created.'))
@@ -537,9 +616,9 @@ describe('AnnualReview print and CSV', () => {
     stubDownload()
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { unmount } = renderPage('/net-worth/review/2025')
-    const button = await screen.findByRole('button', { name: 'Download CSV' })
-    await user.click(button)
-    await user.click(button)
+    await findHeadline()
+    await clickDownload(user)
+    await clickDownload(user)
 
     unmount()
     await new Promise(resolve => setTimeout(resolve, 150))
@@ -550,7 +629,7 @@ describe('AnnualReview print and CSV', () => {
   it('renders the print-only footer with today and the privacy line', async () => {
     renderPage('/net-worth/review/2025')
 
-    await screen.findByText('January to December 2025')
+    await findHeadline()
     expect(document.querySelector('.ar-print-footer')).toHaveTextContent(
       'Prepared with worth on 2026-11-08. Your data stays on your computer.',
     )
@@ -562,8 +641,8 @@ describe('AnnualReview print and CSV', () => {
     const { unmount } = renderPage('/net-worth/review/2025')
 
     await waitFor(() => expect(document.title).toBe('Annual Review 2025 - worth'))
-    await waitFor(() => expect(yearSelect()).toBeEnabled())
-    await user.selectOptions(yearSelect(), '2024')
+    await waitFor(() => expect(prevYear()).toBeEnabled())
+    await user.click(prevYear())
     await waitFor(() => expect(document.title).toBe('Annual Review 2024 - worth'))
 
     unmount()

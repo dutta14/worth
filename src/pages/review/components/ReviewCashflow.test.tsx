@@ -18,18 +18,14 @@ const renderSection = (review: AnnualReview) =>
 const stat = (label: string) => screen.getByText(label).closest('div') as HTMLElement
 
 describe('ReviewCashflow', () => {
-  it('shows income, expenses, savings and savings rate with their explanations', () => {
+  it('shows income, expenses, savings and savings rate', () => {
     renderSection(makeReview())
 
     expect(screen.getByRole('region', { name: 'Income and savings' })).toBeInTheDocument()
     expect(within(stat('Income')).getByText('$120,000')).toBeInTheDocument()
-    expect(within(stat('Income')).getByText('Money in, from your transactions')).toBeInTheDocument()
     expect(within(stat('Expenses')).getByText('$78,000')).toBeInTheDocument()
-    expect(within(stat('Expenses')).getByText('Money out, after refunds')).toBeInTheDocument()
     expect(within(stat('Savings')).getByText('$42,000')).toBeInTheDocument()
-    expect(within(stat('Savings')).getByText('Income minus expenses')).toBeInTheDocument()
     expect(within(stat('Savings rate')).getByText('35.0%')).toBeInTheDocument()
-    expect(within(stat('Savings rate')).getByText('Savings as a share of income')).toBeInTheDocument()
   })
 
   it('shows negative savings and a negative rate as negative values in neutral words', () => {
@@ -49,7 +45,7 @@ describe('ReviewCashflow', () => {
     expect(screen.queryByText('0.0%')).not.toBeInTheDocument()
   })
 
-  it('credits the Growth log as the source for a manual year, with unknown figures Not available', () => {
+  it('shows the logged income for a manual year, with unknown figures Not available', () => {
     renderSection(
       makeReview({
         cashflow: cashflow({
@@ -63,7 +59,7 @@ describe('ReviewCashflow', () => {
       }),
     )
 
-    expect(within(stat('Income')).getByText('From your yearly log in Growth')).toBeInTheDocument()
+    expect(within(stat('Income')).getByText('$90,000')).toBeInTheDocument()
     expect(within(stat('Expenses')).getByText('Not available')).toBeInTheDocument()
     expect(within(stat('Savings')).getByText('Not available')).toBeInTheDocument()
   })
@@ -94,24 +90,39 @@ describe('ReviewCashflow', () => {
     it('compares income and expenses in dollars and the savings rate in points', () => {
       renderSection(makeReview({ prior }))
 
-      expect(within(stat('Income')).getByText('vs. 2024: up $5,000')).toBeInTheDocument()
-      expect(within(stat('Expenses')).getByText('vs. 2024: down $2,000')).toBeInTheDocument()
-      expect(within(stat('Savings rate')).getByText('vs. 2024: down 2.1 points')).toBeInTheDocument()
+      expect(stat('Income')).toHaveTextContent('vs. 2024: ↗Up $5,000')
+      expect(stat('Expenses')).toHaveTextContent('vs. 2024: ↘Down $2,000')
+      expect(stat('Savings rate')).toHaveTextContent('vs. 2024: ↘Down 2.1 points')
+    })
+
+    it('hides the glyph from assistive technology and keeps the direction word for screen readers', () => {
+      renderSection(makeReview({ prior }))
+
+      const glyph = within(stat('Income')).getByText('↗')
+      expect(glyph).toHaveAttribute('aria-hidden', 'true')
+      expect(within(stat('Income')).getByText('Up')).toHaveClass('sr-only')
+    })
+
+    it('says No change, without a glyph, when the rounded difference is zero', () => {
+      renderSection(makeReview({ prior: { ...prior, income: 120000 } }))
+
+      expect(stat('Income')).toHaveTextContent('vs. 2024: No change')
+      expect(within(stat('Income')).queryByText(/[↗↘]/)).not.toBeInTheDocument()
     })
 
     it('drops the income and expenses comparisons for a year in progress but keeps the savings rate', () => {
       renderSection(makeReview({ status: 'in-progress', prior }))
 
-      expect(within(stat('Income')).queryByText(/^vs\./)).not.toBeInTheDocument()
-      expect(within(stat('Expenses')).queryByText(/^vs\./)).not.toBeInTheDocument()
-      expect(within(stat('Savings rate')).getByText('vs. 2024: down 2.1 points')).toBeInTheDocument()
+      expect(within(stat('Income')).queryByText(/vs\./)).not.toBeInTheDocument()
+      expect(within(stat('Expenses')).queryByText(/vs\./)).not.toBeInTheDocument()
+      expect(stat('Savings rate')).toHaveTextContent('vs. 2024: ↘Down 2.1 points')
     })
 
     it('leaves out a comparison whose prior figure is unavailable', () => {
       renderSection(makeReview({ prior: { ...prior, savingsRate: null } }))
 
-      expect(within(stat('Savings rate')).queryByText(/^vs\./)).not.toBeInTheDocument()
-      expect(within(stat('Income')).getByText('vs. 2024: up $5,000')).toBeInTheDocument()
+      expect(within(stat('Savings rate')).queryByText(/vs\./)).not.toBeInTheDocument()
+      expect(stat('Income')).toHaveTextContent('vs. 2024: ↗Up $5,000')
     })
 
     it('shows no comparison when there is no prior year', () => {

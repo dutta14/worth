@@ -2,27 +2,24 @@ import { FC } from 'react'
 import { Link } from 'react-router-dom'
 import type { AnnualReview } from '../types'
 import { formatMoney, formatPercent } from '../utils/format'
-import { describePriorYear } from '../utils/priorYear'
+import { ReviewPriorYear } from './ReviewDelta'
 import ReviewStat from './ReviewStat'
 
 interface ReviewCashflowProps {
   review: AnnualReview
 }
 
-const MANUAL_SUB = 'From your yearly log in Growth'
-
 const ReviewCashflow: FC<ReviewCashflowProps> = ({ review }) => {
   const { cashflow, prior, year } = review
-  const manual = cashflow.source === 'manual'
   const priorYear = year - 1
   // A part-year of money is not comparable with a full prior year; a rate is.
   const comparable = review.status === 'complete'
 
   return (
     <section className="ar-section" aria-labelledby="ar-cf-h">
-      <h3 id="ar-cf-h" className="ar-section__title">
+      <h2 id="ar-cf-h" className="ar-section__title">
         Income and savings
-      </h3>
+      </h2>
       {cashflow.source === 'none' ? (
         <p className="ar-empty-line">
           No income or expense data for {year}{' '}
@@ -35,25 +32,35 @@ const ReviewCashflow: FC<ReviewCashflowProps> = ({ review }) => {
           <ReviewStat
             label="Income"
             value={formatMoney(cashflow.income)}
-            sub={manual ? MANUAL_SUB : 'Money in, from your transactions'}
-            prior={comparable ? describePriorYear(priorYear, cashflow.income, prior?.income, 'usd') : null}
+            prior={
+              comparable && cashflow.income !== null && prior?.income != null ? (
+                <ReviewPriorYear year={priorYear} current={cashflow.income} prior={prior.income} kind="usd" />
+              ) : null
+            }
           />
           <ReviewStat
             label="Expenses"
             value={formatMoney(cashflow.expenses)}
-            sub={manual ? MANUAL_SUB : 'Money out, after refunds'}
-            prior={comparable ? describePriorYear(priorYear, cashflow.expenses, prior?.expenses, 'usd') : null}
+            prior={
+              comparable && cashflow.expenses !== null && prior?.expenses != null ? (
+                <ReviewPriorYear year={priorYear} current={cashflow.expenses} prior={prior.expenses} kind="usd" />
+              ) : null
+            }
           />
-          <ReviewStat
-            label="Savings"
-            value={formatMoney(cashflow.savings)}
-            sub={manual ? MANUAL_SUB : 'Income minus expenses'}
-          />
+          <ReviewStat label="Savings" value={formatMoney(cashflow.savings)} />
           <ReviewStat
             label="Savings rate"
             value={formatPercent(cashflow.savingsRate)}
-            sub="Savings as a share of income"
-            prior={describePriorYear(priorYear, cashflow.savingsRate, prior?.savingsRate, 'points')}
+            prior={
+              cashflow.savingsRate !== null && prior?.savingsRate != null ? (
+                <ReviewPriorYear
+                  year={priorYear}
+                  current={cashflow.savingsRate}
+                  prior={prior.savingsRate}
+                  kind="points"
+                />
+              ) : null
+            }
           />
         </dl>
       )}
