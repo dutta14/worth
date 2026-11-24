@@ -13,9 +13,9 @@ const ReviewNotes: FC<ReviewNotesProps> = ({ review }) => {
     <>
       <p className="sr-only">{describeNoteCount(review.notes.length)}</p>
       <section className="ar-section ar-section--notes" aria-labelledby="ar-notes-h">
-        <h3 id="ar-notes-h" className="ar-section__title">
+        <h2 id="ar-notes-h" className="ar-section__title">
           Things to know
-        </h3>
+        </h2>
         <ul className="ar-notes">
           {review.notes.map((note, i) => {
             const { text, link } = describeNote(note, review)

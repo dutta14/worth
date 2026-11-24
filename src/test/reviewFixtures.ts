@@ -127,6 +127,7 @@ export const makeReview = (overrides: Partial<AnnualReview> = {}): AnnualReview 
       target: 2_000_000,
       startBalance: 300000,
       endBalance: 380000,
+      endGwBalance: 80000,
       startPct: 15,
       endPct: 19,
     },

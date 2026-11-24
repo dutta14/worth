@@ -39,21 +39,31 @@ describe('ReviewSpending', () => {
     expect(screen.getAllByRole('row')).toHaveLength(6)
   })
 
-  it('hides the inline bars from assistive technology and sizes them by share', () => {
+  it('draws a labelled donut with one slice per row, sized by share of the listed spend', () => {
     const { container } = renderSection(spending())
 
-    const bars = [...container.querySelectorAll('.ar-bar')]
-    expect(bars).toHaveLength(6)
-    expect(bars.every(b => b.getAttribute('aria-hidden') === 'true')).toBe(true)
-    expect((bars[0].firstElementChild as HTMLElement).style.width).toBe('38.46%')
+    const donut = screen.getByRole('img', { name: /^Spending by group, 2025\./ })
+    expect(donut).toHaveAccessibleName(/Housing: \$30,000, 38\.5%.*All other groups \(2\): \$10,000, 12\.8%/)
+    const slices = [...container.querySelectorAll('circle')]
+    expect(slices).toHaveLength(6)
+    expect(Number.parseFloat(slices[0].getAttribute('stroke-dasharray')!)).toBeCloseTo(38.46, 1)
+    expect(Number.parseFloat(slices[1].getAttribute('stroke-dashoffset')!)).toBeCloseTo(-38.46, 1)
   })
 
-  it('clamps a bar to the track', () => {
+  it('hides the color swatches in the table from assistive technology', () => {
+    const { container } = renderSection(spending())
+
+    const swatches = [...container.querySelectorAll('.ar-spending__swatch')]
+    expect(swatches).toHaveLength(6)
+    expect(swatches.every(el => el.getAttribute('aria-hidden') === 'true')).toBe(true)
+  })
+
+  it('fills the whole ring for a single group', () => {
     const { container } = renderSection(
-      spending({ top: [{ id: 'x', name: 'Odd', amount: 1, share: 140 }], other: null }),
+      spending({ top: [{ id: 'x', name: 'Odd', amount: 1, share: 100 }], other: null }),
     )
 
-    expect((container.querySelector('.ar-bar__fill') as HTMLElement).style.width).toBe('100%')
+    expect(container.querySelector('circle')).toHaveAttribute('stroke-dasharray', '100 100')
   })
 
   it('wraps a very long group name in its row header without truncating it', () => {
@@ -68,5 +78,6 @@ describe('ReviewSpending', () => {
 
     expect(screen.getByText('No net spending recorded for 2025')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
 })

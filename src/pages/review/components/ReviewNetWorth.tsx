@@ -1,11 +1,10 @@
-import { FC, useId, useState } from 'react'
+import { FC } from 'react'
 import { Link } from 'react-router-dom'
 import type { AnnualReview } from '../types'
 import { formatDelta, formatMoney, formatMonthLong, formatMonthShort, formatPercent } from '../utils/format'
-import { describePriorYear } from '../utils/priorYear'
 import NetWorthChart from './NetWorthChart'
-import NetWorthTable from './NetWorthTable'
 import ReviewStat from './ReviewStat'
+import ReviewDelta, { ReviewPriorYear } from './ReviewDelta'
 
 interface ReviewNetWorthProps {
   review: AnnualReview
@@ -32,8 +31,6 @@ export function summarizeNetWorth(review: AnnualReview): string {
 }
 
 const ReviewNetWorth: FC<ReviewNetWorthProps> = ({ review }) => {
-  const [expanded, setExpanded] = useState(false)
-  const tableId = useId()
   const { start, end, change, changePct, series } = review.netWorth
   const comparable = review.status === 'complete'
   const hasBalances = series.some(p => p.total !== null)
@@ -42,37 +39,29 @@ const ReviewNetWorth: FC<ReviewNetWorthProps> = ({ review }) => {
       ? null
       : changePct === null
         ? 'Percent change not available'
-        : `${formatPercent(changePct)} from ${formatMoney(start.total)} in ${formatMonthShort(start.month)} to ${formatMoney(end.total)} in ${formatMonthShort(end.month)}`
+        : formatPercent(changePct)
 
   return (
     <section className="ar-section" aria-labelledby="ar-nw-h">
-      <h3 id="ar-nw-h" className="ar-section__title">
+      <h2 id="ar-nw-h" className="ar-section__title">
         Net worth
-      </h3>
+      </h2>
       <dl className="ar-stats">
         <ReviewStat
           label="Net worth change"
-          value={formatDelta(change, 'usd')}
+          value={<ReviewDelta n={change} kind="usd" />}
           sub={changeSub}
-          prior={comparable ? describePriorYear(review.year - 1, change, review.prior?.netWorthChange, 'usd') : null}
+          prior={
+            comparable && change !== null && review.prior?.netWorthChange != null ? (
+              <ReviewPriorYear year={review.year - 1} current={change} prior={review.prior.netWorthChange} kind="usd" />
+            ) : null
+          }
         />
         <ReviewStat label="Starting net worth" value={formatMoney(start.total)} sub={anchorSub(start)} />
         <ReviewStat label="Ending net worth" value={formatMoney(end.total)} sub={anchorSub(end)} />
       </dl>
       {hasBalances ? (
-        <figure className="ar-figure">
-          <NetWorthChart series={series} summary={summarizeNetWorth(review)} />
-          <button
-            type="button"
-            className="ar-btn ar-figure__toggle"
-            aria-expanded={expanded}
-            aria-controls={tableId}
-            onClick={() => setExpanded(open => !open)}
-          >
-            {expanded ? 'Hide monthly values' : 'Show monthly values'}
-          </button>
-          <NetWorthTable id={tableId} year={review.year} series={series} expanded={expanded} />
-        </figure>
+        <NetWorthChart series={series} summary={summarizeNetWorth(review)} />
       ) : (
         <p className="ar-empty-line">
           No balances for {review.year}{' '}

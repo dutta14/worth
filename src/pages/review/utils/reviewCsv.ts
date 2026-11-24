@@ -124,6 +124,7 @@ const goalRows = ({ goals }: AnnualReview): string[][] =>
     return [
       numberRow('goals', `goal_${g.goalId}_start`, g.name, g.startPct, 'percent', balanceNote(g.startBalance)),
       numberRow('goals', `goal_${g.goalId}_end`, g.name, g.endPct, 'percent', balanceNote(g.endBalance)),
+      numberRow('goals', `goal_${g.goalId}_gw_balance`, `${g.name}: GW balance`, g.endGwBalance, 'usd'),
     ]
   })
 

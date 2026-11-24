@@ -230,6 +230,7 @@ const Data: FC = () => {
     navigate(location.pathname, { replace: true, state: null })
   }, [isDetailsRoute, location.pathname, location.state, accounts, balances, navigate])
 
+  const [reviewHeaderSlot, setReviewHeaderSlot] = useState<HTMLDivElement | null>(null)
   const activeTab = location.pathname.startsWith('/net-worth/allocation')
     ? 'allocation'
     : location.pathname.startsWith('/net-worth/growth')
@@ -520,7 +521,7 @@ const Data: FC = () => {
         <div className="data-header-left">
           <h1>{getNavTitle('net-worth', location.pathname)}</h1>
         </div>
-        <div className="data-header-right">
+        <div className="data-header-right" ref={activeTab === 'review' ? setReviewHeaderSlot : undefined}>
           {activeTab === 'accounts' && hasAccounts && (
             <div className="tab-bar" role="tablist" aria-label="Data view" onKeyDown={handleDataViewTabKeyDown}>
               {DATA_VIEW_TABS.map(tabDef => (
@@ -619,7 +620,7 @@ const Data: FC = () => {
                     </div>
                   }
                 >
-                  <AnnualReview />
+                  <AnnualReview headerSlot={reviewHeaderSlot} />
                 </Suspense>
               </ErrorBoundary>
             }

@@ -85,6 +85,8 @@ export interface GoalSnapshot {
   target: number
   startBalance: number | null
   endBalance: number | null
+  /** Raw GW balance at the usable ending anchor; not part of FI progress or its target. */
+  endGwBalance: number | null
   startPct: number | null
   endPct: number | null
 }

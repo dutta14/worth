@@ -5,11 +5,11 @@ import type { Account, BalanceEntry } from '../../data/types'
 import type { GoalSnapshot, NetWorthAnchor } from '../types'
 import { roundCents } from './math'
 
-/** Sum of FI account balances in a month, active or not, so a past snapshot does not depend on today's status. */
-function fiBalanceAt(month: string, accounts: Account[], balances: BalanceEntry[]): number {
-  const fiIds = new Set(accounts.filter(a => a.goalType === 'fi').map(a => a.id))
+/** Sum of a goal type's balances in a month, active or not, so a past snapshot does not depend on today's status. */
+function goalBalanceAt(month: string, accounts: Account[], balances: BalanceEntry[], goalType: 'fi' | 'gw'): number {
+  const ids = new Set(accounts.filter(a => a.goalType === goalType).map(a => a.id))
   const byAccount = new Map<number, number>()
-  for (const b of balances) if (b.month === month && fiIds.has(b.accountId)) byAccount.set(b.accountId, b.balance)
+  for (const b of balances) if (b.month === month && ids.has(b.accountId)) byAccount.set(b.accountId, b.balance)
   let total = 0
   for (const balance of byAccount.values()) total += balance
   return roundCents(total)
@@ -48,8 +48,9 @@ export function snapshotGoals(
   start: NetWorthAnchor,
   end: NetWorthAnchor,
 ): { goals: GoalSnapshot[]; skipped: number } {
-  const startBalance = usable(start) ? fiBalanceAt(start.month, accounts, balances) : null
-  const endBalance = usable(end) ? fiBalanceAt(end.month, accounts, balances) : null
+  const startBalance = usable(start) ? goalBalanceAt(start.month, accounts, balances, 'fi') : null
+  const endBalance = usable(end) ? goalBalanceAt(end.month, accounts, balances, 'fi') : null
+  const endGwBalance = usable(end) ? goalBalanceAt(end.month, accounts, balances, 'gw') : null
 
   const snapshots: GoalSnapshot[] = []
   let skipped = 0
@@ -75,6 +76,7 @@ export function snapshotGoals(
       target,
       startBalance,
       endBalance,
+      endGwBalance,
       startPct: pctOf(startBalance),
       endPct: pctOf(endBalance),
     })

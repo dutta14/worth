@@ -1,6 +1,14 @@
-import { FC, RefObject, useLayoutEffect, useRef, useState } from 'react'
+import { FC, useMemo } from 'react'
+import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { MonthPoint } from '../types'
-import { buildChartModel, DEFAULT_CHART_WIDTH } from '../utils/chartGeometry'
+import {
+  formatAxisLabels,
+  formatMoney,
+  formatMonthName,
+  formatMonthShort,
+  formatPercent,
+  NO_CHANGE,
+} from '../utils/format'
 
 interface NetWorthChartProps {
   series: MonthPoint[]
@@ -8,97 +16,85 @@ interface NetWorthChartProps {
   summary: string
 }
 
-/** Width of the element, kept in sync with its size; the default where nothing can be measured (tests, old browsers). */
-function useElementWidth<T extends HTMLElement>(): [RefObject<T | null>, number] {
-  const ref = useRef<T>(null)
-  const [width, setWidth] = useState(DEFAULT_CHART_WIDTH)
+interface ChartDatum {
+  label: string
+  month: string
+  total: number | null
+}
 
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const measure = () => {
-      if (el.clientWidth > 0) setWidth(el.clientWidth)
-    }
-    measure()
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
+interface TooltipProps {
+  active?: boolean
+  label?: string | number
+}
 
-  return [ref, width]
+const LINE_COLOR = 'var(--chart-nw-line, #0f766e)'
+const AXIS_TICK = { fontSize: 10, fill: 'var(--color-text-muted)' }
+
+/** "+$1,234 (+1.2%)", or null when the rounded change is zero. */
+function formatChange(total: number, previous: number): { text: string; direction: 'up' | 'down' } | null {
+  const diff = total - previous
+  const money = formatMoney(Math.abs(diff))
+  if (money === formatMoney(0)) return null
+  const sign = diff > 0 ? '+' : '-'
+  const pct = previous === 0 ? '' : ` (${sign}${formatPercent((Math.abs(diff) / Math.abs(previous)) * 100)})`
+  return { text: `${sign}${money}${pct}`, direction: diff > 0 ? 'up' : 'down' }
 }
 
 const NetWorthChart: FC<NetWorthChartProps> = ({ series, summary }) => {
-  const [ref, width] = useElementWidth<HTMLDivElement>()
-  const model = buildChartModel(series, width)
+  const data = useMemo<ChartDatum[]>(
+    () => series.map(p => ({ label: formatMonthName(p.month).slice(0, 3), month: p.month, total: p.total })),
+    [series],
+  )
+
+  const renderTooltip = ({ active, label }: TooltipProps) => {
+    const index = data.findIndex(d => d.label === label)
+    const point = data[index]
+    if (!active || !point || point.total === null) return null
+    const previous = index > 0 ? data[index - 1].total : null
+    const change = previous === null ? null : formatChange(point.total, previous)
+    return (
+      <div className="ar-tooltip">
+        <div className="ar-tooltip__label">{formatMonthShort(point.month)}</div>
+        <div className="ar-tooltip__row">
+          <span className="ar-tooltip__value">{formatMoney(point.total)}</span>
+          {previous !== null && (
+            <span className={`ar-tooltip__change${change ? ` ar-tooltip__change--${change.direction}` : ''}`}>
+              {change ? change.text : NO_CHANGE}
+            </span>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div ref={ref} className="ar-chart-wrap">
-      {model && (
-        <svg
-          className="ar-chart"
-          width={model.layout.width}
-          height={model.layout.height}
-          viewBox={`0 0 ${model.layout.width} ${model.layout.height}`}
-          role="img"
-          aria-label={summary}
-          focusable="false"
-        >
-          {model.ticks.map(tick => (
-            <g key={tick.value}>
-              <line
-                className="ar-chart__grid"
-                x1={model.layout.left}
-                x2={model.layout.width - model.layout.right}
-                y1={tick.y}
-                y2={tick.y}
-              />
-              <text
-                className="ar-chart__axis"
-                x={model.layout.left - 8}
-                y={tick.y}
-                textAnchor="end"
-                dominantBaseline="middle"
-              >
-                {tick.label}
-              </text>
-            </g>
-          ))}
-          {model.zeroY !== null && (
-            <line
-              className="ar-chart__zero"
-              x1={model.layout.left}
-              x2={model.layout.width - model.layout.right}
-              y1={model.zeroY}
-              y2={model.zeroY}
-            />
-          )}
-          {model.monthLabels.map(m => (
-            <text
-              key={m.label}
-              className="ar-chart__axis"
-              x={m.x}
-              y={model.layout.height - model.layout.bottom + 18}
-              textAnchor="middle"
-            >
-              {m.label}
-            </text>
-          ))}
-          {model.segments.map(run => (
-            <polyline key={run[0].month} className="ar-chart__line" points={run.map(p => `${p.x},${p.y}`).join(' ')} />
-          ))}
-          {model.points.map(p => (
-            <circle
-              key={p.month}
-              className={`ar-chart__point${p.complete ? '' : ' ar-chart__point--hollow'}`}
-              cx={p.x}
-              cy={p.y}
-              r={3}
-            />
-          ))}
-        </svg>
-      )}
+    <div className="ar-chart-wrap" role="group" aria-label={summary}>
+      <ResponsiveContainer width="100%" height={240}>
+        <LineChart data={data} margin={{ top: 10, right: 24, bottom: 0, left: 10 }}>
+          <CartesianGrid vertical={false} stroke="var(--color-border)" />
+          <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+          <YAxis
+            domain={['auto', 'auto']}
+            tickFormatter={(value: number) => formatAxisLabels([value])[0]}
+            tick={AXIS_TICK}
+            axisLine={false}
+            tickLine={false}
+            width="auto"
+          />
+          <ReferenceLine y={0} stroke="var(--color-text-muted)" strokeDasharray="4 3" />
+          <Tooltip content={renderTooltip} />
+          <Line
+            type="monotone"
+            dataKey="total"
+            stroke={LINE_COLOR}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 4, strokeWidth: 0, fill: LINE_COLOR }}
+            connectNulls
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   )
 }
