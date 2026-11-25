@@ -1,3 +1,5 @@
+# Phase 1
+
 ## Heading area
 
 1. take a wider width like the other pages, e.g. /dashboard, /allocation etc.
@@ -38,3 +40,15 @@ This subtext should be removed
 1. remove "from the start of the year"
 2. up and down green and red with same glyphs as previously mentioned
 3. Show the numbers for both FI and GW balance.
+
+# Phase 2
+
+## Top Spending Groups
+
+1. Keep the group name close to the spent and share, instead of taking up the whole space.
+2. On hover on the donut, show me the specific group, spent and share in a tooltip, similar to the design in the net worth chart.
+
+## Goals
+
+1. GW balance doesn't have the target values like FI. Add it.
+2. FI and GW balance will always be the same for all goals, so you don't need to repeat it for each goal. Write it once, and focus the goal metrics on target and percentage.

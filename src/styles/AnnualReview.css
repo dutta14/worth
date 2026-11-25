@@ -249,8 +249,7 @@
   color: var(--color-text);
 }
 
-.ar-notes,
-.ar-goals {
+.ar-notes {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -276,17 +275,30 @@
   color: var(--color-text-muted);
 }
 
-.ar-goal {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  font-size: var(--fs-md);
-  color: var(--color-text);
+.ar-goal-table {
+  width: auto;
+  max-width: 100%;
+  margin-top: 16px;
 }
 
-.ar-goal + .ar-goal {
-  padding-top: 16px;
-  border-top: 1px solid var(--color-border);
+.ar-goal-table th,
+.ar-goal-table td {
+  padding-right: 32px;
+}
+
+.ar-goal-table th:last-child,
+.ar-goal-table td:last-child {
+  padding-right: 0;
+}
+
+.ar-goal__pct {
+  display: block;
+}
+
+.ar-goal__change {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
 }
 
 .ar-chart-wrap {
@@ -324,6 +336,11 @@
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
   color: var(--color-text);
+}
+
+.ar-tooltip__share {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .ar-tooltip__change {
@@ -375,17 +392,32 @@
 }
 
 .ar-spending {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  justify-content: center;
+  gap: 16px 32px;
   min-width: 0;
 }
 
 .ar-donut {
-  display: block;
-  justify-self: center;
+  flex: none;
   max-width: 100%;
-  height: auto;
+}
+
+.ar-spending .ar-table {
+  width: auto;
+  max-width: 100%;
+}
+
+.ar-spending .ar-table th,
+.ar-spending .ar-table td {
+  padding-right: 24px;
+}
+
+.ar-spending .ar-table th:last-child,
+.ar-spending .ar-table td:last-child {
+  padding-right: 0;
 }
 
 .ar-spending__swatch {
@@ -394,12 +426,6 @@
   height: 10px;
   margin-right: 8px;
   border-radius: var(--radius-pill);
-}
-
-@media (min-width: 768px) {
-  .ar-spending {
-    grid-template-columns: 220px minmax(0, 1fr);
-  }
 }
 
 @media (max-width: 479px) {
@@ -509,7 +535,6 @@
   body:has(.ar-page) .ar-section,
   body:has(.ar-page) .ar-chart-wrap,
   body:has(.ar-page) .ar-stat,
-  body:has(.ar-page) .ar-goal,
   body:has(.ar-page) .ar-note,
   body:has(.ar-page) tr {
     break-inside: avoid;

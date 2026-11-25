@@ -27,9 +27,10 @@ spending,group_3,Transport,9000.00,usd,11.54,
 spending,group_4,Travel,8000.00,usd,10.26,
 spending,group_5,Health,6000.00,usd,7.69,
 spending,other,All other groups,10000.00,usd,12.82,2 groups
+goals,fi_balance,FI balance,380000.00,usd,,
+goals,gw_balance,GW balance,80000.00,usd,,
 goals,goal_12_start,Retire at 55,15.00,percent,,FI balance 300000.00 usd of 2000000.00 usd target
 goals,goal_12_end,Retire at 55,19.00,percent,,FI balance 380000.00 usd of 2000000.00 usd target
-goals,goal_12_gw_balance,Retire at 55: GW balance,80000.00,usd,,
 `
 
 const netWorth = (overrides: Partial<NetWorthReview>): AnnualReview['netWorth'] => ({
@@ -237,8 +238,11 @@ describe('buildReviewCsv', () => {
           startBalance: null,
           endBalance: 100000,
           endGwBalance: 0,
+          gwTarget: null,
           startPct: null,
           endPct: 20,
+          startGwPct: null,
+          endGwPct: null,
         },
         {
           goalId: 8,
@@ -247,8 +251,11 @@ describe('buildReviewCsv', () => {
           startBalance: null,
           endBalance: null,
           endGwBalance: null,
+          gwTarget: null,
           startPct: null,
           endPct: null,
+          startGwPct: null,
+          endGwPct: null,
         },
       ],
     })
@@ -263,23 +270,38 @@ describe('buildReviewCsv', () => {
     expect(rowFor(review, 'goal_8_end')?.slice(3, 7)).toEqual(['', 'percent', '', 'Not available'])
   })
 
-  it('writes the GW balance row per goal, 0.00 for none and blank when unavailable', () => {
+  it('writes the FI and GW balances once, blank when unavailable', () => {
     const [goal] = makeReview().goals
     const review = makeReview({
       goals: [
-        { ...goal, goalId: 7, endGwBalance: 0 },
-        { ...goal, goalId: 8, endGwBalance: null },
+        { ...goal, endBalance: 5, endGwBalance: 0 },
+        { ...goal, goalId: 8 },
       ],
     })
 
-    expect(rowFor(review, 'goal_7_gw_balance')?.slice(2, 7)).toEqual([
-      `${goal.name}: GW balance`,
-      '0.00',
-      'usd',
+    expect(review.goals).toHaveLength(2)
+    expect(rowFor(review, 'fi_balance')?.slice(2, 5)).toEqual(['FI balance', '5.00', 'usd'])
+    expect(rowFor(review, 'gw_balance')?.slice(2, 5)).toEqual(['GW balance', '0.00', 'usd'])
+    expect(rowFor(makeReview({ goals: [{ ...goal, endGwBalance: null }] }), 'gw_balance')?.[3]).toBe('')
+  })
+
+  it('writes a GW progress row only for goals that have a GW target', () => {
+    const [goal] = makeReview().goals
+    const review = makeReview({
+      goals: [
+        { ...goal, goalId: 7, gwTarget: 100000, endGwPct: 80, startGwPct: 50 },
+        { ...goal, goalId: 8 },
+      ],
+    })
+
+    expect(rowFor(review, 'goal_7_gw_end')?.slice(2, 7)).toEqual([
+      `${goal.name}: GW`,
+      '80.00',
+      'percent',
       '',
-      '',
+      'GW balance 80000.00 usd of 100000.00 usd target',
     ])
-    expect(rowFor(review, 'goal_8_gw_balance')?.slice(3, 7)).toEqual(['', 'usd', '', 'Not available'])
+    expect(rowFor(review, 'goal_8_gw_end')).toBeUndefined()
   })
 
   it('writes the same note sentences the page shows, numbered in order', () => {
@@ -339,8 +361,11 @@ describe('buildReviewCsv', () => {
             startBalance: 1,
             endBalance: 2,
             endGwBalance: 0,
+            gwTarget: null,
             startPct: 1,
             endPct: 2,
+            startGwPct: null,
+            endGwPct: null,
           },
         ],
       })

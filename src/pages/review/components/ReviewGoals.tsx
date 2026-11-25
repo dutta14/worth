@@ -24,6 +24,20 @@ const ReviewGoals: FC<ReviewGoalsProps> = ({ review, hasGoals }) => {
         : ''
   const baseline =
     start.month && start.month !== `${review.year - 1}-12` ? ` from ${formatMonthShort(start.month)}` : ''
+  const hasGw = review.goals.some(goal => goal.gwTarget !== null)
+  const progress = (endPct: number | null, startPct: number | null) => (
+    <>
+      <span className="ar-goal__pct">{formatPercent(endPct)}</span>
+      {endPct !== null &&
+        (startPct === null ? (
+          <span className="ar-goal__change">Change not available</span>
+        ) : (
+          <span className="ar-goal__change">
+            <ReviewDelta n={endPct - startPct} kind="points" />
+          </span>
+        ))}
+    </>
+  )
   return (
     <section className="ar-section" aria-labelledby="ar-goals-h">
       <h2 id="ar-goals-h" className="ar-section__title">
@@ -46,40 +60,55 @@ const ReviewGoals: FC<ReviewGoalsProps> = ({ review, hasGoals }) => {
         </p>
       ) : (
         <>
-          <ul className="ar-goals">
-            {review.goals.map(goal => {
-              return (
-                <li key={goal.goalId} className="ar-goal">
-                  <span className="ar-goal__line">
-                    {goal.name}: {formatPercent(goal.endPct)}
-                    {goal.endPct !== null && (
-                      <>
-                        {' '}
-                        {endLabel};{' '}
-                        {goal.startPct === null ? (
-                          <>Change{baseline} is not available</>
-                        ) : (
-                          <>
-                            <ReviewDelta n={goal.endPct - goal.startPct} kind="points" />
-                            {baseline}
-                          </>
-                        )}
-                      </>
-                    )}
-                  </span>
-                  <dl className="ar-stats">
-                    <ReviewStat
-                      label="FI balance"
-                      value={formatMoney(goal.endBalance)}
-                      sub={`of ${formatMoney(goal.target)} target`}
-                    />
-                    <ReviewStat label="GW balance" value={formatMoney(goal.endGwBalance)} />
-                  </dl>
-                </li>
-              )
-            })}
-          </ul>
-          <p className="ar-footnote">Progress is measured against each goal as it is set today.</p>
+          <dl className="ar-stats">
+            <ReviewStat label="FI balance" value={formatMoney(review.goals[0].endBalance)} sub={endLabel} />
+            <ReviewStat label="GW balance" value={formatMoney(review.goals[0].endGwBalance)} sub={endLabel} />
+          </dl>
+          <table className="ar-table ar-goal-table">
+            <caption className="sr-only">Goal progress at year end</caption>
+            <thead>
+              <tr>
+                <th scope="col">Goal</th>
+                <th scope="col" className="ar-num">
+                  FI target
+                </th>
+                <th scope="col" className="ar-num">
+                  FI progress
+                </th>
+                {hasGw && (
+                  <>
+                    <th scope="col" className="ar-num">
+                      GW target
+                    </th>
+                    <th scope="col" className="ar-num">
+                      GW progress
+                    </th>
+                  </>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {review.goals.map(goal => (
+                <tr key={goal.goalId}>
+                  <th scope="row">{goal.name}</th>
+                  <td className="ar-num">{formatMoney(goal.target)}</td>
+                  <td className="ar-num">{progress(goal.endPct, goal.startPct)}</td>
+                  {hasGw && (
+                    <>
+                      <td className="ar-num">{goal.gwTarget === null ? '–' : formatMoney(goal.gwTarget)}</td>
+                      <td className="ar-num">
+                        {goal.gwTarget === null ? '–' : progress(goal.endGwPct, goal.startGwPct)}
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="ar-footnote">
+            Progress is measured against each goal as it is set today
+            {baseline ? `, and change is measured${baseline}` : ''}.
+          </p>
           {review.skippedGoals > 0 && (
             <p className="ar-footnote">{describeSkipped(review.skippedGoals, review.year)}</p>
           )}

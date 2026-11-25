@@ -1,6 +1,7 @@
-import type { FinancialGoal } from '../../../types'
+import type { FinancialGoal, GwGoal } from '../../../types'
 import type { GrowthSettings } from '../../../hooks/useGrowthSettings'
 import { getFiTarget } from '../../goal/utils/goalCalculations'
+import { getGwTarget } from '../../goal/utils/goalMath'
 import type { Account, BalanceEntry } from '../../data/types'
 import type { GoalSnapshot, NetWorthAnchor } from '../types'
 import { roundCents } from './math'
@@ -47,9 +48,11 @@ export function snapshotGoals(
   balances: BalanceEntry[],
   start: NetWorthAnchor,
   end: NetWorthAnchor,
+  gwGoals: GwGoal[] = [],
 ): { goals: GoalSnapshot[]; skipped: number } {
   const startBalance = usable(start) ? goalBalanceAt(start.month, accounts, balances, 'fi') : null
   const endBalance = usable(end) ? goalBalanceAt(end.month, accounts, balances, 'fi') : null
+  const startGwBalance = usable(start) ? goalBalanceAt(start.month, accounts, balances, 'gw') : null
   const endGwBalance = usable(end) ? goalBalanceAt(end.month, accounts, balances, 'gw') : null
 
   const snapshots: GoalSnapshot[] = []
@@ -68,8 +71,10 @@ export function snapshotGoals(
       skipped += 1
       continue
     }
-    const pctOf = (balance: number | null) =>
-      balance === null ? null : Math.min(100, Math.max(0, (balance / target) * 100))
+    const gwTotal = getGwTarget(withDeterministicCreation(goal, year), gwGoals, profileBirthday, growth.inflation)
+    const gwTarget = Number.isFinite(gwTotal) && gwTotal > 0 ? gwTotal : null
+    const pctOf = (balance: number | null, of: number | null = target) =>
+      balance === null || of === null ? null : Math.min(100, Math.max(0, (balance / of) * 100))
     snapshots.push({
       goalId: goal.id,
       name: goal.goalName,
@@ -77,8 +82,11 @@ export function snapshotGoals(
       startBalance,
       endBalance,
       endGwBalance,
+      gwTarget,
       startPct: pctOf(startBalance),
       endPct: pctOf(endBalance),
+      startGwPct: pctOf(startGwBalance, gwTarget),
+      endGwPct: pctOf(endGwBalance, gwTarget),
     })
   }
   return { goals: snapshots, skipped }

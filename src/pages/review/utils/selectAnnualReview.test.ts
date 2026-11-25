@@ -72,8 +72,11 @@ describe('selectAnnualReview worked examples', () => {
         startBalance: 300000,
         endBalance: 380000,
         endGwBalance: 80000,
+        gwTarget: null,
         startPct: 15,
         endPct: 19,
+        startGwPct: null,
+        endGwPct: null,
       },
     ])
     expect(review.notes).toEqual([])

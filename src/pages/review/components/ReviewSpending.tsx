@@ -1,4 +1,5 @@
 import { FC } from 'react'
+import { Cell, Pie, PieChart, Tooltip } from 'recharts'
 import { GROUP_COLORS } from '../../allocation/constants'
 import type { SpendingReview } from '../types'
 import { formatMoney, formatPercent } from '../utils/format'
@@ -6,6 +7,27 @@ import { formatMoney, formatPercent } from '../utils/format'
 interface ReviewSpendingProps {
   year: number
   spending: SpendingReview
+}
+
+const DONUT_SIZE = 220
+
+interface TooltipProps {
+  active?: boolean
+  payload?: ReadonlyArray<{ payload?: { name: string; amount: number; share: number } }>
+}
+
+const renderTooltip = ({ active, payload }: TooltipProps) => {
+  const group = payload?.[0]?.payload
+  if (!active || !group) return null
+  return (
+    <div className="ar-tooltip">
+      <div className="ar-tooltip__label">{group.name}</div>
+      <div className="ar-tooltip__row">
+        <span className="ar-tooltip__value">{formatMoney(group.amount)}</span>
+        <span className="ar-tooltip__share">{formatPercent(group.share)}</span>
+      </div>
+    </div>
+  )
 }
 
 const ReviewSpending: FC<ReviewSpendingProps> = ({ year, spending }) => {
@@ -16,14 +38,7 @@ const ReviewSpending: FC<ReviewSpendingProps> = ({ year, spending }) => {
       ? [{ id: 'other', name: `All other groups (${other.count})`, amount: other.amount, share: other.share }]
       : []),
   ]
-  const total = groups.reduce((sum, group) => sum + group.amount, 0)
-  let offset = 0
-  const slices = groups.map((group, index) => {
-    const share = total > 0 ? (group.amount / total) * 100 : 0
-    const slice = { ...group, color: GROUP_COLORS[index % GROUP_COLORS.length], offset, size: share }
-    offset += share
-    return slice
-  })
+  const slices = groups.map((group, index) => ({ ...group, color: GROUP_COLORS[index % GROUP_COLORS.length] }))
   const summary = `Spending by group, ${year}. ${groups
     .map(group => `${group.name}: ${formatMoney(group.amount)}, ${formatPercent(group.share)}`)
     .join('; ')}.`
@@ -37,31 +52,26 @@ const ReviewSpending: FC<ReviewSpendingProps> = ({ year, spending }) => {
         <p className="ar-empty-line">No net spending recorded for {year}</p>
       ) : (
         <div className="ar-spending">
-          <svg
-            className="ar-donut"
-            viewBox="0 0 200 200"
-            width="220"
-            height="220"
-            role="img"
-            aria-label={summary}
-            focusable="false"
-          >
-            {slices.map(slice => (
-              <circle
-                key={slice.id}
-                cx="100"
-                cy="100"
-                r="72"
-                fill="none"
-                stroke={slice.color}
-                strokeWidth="32"
-                pathLength="100"
-                strokeDasharray={`${slice.size} 100`}
-                strokeDashoffset={-slice.offset}
-                transform="rotate(-90 100 100)"
-              />
-            ))}
-          </svg>
+          <div className="ar-donut" role="img" aria-label={summary}>
+            <PieChart width={DONUT_SIZE} height={DONUT_SIZE}>
+              <Tooltip content={renderTooltip} />
+              <Pie
+                data={slices}
+                dataKey="amount"
+                nameKey="name"
+                innerRadius={DONUT_SIZE * 0.3}
+                outerRadius={DONUT_SIZE * 0.45}
+                startAngle={90}
+                endAngle={-270}
+                stroke="none"
+                isAnimationActive={false}
+              >
+                {slices.map(slice => (
+                  <Cell key={slice.id} fill={slice.color} />
+                ))}
+              </Pie>
+            </PieChart>
+          </div>
           <table className="ar-table">
             <caption className="sr-only">Spending by group, {year}</caption>
             <thead>
