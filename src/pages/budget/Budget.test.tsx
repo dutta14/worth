@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import Budget from './Budget'
 import type { BudgetViewMode, SpreadsheetMode } from './types'
 
@@ -23,7 +23,7 @@ const mockUseBudget = {
   updateIncomeCategoryGroups: vi.fn(),
   mergeCategories: vi.fn(),
   editCategory: vi.fn(),
-  categoryHasTransactions: vi.fn(() => false),
+  categoryTransactionCounts: new Map<string, number>(),
   deleteCategory: vi.fn(),
   addTransaction: vi.fn(),
   years: [2024, 2025],
@@ -76,7 +76,9 @@ vi.mock('./components/BudgetAggregatedView', () => ({
 }))
 
 vi.mock('./components/CategoryGroupManager', () => ({
-  default: () => <div data-testid="category-group-manager" />,
+  default: (props: { onViewTransactions: (category: string) => void }) => (
+    <button data-testid="category-group-manager" onClick={() => props.onViewTransactions('Dining & Out')} />
+  ),
 }))
 
 vi.mock('./components/CashflowBarChart', () => ({
@@ -87,10 +89,16 @@ vi.mock('./components/CashflowSankey', () => ({
   default: () => <div data-testid="cashflow-sankey" />,
 }))
 
+function LocationProbe() {
+  const { pathname, search } = useLocation()
+  return <div data-testid="location">{`${pathname}${search}`}</div>
+}
+
 function renderBudget(initialRoute = '/budget/spreadsheet') {
   return render(
     <MemoryRouter initialEntries={[initialRoute]}>
       <Budget />
+      <LocationProbe />
     </MemoryRouter>,
   )
 }
@@ -357,6 +365,25 @@ describe('Budget with data', () => {
   it('hides the more actions button on groups view', () => {
     renderBudget('/budget/groups')
     expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument()
+  })
+
+  it('opens the transactions page filtered to a category chosen on the groups view', async () => {
+    const user = userEvent.setup()
+    renderBudget('/budget/groups')
+
+    await user.click(screen.getByTestId('category-group-manager'))
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/transactions?categories=Dining+%26+Out')
+  })
+
+  it('shows the groups view without year navigation or a no-data empty state', () => {
+    mockUseBudget.yearTransactions = {}
+    mockUseBudget.monthsWithData = new Set<string>()
+    renderBudget('/budget/groups')
+
+    expect(screen.getByTestId('category-group-manager')).toBeInTheDocument()
+    expect(screen.queryByTitle('Previous year')).not.toBeInTheDocument()
+    expect(screen.queryByText(/No data for/)).not.toBeInTheDocument()
   })
 })
 

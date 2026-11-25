@@ -1,5 +1,6 @@
 import type { BudgetStore, CategoryGroup } from '../types'
 import { getExpenseGroups, getIncomeGroups, updateGlobalCategoryGroups } from './budgetStorage'
+import { parseCSVLine } from './csvParser'
 
 export const OTHERS_GROUP_ID = 'others'
 export const REMOVED_GROUP_ID = 'removed'
@@ -98,4 +99,23 @@ export function addDiscoveredCategories(
   }
 
   return { store: next, newCategories: [...expense, ...income] }
+}
+
+/** Transaction count per category across every year's CSV; categories without transactions are absent. */
+export function countTransactionsByCategory(csvs: BudgetStore['csvs']): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const csvData of Object.values(csvs)) {
+    const lines = csvData.csv.split(/\r?\n/)
+    if (lines.length < 2) continue
+    const catIdx = parseCSVLine(lines[0])
+      .map(h => h.trim().toLowerCase())
+      .findIndex(h => h === 'category')
+    if (catIdx === -1) continue
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue
+      const category = parseCSVLine(lines[i])[catIdx]?.trim()
+      if (category) counts.set(category, (counts.get(category) ?? 0) + 1)
+    }
+  }
+  return counts
 }

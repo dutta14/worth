@@ -17,6 +17,7 @@ import {
   INCOME_OTHERS_GROUP_ID,
   addCategoriesToGroup,
   addDiscoveredCategories,
+  countTransactionsByCategory,
   mergeGroupsByType,
 } from '../utils/categoryDiscovery'
 import { executeImport, executeUndo, type CommitResult, type UndoRecord, type UndoResult } from '../import/commitImport'
@@ -365,23 +366,13 @@ export function useBudget() {
     [persist, fileStore],
   )
 
+  const categoryTransactionCounts = useMemo(() => countTransactionsByCategory(store.csvs), [store.csvs])
+
   /** Check if a category has any transactions across all years' CSVs */
-  const categoryHasTransactions = useCallback((category: string): boolean => {
-    const current = storeRef.current
-    for (const csvData of Object.values(current.csvs)) {
-      const lines = csvData.csv.split(/\r?\n/)
-      if (lines.length < 2) continue
-      const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase())
-      const catIdx = headers.findIndex(h => h === 'category')
-      if (catIdx === -1) continue
-      for (let i = 1; i < lines.length; i++) {
-        if (!lines[i].trim()) continue
-        const fields = parseCSVLine(lines[i])
-        if (fields[catIdx]?.trim() === category) return true
-      }
-    }
-    return false
-  }, [])
+  const categoryHasTransactions = useCallback(
+    (category: string): boolean => categoryTransactionCounts.has(category),
+    [categoryTransactionCounts],
+  )
 
   /** Remove a category from all groups (only if it has no transactions) */
   const deleteCategory = useCallback(
@@ -586,6 +577,7 @@ export function useBudget() {
     mergeCategories,
     editCategory,
     categoryHasTransactions,
+    categoryTransactionCounts,
     deleteCategory,
     applyConfig,
     yearTransactions,

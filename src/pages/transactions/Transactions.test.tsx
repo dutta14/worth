@@ -221,6 +221,18 @@ describe('Transactions', () => {
     expect(screen.queryByText('Train Pass')).not.toBeInTheDocument()
   })
 
+  it('preselects a removed category when the URL asks for it', async () => {
+    transactionFixtures[csvMap.august] = [
+      ...baseAugustTransactions,
+      { date: '2026-08-05', category: 'Hidden', amount: -9, description: 'Hidden Charge' },
+    ]
+    renderTransactions('/transactions?categories=Hidden')
+
+    expect(await screen.findByText('Hidden Charge')).toBeInTheDocument()
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+    expect(screen.queryByText('Payroll Deposit')).not.toBeInTheDocument()
+  })
+
   it('shows positive-only categories under Income even when expense Others also lists them', async () => {
     const user = userEvent.setup()
     store.categoryGroups = [
