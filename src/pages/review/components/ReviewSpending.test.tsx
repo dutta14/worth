@@ -1,8 +1,23 @@
 import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import type { ReactNode } from 'react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeReview } from '../../../test/reviewFixtures'
 import type { SpendingReview } from '../types'
 import ReviewSpending from './ReviewSpending'
+
+type TooltipPayload = ReadonlyArray<{ payload: { name: string; amount: number; share: number } }>
+let hovered: TooltipPayload | undefined
+
+// jsdom cannot drive Recharts' hover, so the tooltip renderer is invoked directly with a chosen slice.
+vi.mock('recharts', async importOriginal => {
+  const actual = await importOriginal<typeof import('recharts')>()
+  return {
+    ...actual,
+    Tooltip: ({ content }: { content: (props: { active: boolean; payload?: TooltipPayload }) => ReactNode }) => (
+      <div data-testid="tooltip">{content({ active: hovered !== undefined, payload: hovered })}</div>
+    ),
+  }
+})
 
 const spending = (overrides: Partial<SpendingReview> = {}): SpendingReview => ({
   ...(makeReview().spending as SpendingReview),
@@ -11,6 +26,10 @@ const spending = (overrides: Partial<SpendingReview> = {}): SpendingReview => ({
 const renderSection = (s: SpendingReview) => render(<ReviewSpending year={2025} spending={s} />)
 
 describe('ReviewSpending', () => {
+  beforeEach(() => {
+    hovered = undefined
+  })
+
   it('lists the top groups with amount and share in a real table', () => {
     renderSection(spending())
 
@@ -39,15 +58,25 @@ describe('ReviewSpending', () => {
     expect(screen.getAllByRole('row')).toHaveLength(6)
   })
 
-  it('draws a labelled donut with one slice per row, sized by share of the listed spend', () => {
+  it('draws a donut named by the spending summary, with one slice per row', () => {
     const { container } = renderSection(spending())
 
     const donut = screen.getByRole('img', { name: /^Spending by group, 2025\./ })
     expect(donut).toHaveAccessibleName(/Housing: \$30,000, 38\.5%.*All other groups \(2\): \$10,000, 12\.8%/)
-    const slices = [...container.querySelectorAll('circle')]
-    expect(slices).toHaveLength(6)
-    expect(Number.parseFloat(slices[0].getAttribute('stroke-dasharray')!)).toBeCloseTo(38.46, 1)
-    expect(Number.parseFloat(slices[1].getAttribute('stroke-dashoffset')!)).toBeCloseTo(-38.46, 1)
+    expect(container.querySelectorAll('.recharts-pie-sector')).toHaveLength(6)
+  })
+
+  it('shows the hovered group, spent and share in a tooltip', () => {
+    hovered = [{ payload: { name: 'Housing', amount: 30000, share: 38.46 } }]
+    renderSection(spending())
+
+    expect(screen.getByTestId('tooltip')).toHaveTextContent('Housing$30,00038.5%')
+  })
+
+  it('shows no tooltip when no slice is hovered', () => {
+    renderSection(spending())
+
+    expect(screen.getByTestId('tooltip')).toBeEmptyDOMElement()
   })
 
   it('hides the color swatches in the table from assistive technology', () => {
@@ -58,12 +87,12 @@ describe('ReviewSpending', () => {
     expect(swatches.every(el => el.getAttribute('aria-hidden') === 'true')).toBe(true)
   })
 
-  it('fills the whole ring for a single group', () => {
+  it('draws a single slice for a single group', () => {
     const { container } = renderSection(
       spending({ top: [{ id: 'x', name: 'Odd', amount: 1, share: 100 }], other: null }),
     )
 
-    expect(container.querySelector('circle')).toHaveAttribute('stroke-dasharray', '100 100')
+    expect(container.querySelectorAll('.recharts-pie-sector')).toHaveLength(1)
   })
 
   it('wraps a very long group name in its row header without truncating it', () => {

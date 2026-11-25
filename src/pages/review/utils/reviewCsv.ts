@@ -117,16 +117,34 @@ const spendingRows = ({ spending }: AnnualReview): string[][] => {
   return rows
 }
 
-const goalRows = ({ goals }: AnnualReview): string[][] =>
-  goals.flatMap(g => {
-    const balanceNote = (balance: number | null) =>
-      balance === null ? 'Not available' : `FI balance ${fixed(balance)} usd of ${fixed(g.target)} usd target`
-    return [
-      numberRow('goals', `goal_${g.goalId}_start`, g.name, g.startPct, 'percent', balanceNote(g.startBalance)),
-      numberRow('goals', `goal_${g.goalId}_end`, g.name, g.endPct, 'percent', balanceNote(g.endBalance)),
-      numberRow('goals', `goal_${g.goalId}_gw_balance`, `${g.name}: GW balance`, g.endGwBalance, 'usd'),
-    ]
-  })
+const goalRows = ({ goals }: AnnualReview): string[][] => {
+  if (goals.length === 0) return []
+  const [first] = goals
+  const fiNote = (balance: number | null, target: number) =>
+    balance === null ? 'Not available' : `FI balance ${fixed(balance)} usd of ${fixed(target)} usd target`
+  const gwNote = (balance: number | null, target: number) =>
+    balance === null ? 'Not available' : `GW balance ${fixed(balance)} usd of ${fixed(target)} usd target`
+  return [
+    numberRow('goals', 'fi_balance', 'FI balance', first.endBalance, 'usd'),
+    numberRow('goals', 'gw_balance', 'GW balance', first.endGwBalance, 'usd'),
+    ...goals.flatMap(g => [
+      numberRow('goals', `goal_${g.goalId}_start`, g.name, g.startPct, 'percent', fiNote(g.startBalance, g.target)),
+      numberRow('goals', `goal_${g.goalId}_end`, g.name, g.endPct, 'percent', fiNote(g.endBalance, g.target)),
+      ...(g.gwTarget === null
+        ? []
+        : [
+            numberRow(
+              'goals',
+              `goal_${g.goalId}_gw_end`,
+              `${g.name}: GW`,
+              g.endGwPct,
+              'percent',
+              gwNote(g.endGwBalance, g.gwTarget),
+            ),
+          ]),
+    ]),
+  ]
+}
 
 const noteRows = (review: AnnualReview): string[][] =>
   review.notes.map((note, i) => textRow('notes', `note_${i + 1}`, 'Note', describeNote(note, review).text, 'text'))

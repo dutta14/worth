@@ -1,4 +1,4 @@
-import type { FinancialGoal } from '../../types'
+import type { FinancialGoal, GwGoal } from '../../types'
 import type { GrowthSettings } from '../../hooks/useGrowthSettings'
 import type { CategoryGroup, Transaction } from '../budget/types'
 import type { Account, BalanceEntry } from '../data/types'
@@ -87,8 +87,12 @@ export interface GoalSnapshot {
   endBalance: number | null
   /** Raw GW balance at the usable ending anchor; not part of FI progress or its target. */
   endGwBalance: number | null
+  /** Present value of the goal's GW goals; null when the goal has none. */
+  gwTarget: number | null
   startPct: number | null
   endPct: number | null
+  startGwPct: number | null
+  endGwPct: number | null
 }
 
 export type ReviewNote =
@@ -141,6 +145,7 @@ export interface ReviewInputs {
   categoryGroups: CategoryGroup[]
   manual: Record<number, ManualYearLog>
   goals: FinancialGoal[]
+  gwGoals: GwGoal[]
   profileBirthday: string
   growth: GrowthSettings
 }

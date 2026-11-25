@@ -95,6 +95,7 @@ function build(i: ReviewInputs, withPrior: boolean): AnnualReview {
     i.balances,
     netWorth.start,
     netWorth.end,
+    i.gwGoals,
   )
   const core = {
     year,

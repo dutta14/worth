@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
-import { makeGoal } from '../../../test/factories'
+import { makeGoal, makeGwGoal } from '../../../test/factories'
 import { balancesFor, GROWTH, makeAccounts } from '../../../test/reviewFixtures'
 import { getFiTarget } from '../../goal/utils/goalCalculations'
+import { getGwTarget } from '../../goal/utils/goalMath'
 import type { NetWorthAnchor } from '../types'
 import { snapshotGoals } from './goals'
 
@@ -136,6 +137,77 @@ describe('snapshotGoals', () => {
       anchor('2025-12', 'incomplete'),
     ).goals
     expect(s).toMatchObject({ startBalance: null, endBalance: null, startPct: null, endPct: null })
+  })
+
+  describe('GW target and progress', () => {
+    const gwGoal = makeGwGoal({ fiGoalId: 7, disburseAge: 55, disburseAmount: 50000, growthRate: 5 })
+    const gwTarget = getGwTarget(goal, [gwGoal], '1990-01', GROWTH.inflation)
+    const run = (gwGoals: ReturnType<typeof makeGwGoal>[]) =>
+      snapshotGoals(
+        2025,
+        [goal],
+        '1990-01',
+        GROWTH,
+        makeAccounts({ goalType: 'gw' }),
+        balancesFor(1, { '2024-12': gwTarget / 4, '2025-12': gwTarget / 2 }),
+        anchor('2024-12'),
+        anchor('2025-12'),
+        gwGoals,
+      ).goals[0]
+
+    it('measures GW balances against the goal’s GW target at the two anchors', () => {
+      const s = run([gwGoal])
+
+      expect(s.gwTarget).toBeCloseTo(gwTarget, 2)
+      expect(s.startGwPct).toBeCloseTo(25, 1)
+      expect(s.endGwPct).toBeCloseTo(50, 1)
+    })
+
+    it('has no GW target or progress for a goal without GW goals', () => {
+      const s = run([])
+
+      expect(s.gwTarget).toBeNull()
+      expect(s.startGwPct).toBeNull()
+      expect(s.endGwPct).toBeNull()
+    })
+
+    it('ignores GW goals that belong to another FI goal', () => {
+      expect(run([{ ...gwGoal, fiGoalId: 99 }]).gwTarget).toBeNull()
+    })
+
+    it('has no GW progress when the anchors are unusable', () => {
+      const s = snapshotGoals(
+        2025,
+        [goal],
+        '1990-01',
+        GROWTH,
+        makeAccounts({ goalType: 'gw' }),
+        [],
+        anchor(null, 'missing'),
+        anchor(null, 'missing'),
+        [gwGoal],
+      ).goals[0]
+
+      expect(s.gwTarget).toBeGreaterThan(0)
+      expect(s.startGwPct).toBeNull()
+      expect(s.endGwPct).toBeNull()
+    })
+
+    it('caps GW progress at 100 percent', () => {
+      const s = snapshotGoals(
+        2025,
+        [goal],
+        '1990-01',
+        GROWTH,
+        makeAccounts({ goalType: 'gw' }),
+        balancesFor(1, { '2024-12': gwTarget * 3, '2025-12': gwTarget * 3 }),
+        anchor('2024-12'),
+        anchor('2025-12'),
+        [gwGoal],
+      ).goals[0]
+
+      expect(s.endGwPct).toBe(100)
+    })
   })
 
   describe('endGwBalance', () => {

@@ -38,7 +38,7 @@ const RELOAD_EVENTS = ['budget-changed', 'tools-changed', 'data-changed'] as con
  */
 export function useAnnualReview(year: number | null): UseAnnualReviewResult {
   const { accounts, balances, isLoaded, loadFailed = false } = useData()
-  const { goals, profile } = useGoals()
+  const { goals, gwGoals, profile } = useGoals()
   const { settings: growth } = useGrowthSettings()
   const { fileStore } = useFileStore()
   const [today] = useState(() => new Date())
@@ -107,10 +107,11 @@ export function useAnnualReview(year: number | null): UseAnnualReviewResult {
       categoryGroups: source.categoryGroups,
       manual: source.manual,
       goals,
+      gwGoals,
       profileBirthday: profile.birthday || FALLBACK_BIRTHDAY,
       growth,
     })
-  }, [status, source, year, today, accounts, balances, goals, profile.birthday, growth])
+  }, [status, source, year, today, accounts, balances, goals, gwGoals, profile.birthday, growth])
 
   return { status, review, years, defaultYear, retry }
 }
