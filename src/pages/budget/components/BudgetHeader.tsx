@@ -47,7 +47,7 @@ const BudgetHeader: FC<BudgetHeaderProps> = ({
           </button>
         </div>
       )}
-      <YearNav selectedYear={selectedYear} onPrevYear={onPrevYear} onNextYear={onNextYear} />
+      {viewMode !== 'groups' && <YearNav selectedYear={selectedYear} onPrevYear={onPrevYear} onNextYear={onNextYear} />}
     </div>
   </div>
 )

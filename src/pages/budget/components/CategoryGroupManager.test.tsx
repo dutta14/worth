@@ -11,22 +11,23 @@ const defaultGroups: CategoryGroup[] = [
   { id: 'removed', name: 'Removed', categories: [] },
 ]
 
-// All categories are expense categories (have negative months)
-const defaultCategorySums: Record<string, Record<string, number>> = {
-  Groceries: { '2024-01': -500 },
-  Rent: { '2024-01': -1500 },
-  Utilities: { '2024-01': -200 },
-  Entertainment: { '2024-01': -100 },
-  Dining: { '2024-01': -300 },
-}
+const defaultCounts = new Map([
+  ['Groceries', 12],
+  ['Rent', 36],
+  ['Utilities', 24],
+  ['Entertainment', 5],
+  ['Dining', 1],
+])
+const onlyGroceries = new Map([['Groceries', 2]])
+const withoutCategories = (...names: string[]) => new Map([...defaultCounts].filter(([cat]) => !names.includes(cat)))
 
 const defaultProps = {
   groups: defaultGroups,
   onUpdate: vi.fn(),
   onMerge: vi.fn(),
   onDeleteCategory: vi.fn(),
-  categoryHasTransactions: vi.fn(() => false),
-  categorySums: defaultCategorySums,
+  categoryTransactionCounts: defaultCounts,
+  onViewTransactions: vi.fn(),
 }
 
 describe('CategoryGroupManager', () => {
@@ -225,9 +226,8 @@ describe('CategoryGroupManager', () => {
   })
 
   it('shows delete merge prompt for category with transactions', async () => {
-    const categoryHasTransactions = vi.fn((cat: string) => cat === 'Groceries')
     const user = userEvent.setup()
-    render(<CategoryGroupManager {...defaultProps} categoryHasTransactions={categoryHasTransactions} />)
+    render(<CategoryGroupManager {...defaultProps} categoryTransactionCounts={onlyGroceries} />)
 
     // Click the delete button on Groceries
     const groceriesEl = screen.getByText('Groceries').closest('.budget-group-cat')! as HTMLElement as HTMLElement
@@ -242,7 +242,13 @@ describe('CategoryGroupManager', () => {
   it('calls onDeleteCategory directly for category without transactions', async () => {
     const onDeleteCategory = vi.fn()
     const user = userEvent.setup()
-    render(<CategoryGroupManager {...defaultProps} onDeleteCategory={onDeleteCategory} />)
+    render(
+      <CategoryGroupManager
+        {...defaultProps}
+        onDeleteCategory={onDeleteCategory}
+        categoryTransactionCounts={new Map()}
+      />,
+    )
 
     const groceriesEl = screen.getByText('Groceries').closest('.budget-group-cat')! as HTMLElement as HTMLElement
     const deleteBtn = within(groceriesEl).getByTitle('Delete category')
@@ -252,39 +258,25 @@ describe('CategoryGroupManager', () => {
   })
 
   it('shows all categories in their groups regardless of amount sign', () => {
-    const categorySums = {
-      ...defaultCategorySums,
-      Salary: { '2024-01': 5000 }, // positive amount, but in expense group
-    }
     const groups: CategoryGroup[] = [
       ...defaultGroups.slice(0, 2),
       { id: 'others', name: 'Others', categories: ['Salary'] },
       defaultGroups[3],
     ]
-    render(<CategoryGroupManager {...defaultProps} groups={groups} categorySums={categorySums} />)
+    render(<CategoryGroupManager {...defaultProps} groups={groups} />)
 
     // Salary appears in expense section since it's in an expense group
     expect(screen.queryByText('Salary')).toBeInTheDocument()
   })
 
   it('renders a separate income section when income groups are provided', () => {
-    const categorySums = {
-      ...defaultCategorySums,
-      Salary: { '2024-01': 5000 },
-      Bonus: { '2024-01': 1200 },
-    }
     const incomeGroups: CategoryGroup[] = [
       { id: 'paychecks', name: 'Paychecks', categories: ['Salary'] },
       { id: 'income-others', name: 'Others', categories: ['Bonus'] },
     ]
 
     render(
-      <CategoryGroupManager
-        {...defaultProps}
-        incomeCategoryGroups={incomeGroups}
-        onUpdateIncomeGroups={vi.fn()}
-        categorySums={categorySums}
-      />,
+      <CategoryGroupManager {...defaultProps} incomeCategoryGroups={incomeGroups} onUpdateIncomeGroups={vi.fn()} />,
     )
 
     expect(screen.getByText('Income Category Groups')).toBeInTheDocument()
@@ -299,33 +291,109 @@ describe('CategoryGroupManager', () => {
       { id: 'others', name: 'Others', categories: [] },
       { id: 'removed', name: 'Removed', categories: [] },
     ]
-    const sums: Record<string, Record<string, number>> = {
-      'Food: Groceries': { '2024-01': -500 },
-      'Food: Dining': { '2024-01': -300 },
-    }
-    render(<CategoryGroupManager {...defaultProps} groups={groups} categorySums={sums} />)
+    render(<CategoryGroupManager {...defaultProps} groups={groups} />)
 
     // Should display "Groceries" and "Dining" (stripped prefix)
     expect(screen.getByText('Dining')).toBeInTheDocument()
     expect(screen.getByText('Groceries')).toBeInTheDocument()
   })
 
-  it('shows transaction counts when yearly transactions are provided', () => {
+  it('does not put a per-year total tooltip on the pill', () => {
+    render(<CategoryGroupManager {...defaultProps} />)
+
+    const groceriesEl = screen.getByText('Groceries').closest('.budget-group-cat')! as HTMLElement
+    expect(groceriesEl).not.toHaveAttribute('title')
+  })
+
+  it('flags categories with no transactions and offers to remove them', () => {
+    render(<CategoryGroupManager {...defaultProps} categoryTransactionCounts={withoutCategories('Rent', 'Dining')} />)
+
+    expect(screen.getByRole('status')).toHaveTextContent('Dining, Rent have no transactions.')
+    const rentEl = screen.getByText('Rent').closest('.budget-group-cat')! as HTMLElement
+    expect(within(rentEl).getByText('No transactions')).toBeInTheDocument()
+    const groceriesEl = screen.getByText('Groceries').closest('.budget-group-cat')! as HTMLElement
+    expect(within(groceriesEl).queryByText('No transactions')).not.toBeInTheDocument()
+  })
+
+  it('shows the total transaction count for each category in its pill', () => {
+    render(<CategoryGroupManager {...defaultProps} />)
+
+    const rentEl = screen.getByText('Rent').closest('.budget-group-cat')! as HTMLElement
+    expect(within(rentEl).getByRole('button', { name: 'View 36 transactions in Rent' })).toHaveTextContent('36')
+    const diningEl = screen.getByText('Dining').closest('.budget-group-cat')! as HTMLElement
+    expect(within(diningEl).getByRole('button', { name: 'View 1 transaction in Dining' })).toHaveTextContent('1')
+  })
+
+  it('opens the transactions for a category when its count is clicked', async () => {
+    const onViewTransactions = vi.fn()
+    const user = userEvent.setup()
+    render(<CategoryGroupManager {...defaultProps} onViewTransactions={onViewTransactions} />)
+
+    await user.click(screen.getByRole('button', { name: 'View 36 transactions in Rent' }))
+
+    expect(onViewTransactions).toHaveBeenCalledTimes(1)
+    expect(onViewTransactions).toHaveBeenCalledWith('Rent')
+  })
+
+  it('shows no count for a category without transactions', () => {
+    render(<CategoryGroupManager {...defaultProps} categoryTransactionCounts={withoutCategories('Rent')} />)
+
+    const rentEl = screen.getByText('Rent').closest('.budget-group-cat')! as HTMLElement
+    expect(within(rentEl).queryByRole('button', { name: /View/ })).not.toBeInTheDocument()
+  })
+
+  it('shows no unused notice when every category has transactions', () => {
+    render(<CategoryGroupManager {...defaultProps} />)
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByText('No transactions')).not.toBeInTheDocument()
+  })
+
+  it('removes all unused categories from the expense groups in one update', async () => {
+    const onUpdate = vi.fn()
+    const user = userEvent.setup()
     render(
       <CategoryGroupManager
         {...defaultProps}
-        yearTransactions={{
-          '2024-01': [
-            { date: '2024-01-01', category: 'Groceries', amount: -50, description: 'A' },
-            { date: '2024-01-02', category: 'Groceries', amount: -25, description: 'B' },
-          ],
-        }}
+        onUpdate={onUpdate}
+        categoryTransactionCounts={withoutCategories('Rent', 'Dining')}
       />,
     )
 
-    const groceriesEl = screen.getByText('Groceries').closest('.budget-group-cat')! as HTMLElement
-    expect(within(groceriesEl).getByText('2')).toBeInTheDocument()
-    expect(groceriesEl).toHaveAttribute('title', '$500 · 2 transactions')
+    await user.click(screen.getByRole('button', { name: 'Remove unused' }))
+
+    expect(onUpdate).toHaveBeenCalledTimes(1)
+    expect(onUpdate).toHaveBeenCalledWith([
+      { id: 'essentials', name: 'Essentials', categories: ['Groceries', 'Utilities'] },
+      { id: 'lifestyle', name: 'Lifestyle', categories: ['Entertainment'] },
+      { id: 'others', name: 'Others', categories: [] },
+      { id: 'removed', name: 'Removed', categories: [] },
+    ])
+  })
+
+  it('removes unused income categories without touching expense groups', async () => {
+    const onUpdate = vi.fn()
+    const onUpdateIncomeGroups = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <CategoryGroupManager
+        {...defaultProps}
+        onUpdate={onUpdate}
+        incomeCategoryGroups={[
+          { id: 'income-others', name: 'Others', categories: ['901.10', 'Salary'], type: 'income' },
+        ]}
+        onUpdateIncomeGroups={onUpdateIncomeGroups}
+        categoryTransactionCounts={new Map([...defaultCounts, ['Salary', 3]])}
+      />,
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent('901.10 has no transactions.')
+    await user.click(screen.getByRole('button', { name: 'Remove unused' }))
+
+    expect(onUpdate).not.toHaveBeenCalled()
+    expect(onUpdateIncomeGroups).toHaveBeenCalledWith([
+      { id: 'income-others', name: 'Others', categories: ['Salary'], type: 'income' },
+    ])
   })
 
   /* ── Add group via Enter key ── */
@@ -538,11 +606,8 @@ describe('CategoryGroupManager', () => {
 
   it('confirms delete merge by selecting a target and clicking Merge & Delete', async () => {
     const onMerge = vi.fn()
-    const categoryHasTransactions = vi.fn((cat: string) => cat === 'Groceries')
     const user = userEvent.setup()
-    render(
-      <CategoryGroupManager {...defaultProps} onMerge={onMerge} categoryHasTransactions={categoryHasTransactions} />,
-    )
+    render(<CategoryGroupManager {...defaultProps} onMerge={onMerge} categoryTransactionCounts={onlyGroceries} />)
 
     // Delete Groceries (has transactions)
     const groceriesEl = screen.getByText('Groceries').closest('.budget-group-cat')! as HTMLElement as HTMLElement
@@ -559,9 +624,8 @@ describe('CategoryGroupManager', () => {
   })
 
   it('cancels delete merge prompt when Cancel is clicked', async () => {
-    const categoryHasTransactions = vi.fn((cat: string) => cat === 'Groceries')
     const user = userEvent.setup()
-    render(<CategoryGroupManager {...defaultProps} categoryHasTransactions={categoryHasTransactions} />)
+    render(<CategoryGroupManager {...defaultProps} categoryTransactionCounts={onlyGroceries} />)
 
     const groceriesEl = screen.getByText('Groceries').closest('.budget-group-cat')! as HTMLElement as HTMLElement
     await user.click(within(groceriesEl).getByTitle('Delete category'))
@@ -629,7 +693,6 @@ describe('CategoryGroupManager', () => {
         ]}
         incomeCategoryGroups={[{ id: 'paychecks', name: 'Paychecks', categories: ['Salary'], type: 'income' }]}
         onUpdateIncomeGroups={onUpdateIncomeGroups}
-        categorySums={{ ...defaultCategorySums, Salary: { '2024-01': 5000 } }}
       />,
     )
 
@@ -707,9 +770,7 @@ describe('CategoryGroupManager', () => {
 
   it('clears the custom delete-merge input when an existing target is selected', async () => {
     const user = userEvent.setup()
-    render(
-      <CategoryGroupManager {...defaultProps} categoryHasTransactions={vi.fn((cat: string) => cat === 'Groceries')} />,
-    )
+    render(<CategoryGroupManager {...defaultProps} categoryTransactionCounts={onlyGroceries} />)
 
     const groceriesEl = screen.getByText('Groceries').closest('.budget-group-cat')! as HTMLElement as HTMLElement
     await user.click(within(groceriesEl).getByTitle('Delete category'))
@@ -723,13 +784,7 @@ describe('CategoryGroupManager', () => {
   it('merges a category into a typed custom target from the delete prompt', async () => {
     const onMerge = vi.fn()
     const user = userEvent.setup()
-    render(
-      <CategoryGroupManager
-        {...defaultProps}
-        onMerge={onMerge}
-        categoryHasTransactions={vi.fn((cat: string) => cat === 'Groceries')}
-      />,
-    )
+    render(<CategoryGroupManager {...defaultProps} onMerge={onMerge} categoryTransactionCounts={onlyGroceries} />)
 
     const groceriesEl = screen.getByText('Groceries').closest('.budget-group-cat')! as HTMLElement as HTMLElement
     await user.click(within(groceriesEl).getByTitle('Delete category'))

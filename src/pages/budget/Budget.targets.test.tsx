@@ -33,7 +33,7 @@ const mockUseBudget = {
   updateIncomeCategoryGroups: vi.fn(),
   mergeCategories: vi.fn(),
   editCategory: vi.fn(),
-  categoryHasTransactions: vi.fn(() => false),
+  categoryTransactionCounts: new Map<string, number>(),
   deleteCategory: vi.fn(),
   addTransaction: vi.fn(),
   years: [2025, 2026],

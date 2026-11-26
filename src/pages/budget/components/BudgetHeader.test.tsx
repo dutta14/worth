@@ -95,6 +95,20 @@ describe('BudgetHeader', () => {
     expect(screen.queryByText('H')).not.toBeInTheDocument()
   })
 
+  it('hides the year navigation in groups mode', () => {
+    renderHeader({ viewMode: 'groups' })
+
+    expect(screen.queryByTitle('Previous year')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Next year')).not.toBeInTheDocument()
+  })
+
+  it('shows the year navigation outside groups mode', () => {
+    renderHeader({ viewMode: 'spreadsheet' })
+
+    expect(screen.getByTitle('Previous year')).toBeInTheDocument()
+    expect(screen.getByTitle('Next year')).toBeInTheDocument()
+  })
+
   it('marks the active half-year period button in cashflow mode', () => {
     renderHeader({ viewMode: 'cashflow', timePeriod: 'half' })
 

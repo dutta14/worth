@@ -371,11 +371,15 @@ const Transactions: FC = () => {
         knownCategories.current = new Set(result.transactions.map(t => t.category))
         const removed = result.budgetGroups.find(g => g.id === 'removed')
         const removedSet = new Set(removed?.categories ?? [])
-        const allCats = new Set(result.transactions.map(t => t.category))
-        removedSet.forEach(c => allCats.delete(c))
+        const everyCategory = new Set(result.transactions.map(t => t.category))
+        const defaultCats = new Set(everyCategory)
+        removedSet.forEach(c => defaultCats.delete(c))
+        // An explicit category link may target a removed category, so it filters against every category.
         const urlCategories = searchParams.get('categories')?.split(',').filter(Boolean) ?? []
         setSelectedCategories(
-          urlCategories.length > 0 ? new Set(urlCategories.filter(category => allCats.has(category))) : allCats,
+          urlCategories.length > 0
+            ? new Set(urlCategories.filter(category => everyCategory.has(category)))
+            : defaultCats,
         )
         setLoading(false)
       }

@@ -35,7 +35,7 @@ const Budget: FC = () => {
     updateCategoryGroups,
     updateIncomeCategoryGroups,
     mergeCategories,
-    categoryHasTransactions,
+    categoryTransactionCounts,
     deleteCategory,
     addTransaction,
     yearTransactions,
@@ -154,7 +154,18 @@ const Budget: FC = () => {
 
         {wizard.element}
 
-        {Object.keys(yearTransactions).length === 0 && monthsWithData.size === 0 ? (
+        {viewMode === 'groups' ? (
+          <CategoryGroupManager
+            groups={categoryGroups}
+            onUpdate={groups => updateCategoryGroups(groups)}
+            incomeCategoryGroups={incomeCategoryGroups}
+            onUpdateIncomeGroups={groups => updateIncomeCategoryGroups(groups)}
+            onMerge={mergeCategories}
+            onDeleteCategory={deleteCategory}
+            categoryTransactionCounts={categoryTransactionCounts}
+            onViewTransactions={category => navigate(`/transactions?${new URLSearchParams({ categories: category })}`)}
+          />
+        ) : Object.keys(yearTransactions).length === 0 && monthsWithData.size === 0 ? (
           <div className="budget-empty-year">
             <svg
               width="40"
@@ -192,19 +203,7 @@ const Budget: FC = () => {
               />
             )}
 
-            {viewMode === 'groups' ? (
-              <CategoryGroupManager
-                groups={categoryGroups}
-                onUpdate={groups => updateCategoryGroups(groups)}
-                incomeCategoryGroups={incomeCategoryGroups}
-                onUpdateIncomeGroups={groups => updateIncomeCategoryGroups(groups)}
-                onMerge={mergeCategories}
-                onDeleteCategory={deleteCategory}
-                categoryHasTransactions={categoryHasTransactions}
-                categorySums={categorySums}
-                yearTransactions={yearTransactions}
-              />
-            ) : viewMode === 'spreadsheet' ? (
+            {viewMode === 'spreadsheet' ? (
               <>
                 <div className="budget-frozen-header">
                   <BudgetSummary

@@ -1,5 +1,5 @@
 import { FC, useEffect, useMemo, useState } from 'react'
-import { CategoryGroup, Transaction } from '../types'
+import { CategoryGroup } from '../types'
 
 type GroupSection = 'expense' | 'income'
 
@@ -10,9 +10,8 @@ interface CategoryGroupManagerProps {
   onUpdateIncomeGroups?: (groups: CategoryGroup[]) => void
   onMerge: (sourceCategories: string[], targetName: string) => void
   onDeleteCategory: (category: string) => void
-  categoryHasTransactions: (category: string) => boolean
-  categorySums: Record<string, Record<string, number>>
-  yearTransactions?: Record<string, Transaction[]>
+  categoryTransactionCounts: ReadonlyMap<string, number>
+  onViewTransactions: (category: string) => void
 }
 
 const OTHERS_GROUP_ID = 'others'
@@ -26,9 +25,8 @@ const CategoryGroupManager: FC<CategoryGroupManagerProps> = ({
   onUpdateIncomeGroups,
   onMerge,
   onDeleteCategory,
-  categoryHasTransactions,
-  categorySums,
-  yearTransactions,
+  categoryTransactionCounts,
+  onViewTransactions,
 }) => {
   const displayCat = (cat: string, groupName: string): string => {
     const prefix = groupName + ':'
@@ -81,25 +79,7 @@ const CategoryGroupManager: FC<CategoryGroupManagerProps> = ({
     })
   }, [groups, resolvedIncomeGroups])
 
-  const currencyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-
-  const txnCountByCategory = useMemo(() => {
-    const counts: Record<string, number> = {}
-    if (!yearTransactions) return counts
-    Object.values(yearTransactions).forEach(txs =>
-      txs.forEach(t => {
-        counts[t.category] = (counts[t.category] || 0) + 1
-      }),
-    )
-    return counts
-  }, [yearTransactions])
-
-  const getCatStats = (cat: string) => {
-    const months = categorySums[cat] || {}
-    const total = Object.values(months).reduce((sum, value) => sum + value, 0)
-    const txnCount = txnCountByCategory[cat] || 0
-    return { txnCount, total }
-  }
+  const categoryHasTransactions = (cat: string) => (categoryTransactionCounts.get(cat) ?? 0) > 0
 
   const getGroupsForSection = (section: GroupSection) => (section === 'expense' ? groups : resolvedIncomeGroups)
   const getDisplayGroupsForSection = (section: GroupSection) =>
@@ -165,6 +145,21 @@ const CategoryGroupManager: FC<CategoryGroupManagerProps> = ({
     onMerge([deletingCat.category], deleteMergeTarget.trim())
     setDeletingCat(null)
     setDeleteMergeTarget('')
+  }
+
+  const getUnusedCategories = (section: GroupSection) =>
+    getGroupsForSection(section)
+      .flatMap(group => group.categories)
+      .filter(cat => !categoryHasTransactions(cat))
+      .sort((a, b) => a.localeCompare(b))
+
+  const removeUnusedCategories = (section: GroupSection) => {
+    const unused = new Set(getUnusedCategories(section))
+    if (unused.size === 0) return
+    updateSectionGroups(
+      section,
+      getGroupsForSection(section).map(g => ({ ...g, categories: g.categories.filter(c => !unused.has(c)) })),
+    )
   }
 
   const addGroup = (section: GroupSection) => {
@@ -319,6 +314,7 @@ const CategoryGroupManager: FC<CategoryGroupManagerProps> = ({
   const renderSection = (section: GroupSection, title: string) => {
     const displayGroups = getDisplayGroupsForSection(section)
     const allSectionCats = getSectionCategories(section)
+    const unusedCategories = getUnusedCategories(section)
 
     return (
       <section key={section} className="budget-group-manager-section">
@@ -349,6 +345,17 @@ const CategoryGroupManager: FC<CategoryGroupManagerProps> = ({
             </button>
           </div>
         </div>
+
+        {unusedCategories.length > 0 && (
+          <div className="budget-group-unused-notice" role="status">
+            <p className="budget-group-unused-text">
+              {unusedCategories.join(', ')} {unusedCategories.length === 1 ? 'has' : 'have'} no transactions.
+            </p>
+            <button className="budget-action-btn" onClick={() => removeUnusedCategories(section)}>
+              Remove unused
+            </button>
+          </div>
+        )}
 
         {mergeModeSection === section && (
           <div className="budget-merge-panel">
@@ -511,27 +518,38 @@ const CategoryGroupManager: FC<CategoryGroupManagerProps> = ({
                       [...group.displayCategories]
                         .sort((a, b) => a.localeCompare(b))
                         .map(cat => {
-                          const { txnCount, total } = getCatStats(cat)
-                          const tooltip =
-                            txnCount > 0
-                              ? `${currencyFmt.format(Math.abs(total))} · ${txnCount} transaction${txnCount === 1 ? '' : 's'}`
-                              : undefined
-
+                          const txnCount = categoryTransactionCounts.get(cat) ?? 0
+                          const isUnused = txnCount === 0
                           return (
                             <div
                               key={cat}
-                              className={`budget-group-cat${dragCat?.category === cat ? ' budget-group-cat--dragging' : ''}${mergeModeSection === section && mergeSelected.has(cat) ? ' budget-group-cat--merge-selected' : ''}${mergeModeSection === section ? ' budget-group-cat--clickable' : ''}`}
+                              className={`budget-group-cat${dragCat?.category === cat ? ' budget-group-cat--dragging' : ''}${mergeModeSection === section && mergeSelected.has(cat) ? ' budget-group-cat--merge-selected' : ''}${mergeModeSection === section ? ' budget-group-cat--clickable' : ''}${isUnused ? ' budget-group-cat--unused' : ''}`}
                               draggable={mergeModeSection !== section}
                               onDragStart={e =>
                                 mergeModeSection !== section && handleDragStart(e, section, cat, group.id)
                               }
                               onDragEnd={handleDragEnd}
                               onClick={() => mergeModeSection === section && toggleMergeSelect(cat)}
-                              title={tooltip}
                             >
                               <span className="budget-group-cat-handle">⠿</span>
                               <span className="budget-group-cat-name">{displayCat(cat, group.name)}</span>
-                              {txnCount > 0 && <span className="budget-group-cat-months">{txnCount}</span>}
+                              {isUnused && <span className="budget-group-cat-unused">No transactions</span>}
+                              {!isUnused &&
+                                (mergeModeSection === section ? (
+                                  <span className="budget-group-cat-count">{txnCount}</span>
+                                ) : (
+                                  <button
+                                    className="budget-group-cat-count budget-group-cat-count--link"
+                                    onClick={e => {
+                                      e.stopPropagation()
+                                      onViewTransactions(cat)
+                                    }}
+                                    title="View transactions"
+                                    aria-label={`View ${txnCount} ${txnCount === 1 ? 'transaction' : 'transactions'} in ${cat}`}
+                                  >
+                                    {txnCount}
+                                  </button>
+                                ))}
                               {mergeModeSection !== section && (
                                 <button
                                   className="budget-group-cat-delete"
