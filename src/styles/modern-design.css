@@ -1,11 +1,15 @@
 /* ═══════════════════════════════════════════════════════════════════
-   Modern Design System (behind MODERN_DESIGN feature flag)
-   All styles scoped under body.modern-design
+   Design system: Inter type, translucent borders, composite shadows,
+   glass sidebar, pill tabs, borderless tables, dark surface layering.
+
+   Selectors start with `:root body` on purpose. That gives them the
+   (0,2,1) specificity they need to override the per-page stylesheets,
+   which load after this file. Do not shorten the prefix to `body`.
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ── #20: Inter font + tabular-nums ───────────────────────────── */
+/* ── Tokens ───────────────────────────────────────────────────── */
 
-body.modern-design {
+:root body {
   font-family:
     'Inter',
     -apple-system,
@@ -18,142 +22,43 @@ body.modern-design {
   font-variant-numeric: tabular-nums;
   scrollbar-width: thin;
   scrollbar-color: var(--color-border) transparent;
-}
 
-body.modern-design *::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-body.modern-design *::-webkit-scrollbar-track {
-  background: transparent;
-}
-body.modern-design *::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
-}
-body.modern-design::-webkit-scrollbar {
-  width: 6px;
-}
-body.modern-design::-webkit-scrollbar-track {
-  background: transparent;
-}
-body.modern-design::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
-}
-html:has(body.modern-design)::-webkit-scrollbar {
-  width: 6px;
-}
-html:has(body.modern-design)::-webkit-scrollbar-track {
-  background: transparent;
-}
-html:has(body.modern-design)::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
-}
-
-body.modern-design {
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --fs-xs: 0.75rem;
   --fs-sm: 0.8125rem;
   --fs-md: 0.875rem;
   --fs-lg: 1rem;
   --fs-xl: 1.125rem;
-}
 
-/* ── #21: Translucent borders ─────────────────────────────────── */
-
-body.modern-design {
   --color-border: rgba(0, 0, 0, 0.06);
   --color-border-light: rgba(0, 0, 0, 0.04);
   --accent-border: var(--accent-focus-ring, rgba(59, 130, 246, 0.2));
-}
 
-body.modern-design.dark {
-  --color-border: rgba(255, 255, 255, 0.06);
-  --color-border-light: rgba(255, 255, 255, 0.04);
-  --accent-border: var(--accent-focus-ring, rgba(59, 130, 246, 0.25));
-}
-
-/* ── #22: Composite shadow system ─────────────────────────────── */
-
-body.modern-design {
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.04), 0 8px 16px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.02), 0 12px 24px rgba(0, 0, 0, 0.08);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 350ms;
+  --radius: 10px;
+  --radius-sm: 6px;
 }
 
-body.modern-design.dark {
+/* Dark mode: surface layering, glow, stronger shadows */
+:root body.dark {
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-light: rgba(255, 255, 255, 0.04);
+  --accent-border: var(--accent-focus-ring, rgba(59, 130, 246, 0.25));
+
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
   --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.3), 0 16px 32px rgba(0, 0, 0, 0.3);
-}
 
-body.modern-design .home-card,
-body.modern-design .fi-card,
-body.modern-design .goal-card {
-  box-shadow: var(--shadow-sm);
-}
-
-body.modern-design .home-card:hover,
-body.modern-design .fi-card:hover,
-body.modern-design .goal-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-
-body.modern-design .settings-modal,
-body.modern-design .search-overlay .search-modal {
-  box-shadow: var(--shadow-lg);
-}
-
-/* ── #23: Premium input styling ───────────────────────────────── */
-
-body.modern-design input:not([type='checkbox']):not([type='radio']),
-body.modern-design select,
-body.modern-design textarea {
-  padding: 10px 14px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-alt);
-  border-radius: var(--radius);
-  font-variant-numeric: tabular-nums;
-  transition:
-    border-color 120ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1),
-    background 120ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-body.modern-design input:not([type='checkbox']):not([type='radio']):hover,
-body.modern-design select:hover {
-  border-color: var(--accent-border);
-}
-
-body.modern-design input:not([type='checkbox']):not([type='radio']):focus,
-body.modern-design select:focus,
-body.modern-design textarea:focus {
-  border-color: var(--accent);
-  background: var(--color-surface);
-  box-shadow: 0 0 0 3px var(--accent-light);
-}
-
-body.modern-design input:not([type='checkbox']):not([type='radio'])::placeholder {
-  color: var(--color-text-muted);
-  opacity: 0.6;
-}
-
-body.modern-design.dark input:not([type='checkbox']):not([type='radio']):focus,
-body.modern-design.dark select:focus,
-body.modern-design.dark textarea:focus {
-  box-shadow:
-    0 0 0 3px var(--accent-focus-ring),
-    0 0 20px var(--accent-shadow);
-}
-
-/* ── #24: Dark mode surface layering + glow ───────────────────── */
-
-body.modern-design.dark {
   --color-bg: #111111;
   --color-surface-sunken: #0d0d0d;
   --color-surface: #1a1a1a;
@@ -168,108 +73,179 @@ body.modern-design.dark {
   --color-negative: #f87171;
   --color-warning: #fbbf24;
   --accent-glow: 0 0 20px var(--accent-shadow);
-}
 
-body.modern-design.dark {
   background: radial-gradient(ellipse 80% 50% at 50% -20%, var(--accent-shadow), transparent), var(--color-bg);
 }
 
-body.modern-design.dark .home-card:hover,
-body.modern-design.dark .fi-card:hover,
-body.modern-design.dark .goal-card:hover {
+/* ── Slim scrollbars ──────────────────────────────────────────── */
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+/* ── Cards and overlays ───────────────────────────────────────── */
+
+:root body .home-card,
+:root body .fi-card,
+:root body .goal-card {
+  box-shadow: var(--shadow-sm);
+}
+
+:root body .home-card:hover,
+:root body .fi-card:hover,
+:root body .goal-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+:root body .settings-modal,
+:root body .search-overlay .search-modal {
+  box-shadow: var(--shadow-lg);
+}
+
+:root body.dark .home-card:hover,
+:root body.dark .fi-card:hover,
+:root body.dark .goal-card:hover {
   border-color: var(--accent-border);
   box-shadow:
     var(--shadow-md),
     0 0 30px var(--accent-shadow);
 }
 
-body.modern-design.dark .settings-modal,
-body.modern-design.dark .search-overlay .search-modal {
+:root body.dark .settings-modal,
+:root body.dark .search-overlay .search-modal {
   background: var(--color-surface-raised);
 }
 
-/* ── #25: Global transition baseline ──────────────────────────── */
+/* ── Inputs ───────────────────────────────────────────────────── */
 
-body.modern-design {
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --duration-fast: 120ms;
-  --duration-base: 200ms;
-  --duration-slow: 350ms;
-  --radius: 10px;
-  --radius-sm: 6px;
+:root body input:not([type='checkbox']):not([type='radio']),
+:root body select,
+:root body textarea {
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
+  border-radius: var(--radius);
+  font-variant-numeric: tabular-nums;
+  transition:
+    border-color 120ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1),
+    background 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-body.modern-design a,
-body.modern-design button {
+:root body input:not([type='checkbox']):not([type='radio']):hover,
+:root body select:hover {
+  border-color: var(--accent-border);
+}
+
+:root body input:not([type='checkbox']):not([type='radio']):focus,
+:root body select:focus,
+:root body textarea:focus {
+  border-color: var(--accent);
+  background: var(--color-surface);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+:root body input:not([type='checkbox']):not([type='radio'])::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.6;
+}
+
+:root body.dark input:not([type='checkbox']):not([type='radio']):focus,
+:root body.dark select:focus,
+:root body.dark textarea:focus {
+  box-shadow:
+    0 0 0 3px var(--accent-focus-ring),
+    0 0 20px var(--accent-shadow);
+}
+
+/* ── Transition baseline ──────────────────────────────────────── */
+
+:root body a,
+:root body button {
   transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   transition-duration: 120ms;
 }
 
-body.modern-design button:active {
+:root body button:active {
   transform: scale(0.98);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.modern-design,
-  body.modern-design * {
+  :root body,
+  :root body * {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
-  body.modern-design button:active {
+  :root body button:active {
     transform: none;
   }
 }
 
-/* ── #26: Glass sidebar ───────────────────────────────────────── */
+:root body.dark button:focus-visible,
+:root body.dark a:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--color-bg),
+    0 0 0 4px var(--accent),
+    0 0 20px rgba(59, 130, 246, 0.15);
+}
 
-body.modern-design .sidebar {
+/* ── Glass sidebar ────────────────────────────────────────────── */
+
+:root body .sidebar {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
   border-right: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-body.modern-design.dark .sidebar {
+:root body.dark .sidebar {
   background: rgba(17, 17, 17, 0.85);
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
   border-right: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-body.modern-design .sidebar-link.active {
+:root body .sidebar-link.active {
   background: var(--accent-lighter, rgba(59, 130, 246, 0.08));
   color: var(--accent);
   font-weight: var(--fw-semibold);
 }
 
-body.modern-design.dark .sidebar-link.active {
+:root body.dark .sidebar-link.active {
   background: var(--accent-light);
   color: var(--accent-text-mid);
   box-shadow: 0 0 16px var(--accent-shadow);
 }
 
-body.modern-design .sidebar-menu {
+:root body .sidebar-menu {
   gap: 2px;
 }
 
-body.modern-design .sidebar-link {
+:root body .sidebar-link {
   border-radius: var(--radius);
   padding: 8px 12px 8px 4px;
 }
 
-body.modern-design .main-content {
+:root body .main-content {
   background: var(--color-bg, #ffffff);
 }
 
-body.modern-design.dark .main-content {
+:root body.dark .main-content {
   background: var(--color-bg, #0f172a);
 }
 
-/* ── #27: Pill tabs replace underline tabs ────────────────────── */
+/* ── Pill tabs ────────────────────────────────────────────────── */
 
-/* ── Unified tab bar ── */
-body.modern-design .tab-bar {
+:root body .tab-bar {
   display: flex;
   gap: 2px;
   padding: 3px;
@@ -283,7 +259,7 @@ body.modern-design .tab-bar {
   width: fit-content;
 }
 
-body.modern-design .tab-btn {
+:root body .tab-btn {
   flex: 0 1 auto;
   padding: 7px 16px;
   border-radius: calc(var(--radius) - 2px);
@@ -300,57 +276,37 @@ body.modern-design .tab-btn {
     box-shadow var(--duration-fast) var(--ease-out);
 }
 
-body.modern-design .tab-btn:hover {
+:root body .tab-btn:hover {
   color: var(--color-text);
 }
 
-body.modern-design .tab-btn.active {
+:root body .tab-btn.active {
   background: var(--color-surface);
   color: var(--color-text);
   box-shadow: var(--shadow-xs);
   font-weight: var(--fw-semibold);
 }
 
-/* Small variant */
-body.modern-design .tab-btn--sm {
+:root body .tab-btn--sm {
   padding: 5px 10px;
   font-size: var(--fs-xs);
 }
 
-/* Dark mode glass */
-body.modern-design.dark .tab-bar {
+:root body.dark .tab-bar {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.08);
 }
 
-/* ── #28: Dark mode accent glow ───────────────────────────────── */
+/* ── Borderless tables ────────────────────────────────────────── */
 
-body.modern-design.dark button:focus-visible,
-body.modern-design.dark a:focus-visible {
-  box-shadow:
-    0 0 0 2px var(--color-bg),
-    0 0 0 4px var(--accent),
-    0 0 20px rgba(59, 130, 246, 0.15);
-}
-
-/* ── #29: Budget total column width fix (tabular-nums causes wider numbers) ── */
-
-body.modern-design .budget-th--total,
-body.modern-design .budget-td--total {
-  min-width: 90px;
-  width: auto;
-}
-
-/* ── #29: Borderless table rows ───────────────────────────────── */
-
-body.modern-design table:not([class]),
-body.modern-design .modern-table {
+:root body table:not([class]),
+:root body .modern-table {
   border-collapse: separate;
   border-spacing: 0;
 }
 
-body.modern-design table:not([class]) th,
-body.modern-design .modern-table th {
+:root body table:not([class]) th,
+:root body .modern-table th {
   padding: 8px 16px;
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
@@ -362,8 +318,8 @@ body.modern-design .modern-table th {
   border-right: none;
 }
 
-body.modern-design table:not([class]) td,
-body.modern-design .modern-table td {
+:root body table:not([class]) td,
+:root body .modern-table td {
   padding: 12px 16px;
   font-size: var(--fs-sm);
   color: var(--color-text);
@@ -373,59 +329,63 @@ body.modern-design .modern-table td {
   font-variant-numeric: tabular-nums;
 }
 
-body.modern-design table:not([class]) tbody tr,
-body.modern-design .modern-table tbody tr {
+:root body table:not([class]) tbody tr,
+:root body .modern-table tbody tr {
   transition: background 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-body.modern-design table:not([class]) tbody tr:hover,
-body.modern-design .modern-table tbody tr:hover {
+:root body table:not([class]) tbody tr:hover,
+:root body .modern-table tbody tr:hover {
   background: var(--color-surface-hover);
 }
 
-body.modern-design table:not([class]) tbody tr:last-child td,
-body.modern-design .modern-table tbody tr:last-child td {
+:root body table:not([class]) tbody tr:last-child td,
+:root body .modern-table tbody tr:last-child td {
   border-bottom: none;
 }
 
-body.modern-design .budget-td--total,
-body.modern-design .budget-th--total {
+/* Budget table: tabular-nums makes numbers wider, so the total column needs room */
+:root body .budget-th--total,
+:root body .budget-td--total {
+  min-width: 90px;
+  width: auto;
   border-left: 2px solid var(--color-border);
 }
 
-body.modern-design .budget-td {
+:root body .budget-td {
   padding: 0.65rem 0.45rem;
   font-size: var(--fs-sm);
 }
 
-body.modern-design .budget-td--number,
-body.modern-design .budget-td--group-number {
+:root body .budget-td--number,
+:root body .budget-td--group-number {
   text-align: right;
 }
 
-body.modern-design .budget-th {
+:root body .budget-th {
   padding: 0.6rem 0.45rem;
   text-align: right;
   text-transform: none;
   letter-spacing: normal;
 }
-body.modern-design .budget-th--category {
+:root body .budget-th--category {
   text-align: left;
 }
 
-/* ─── Page Title Typography (Kai spec) ─── */
-body.modern-design .budget-title,
-body.modern-design .txn-title,
-body.modern-design .home-greeting h1,
-body.modern-design .welcome-title,
-body.modern-design .tax-heading,
-body.modern-design .goal-header h1,
-body.modern-design .goal-detail-title,
-body.modern-design .goal-detail-rename-input,
-body.modern-design .alloc-page-title,
-body.modern-design .data-header h1,
-body.modern-design .drive-title,
-body.modern-design .settings-section h3 {
+/* ── Page title typography ────────────────────────────────────── */
+
+:root body .budget-title,
+:root body .txn-title,
+:root body .home-greeting h1,
+:root body .welcome-title,
+:root body .tax-heading,
+:root body .goal-header h1,
+:root body .goal-detail-title,
+:root body .goal-detail-rename-input,
+:root body .alloc-page-title,
+:root body .data-header h1,
+:root body .drive-title,
+:root body .settings-section h3 {
   font-size: var(--fs-xl);
   font-weight: 600;
   letter-spacing: -0.025em;
@@ -436,7 +396,8 @@ body.modern-design .settings-section h3 {
   background-clip: unset;
 }
 
-/* ─── Shared Action Button ─── */
+/* ── Shared action button ─────────────────────────────────────── */
+
 .action-btn {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

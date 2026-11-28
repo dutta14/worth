@@ -1,9 +1,5 @@
 {
   "version": 1,
   "updatedAt": "2026-11-22T19:35:43.000Z",
-  "flags": {
-    "modern-design": {
-      "percentage": 100
-    }
-  }
+  "flags": {}
 }

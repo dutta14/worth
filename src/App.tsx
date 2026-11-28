@@ -30,7 +30,6 @@ import './styles/ErrorBoundary.css'
 import './styles/colorThemes.css'
 import './styles/modern-design.css'
 import './styles/utilities.css'
-import { ModernDesignToggle } from './flags/ModernDesignToggle'
 import { composeProviders } from './utils/composeProviders'
 
 /*
@@ -158,7 +157,6 @@ const AppShell: FC = () => {
   return (
     <div className="app-layout" ref={layoutRef}>
       <SkipLink />
-      <ModernDesignToggle />
       {(sidebarOpen || !isNarrow) && (
         <SidebarNavigation currentPage={currentPage} setCurrentPage={handleNavigate} navigateTo={handleNavigateTo} />
       )}

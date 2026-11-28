@@ -181,7 +181,7 @@
   overflow-wrap: break-word;
 }
 
-body.modern-design .splan--simple input.splan-simple-growth-inline {
+:root body .splan--simple input.splan-simple-growth-inline {
   display: inline-block;
   width: 5.5ch;
   min-width: 3ch;
@@ -203,7 +203,7 @@ body.modern-design .splan--simple input.splan-simple-growth-inline {
     border-bottom-width 0.1s ease-out;
 }
 
-body.modern-design .splan--simple input.splan-simple-growth-inline:hover {
+:root body .splan--simple input.splan-simple-growth-inline:hover {
   border-bottom-color: var(--accent) !important;
   box-shadow: none !important;
   background: transparent !important;
@@ -211,7 +211,7 @@ body.modern-design .splan--simple input.splan-simple-growth-inline:hover {
   outline: none;
 }
 
-body.modern-design .splan--simple input.splan-simple-growth-inline:focus {
+:root body .splan--simple input.splan-simple-growth-inline:focus {
   border-bottom: 2px solid var(--accent) !important;
   outline: 2px solid color-mix(in srgb, var(--accent) 25%, transparent);
   outline-offset: 2px;

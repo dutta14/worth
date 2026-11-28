@@ -33,13 +33,12 @@ vi.mock('../../../flags/FlagContext', () => ({
 
 vi.mock('../../../styles/FlagAdmin.css', () => ({}))
 
-// Pin the registry to the one flag these tests were written against, so adding flags elsewhere does not change them.
-vi.mock('../../../flags/flagDefinitions', async () => {
-  const actual = await vi.importActual<typeof import('../../../flags/flagDefinitions')>(
-    '../../../flags/flagDefinitions',
-  )
-  return { FLAGS: { MODERN_DESIGN: actual.FLAGS.MODERN_DESIGN } }
-})
+// Pin the registry to one fixture flag so these tests do not depend on which flags the app ships.
+vi.mock('../../../flags/flagDefinitions', () => ({
+  FLAGS: {
+    EXAMPLE: { id: 'example-flag', type: 'boolean', default: true, description: 'Fixture flag', temporary: true },
+  },
+}))
 
 /* ─── Helpers ─── */
 
@@ -104,7 +103,7 @@ describe('FlagAdminPane — error state', () => {
    ═══════════════════════════════════════════════════════════════ */
 
 /* Note: The empty flag list path (line 149) requires zero flags defined.
-   Since FLAGS always has MODERN_DESIGN, this branch isn't reachable in tests
+   Since FLAGS always has the fixture flag, this branch isn't reachable in tests
    without modifying production code. */
 
 /* ═══════════════════════════════════════════════════════════════
@@ -112,9 +111,9 @@ describe('FlagAdminPane — error state', () => {
    ═══════════════════════════════════════════════════════════════ */
 
 describe('FlagAdminPane — basic render', () => {
-  it('renders flag list with the MODERN_DESIGN flag', () => {
+  it('renders flag list with the fixture flag', () => {
     renderPane()
-    expect(screen.getByText('modern-design')).toBeInTheDocument()
+    expect(screen.getByText('example-flag')).toBeInTheDocument()
     expect(screen.getByText('boolean')).toBeInTheDocument()
   })
 
@@ -129,7 +128,7 @@ describe('FlagAdminPane — basic render', () => {
   })
 
   it('shows override label when override exists for a flag', () => {
-    mockContextValue.overrides = { 'modern-design': true }
+    mockContextValue.overrides = { 'example-flag': true }
     mockContextValue.resolveFlag = () => true as never
     renderPane()
     expect(screen.getByText(/Override: true/)).toBeInTheDocument()
@@ -145,10 +144,10 @@ describe('FlagAdminPane — flag toggle', () => {
     const user = userEvent.setup()
     renderPane()
 
-    const toggle = screen.getByRole('switch', { name: /Toggle modern-design/ })
+    const toggle = screen.getByRole('switch', { name: /Toggle example-flag/ })
     await user.click(toggle)
 
-    expect(mockContextValue.setOverride).toHaveBeenCalledWith('modern-design', expect.anything())
+    expect(mockContextValue.setOverride).toHaveBeenCalledWith('example-flag', expect.anything())
   })
 })
 
@@ -302,14 +301,14 @@ describe('FlagAdminPane — admin rollout config', () => {
 
 describe('FlagAdminPane — formatValue via override display', () => {
   it('displays null override value correctly', () => {
-    mockContextValue.overrides = { 'modern-design': null }
+    mockContextValue.overrides = { 'example-flag': null }
     mockContextValue.resolveFlag = () => null as never
     renderPane()
     expect(screen.getByText(/Override: null/)).toBeInTheDocument()
   })
 
   it('displays object override value as JSON', () => {
-    mockContextValue.overrides = { 'modern-design': { key: 'val' } }
+    mockContextValue.overrides = { 'example-flag': { key: 'val' } }
     mockContextValue.resolveFlag = () => ({ key: 'val' }) as never
     renderPane()
     expect(screen.getByText(/Override:/)).toBeInTheDocument()
@@ -322,12 +321,12 @@ describe('FlagAdminPane — formatValue via override display', () => {
 
 describe('FlagAdminPane — override change with non-boolean type', () => {
   // This indirectly covers handleOverrideChange branches for number/json/string types
-  // The MODERN_DESIGN flag is the only one and it's boolean, so the boolean path is tested above.
+  // The fixture flag is boolean, so the boolean path is tested above.
   // These tests verify the rendering paths for the toggle.
 
   it('renders toggle in on state for true default value', () => {
     renderPane()
-    const toggle = screen.getByRole('switch', { name: /Toggle modern-design/ })
+    const toggle = screen.getByRole('switch', { name: /Toggle example-flag/ })
     expect(toggle).toHaveAttribute('aria-checked', 'true')
   })
 })

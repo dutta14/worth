@@ -70,7 +70,7 @@ test.describe('Sidebar navigation, routing, and active state (#141)', () => {
     await transactions.click()
 
     await expect(page).toHaveURL(/#\/transactions/)
-    await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Transactions' })).toBeVisible()
     await nav.expectActive('Cashflow')
     await expect(transactions).toHaveAttribute('aria-current', 'page')
     await expect(transactions).toBeFocused()
