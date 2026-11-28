@@ -1,10 +1,7 @@
-import { defineFlag } from './flagSystem'
+import type { FlagDefinition, FlagType } from './flagSystem'
 
-export const FLAGS = {
-  MODERN_DESIGN: defineFlag('modern-design', {
-    type: 'boolean',
-    default: true,
-    description: 'Enables the modernized CSS design system',
-    temporary: true,
-  }),
-} as const
+/**
+ * Registry of feature flags. Add one with `defineFlag()` and register it in `feature-flags.json`.
+ * No flags are live right now; shipped features are permanent rather than flagged.
+ */
+export const FLAGS: Record<string, FlagDefinition<FlagType>> = {}

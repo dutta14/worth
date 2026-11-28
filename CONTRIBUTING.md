@@ -52,8 +52,7 @@ src/
 │   ├── FlagContext.tsx      # Provider: fetches config, manages overrides
 │   ├── flagSystem.ts        # Resolution logic (override > rollout > default)
 │   ├── flagDefinitions.ts   # Flag names and defaults
-│   ├── useFlag.ts           # Hook: useFlag(FLAGS.NAME) → boolean
-│   └── ModernDesignToggle   # Applies body.modern-design class when flag is on
+│   └── useFlag.ts           # Hook: useFlag(FLAGS.NAME) → boolean
 ├── search/                  # Global search (⌘K)
 │   ├── searchIndex.ts       # Builds the index of pages, goals and accounts
 │   └── useSearchIndexData.ts # Gathers the data the index is built from
@@ -96,7 +95,7 @@ src/
 │   └── settings/            # Settings modal (refactored package)
 ├── styles/                  # CSS files (one per component/page)
 │   ├── colorThemes.css      # Base :root + body.dark variables
-│   └── modern-design.css    # Modern design system (scoped under body.modern-design)
+│   └── modern-design.css    # Design system: tokens, glass sidebar, pill tabs, tables, dark layering
 ├── utils/
 │   ├── fileStoreTypes.ts    # FileStore interface (the contract every store must satisfy)
 │   ├── fileStore.ts         # FileSystemFileStore — File System Access API implementation
@@ -169,7 +168,7 @@ The chosen folder handle is persisted in IndexedDB via `src/utils/handlePersiste
 
 - One CSS file per component/page in `src/styles/`.
 - Dark mode via `body.dark` class.
-- **Modern design system** — `modern-design.css`, scoped entirely under `body.modern-design`. Includes Inter font, translucent borders, composite shadows, premium inputs, dark surface layering, glass sidebar, pill tabs, accent glow, and borderless tables. Toggled via the `modern-design` feature flag (currently 100% rollout, and on by default so it still applies when the rollout config cannot be fetched).
+- **Design system** — `modern-design.css` is always on. Includes Inter font (loaded in `index.html`), translucent borders, composite shadows, premium inputs, dark surface layering, glass sidebar, pill tabs, accent glow, and borderless tables. See [Design System](#design-system).
 - Accent theming via `--accent` and `--accent-rgb` CSS custom properties.
 - `colorThemes.css` contains only base `:root` and `body.dark` variables (the 9-color theme picker was removed).
 - Responsive breakpoints: desktop (1200px+), tablet (768–1199px), mobile (≤900px sidebar collapse).
@@ -221,19 +220,18 @@ The flag system in `src/flags/` controls runtime feature rollout:
 
 1. **Config** — `feature-flags.json` at repo root. Deployed as a static file. Fetched publicly (no auth) on app load. Admin writes (updating rollout %) require GitHub auth.
 2. **Resolution order** — local override → rollout percentage → default value. Each browser gets a stable random id (`flag-client-id` in localStorage), hashed with the flag id for consistent percentage bucketing.
-3. **Usage** — `const enabled = useFlag(FLAGS.MODERN_DESIGN)` in any component.
-4. **Adding a flag** — Define in `flagDefinitions.ts`, add rollout config to `feature-flags.json`.
+3. **Usage** — `const enabled = useFlag(FLAGS.SOME_FLAG)` in any component.
+4. **Adding a flag** — Define in `flagDefinitions.ts` with `defineFlag()`, add rollout config to `feature-flags.json`. The registry is empty today; the two files must list the same flag ids (a test enforces it).
 5. **Local override** — Set `flag-overrides` in localStorage (JSON object of `{ "flag-name": true/false }`) for development/testing.
-6. **Retired flags** — The feature flags used while building the monthly check-in, annual review, category budget targets, data safety net and import wizard have been removed; those features are permanent.
-7. **ModernDesignToggle** — A special component that adds/removes `body.modern-design` class based on the `modern-design` flag.
+6. **Retired flags** — The flags used while building the monthly check-in, annual review, category budget targets, data safety net, import wizard and modern design have been removed; those features are permanent.
 
-## Modern Design
+## Design System
 
-All modern design styles live in `src/styles/modern-design.css`, scoped under `body.modern-design`. This means:
+All design-system styles live in `src/styles/modern-design.css` and apply to the whole app; there is no flag or body class.
 
-- Styles only apply when the feature flag is enabled and `ModernDesignToggle` adds the class.
-- You can safely add new modern styles without affecting the classic design.
-- When contributing new components, add modern variants inside a `body.modern-design` selector block.
+- Selectors start with `:root body` (for example `:root body .tab-btn`, `:root body.dark .sidebar`). That gives them the specificity needed to override the per-page stylesheets, which load after it. Don't shorten the prefix to `body`.
+- Tokens (`--shadow-*`, `--fs-*`, `--radius`, translucent `--color-border`) are defined on `:root body` and `:root body.dark` in that file; use them instead of hard-coded values.
+- When you add a component, style it in its own page stylesheet and use the tokens. Only put cross-cutting rules in `modern-design.css`.
 
 ## Testing
 

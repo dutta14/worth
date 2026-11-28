@@ -198,7 +198,7 @@
 }
 
 .growth-settings-input-wrap input,
-body.modern-design .growth-settings-input-wrap input:not([type='checkbox']):not([type='radio']) {
+:root body .growth-settings-input-wrap input:not([type='checkbox']):not([type='radio']) {
   width: 52px;
   height: 28px;
   padding: 0 4px;
@@ -218,7 +218,7 @@ body.modern-design .growth-settings-input-wrap input:not([type='checkbox']):not(
 }
 
 .growth-settings-input-wrap input:focus,
-body.modern-design .growth-settings-input-wrap input:not([type='checkbox']):not([type='radio']):focus {
+:root body .growth-settings-input-wrap input:not([type='checkbox']):not([type='radio']):focus {
   outline: none;
   border-color: var(--accent);
   background: var(--color-surface);
@@ -232,17 +232,17 @@ body.modern-design .growth-settings-input-wrap input:not([type='checkbox']):not(
   margin: 0;
 }
 
-body.modern-design .growth-settings-input-wrap input:not([type='checkbox']):not([type='radio']):hover {
+:root body .growth-settings-input-wrap input:not([type='checkbox']):not([type='radio']):hover {
   border-color: var(--accent-border);
 }
 
 .growth-settings-input-wrap--dollar input,
-body.modern-design .growth-settings-input-wrap--dollar input:not([type='checkbox']):not([type='radio']) {
+:root body .growth-settings-input-wrap--dollar input:not([type='checkbox']):not([type='radio']) {
   width: 80px;
 }
 
 .growth-settings-input-wrap--age input,
-body.modern-design .growth-settings-input-wrap--age input:not([type='checkbox']):not([type='radio']) {
+:root body .growth-settings-input-wrap--age input:not([type='checkbox']):not([type='radio']) {
   width: 52px;
 }
 

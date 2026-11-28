@@ -127,7 +127,7 @@
   outline-offset: 2px;
 }
 
-body.modern-design .checkin-card {
+:root body .checkin-card {
   box-shadow: var(--shadow-sm);
 }
 
