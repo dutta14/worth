@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20+ (CI runs Node 20)
+- Node.js 22+ (CI runs Node 22)
 - npm
 
 ## Getting Started

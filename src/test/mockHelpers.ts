@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { vi, type Mock } from 'vitest'
 
 /**
  * Mocks the FileReader API so that readAsText synchronously calls onload
@@ -50,8 +50,8 @@ export function mockFetch(
 /**
  * Mocks navigator.vibrate and returns the spy for assertions.
  */
-export function mockNavigatorVibrate() {
-  const spy = vi.fn().mockReturnValue(true)
+export function mockNavigatorVibrate(): Mock<() => boolean> {
+  const spy = vi.fn<() => boolean>().mockReturnValue(true)
   Object.defineProperty(navigator, 'vibrate', { value: spy, writable: true, configurable: true })
   return spy
 }
