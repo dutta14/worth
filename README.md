@@ -2,304 +2,41 @@
 
 **Your money, on your own disk, and nowhere else.**
 
-This is a personal finance app for one person, and it runs entirely in your browser with your data stored as plain files in a folder you choose on your own machine. It tracks your net worth, your budget, your transactions, your savings goals, your tax documents, and the little Sunday-morning habits that make all of that sustainable over time. Nothing ever touches a server I run, and nothing about you is for sale.
+A personal finance app for one person. It runs in your browser and keeps your data as plain files in a folder you choose. Net worth, goals, budget, transactions and tax documents, with no account, no server and no analytics.
 
-- Browser only (Chrome or Edge).
-- Data lives in a folder you own.
-- No lock-in.
+[**Open the app**](https://anindya.dev/worth) · [**Read the wiki**](https://github.com/dutta14/worth/wiki)
 
-![Home dashboard, light and dark](./docs/screenshots/home-light.png)
+![Home dashboard](./docs/screenshots/home-light.png)
 
----
+## Why
 
-## Why this exists
+Spreadsheets survive but drift. Apps get bought, shut down, or want your bank login. This one is small on purpose: your data is a folder you already know how to back up, and nothing leaves your device.
 
-It is a Sunday morning and I have a spreadsheet open that I have kept, on and off, for the better part of a decade. The date column is wider than it needs to be, in a green I never quite picked on purpose, and the formula in the last row has been broken for two months without me noticing. Before this spreadsheet there were others. There was Mint, while it lasted; there was a subscription app that asked, very politely, for the login to my bank; there was a notebook I kept for one quarter and then misplaced behind a stack of books I was meaning to read. None of them stayed. The spreadsheet stayed, in its half-broken way, because nobody could take it from me.
+## Quick start
 
-The pattern repeats. The good apps die or get bought and become something else; the subscriptions keep charging long after I have stopped opening them; the free ones want my bank credentials, and somewhere down in the terms of service is a sentence about how my data may be used to improve the product, which is the polite phrasing for sold. The spreadsheets survive in a quieter way, but they live in browser tabs I forget to close and folders I forget to back up, and the formulas drift, and one day a cell refers to a sheet that no longer exists. None of it ever felt like mine. It always felt borrowed. And there is a small embarrassment, after a while, in handing the keys to your financial life to a company that needs to grow every quarter to keep its lights on, and pretending the arrangement is normal.
+1. Open [anindya.dev/worth](https://anindya.dev/worth) in Chrome or Edge.
+2. Choose an empty folder for your data.
+3. Add an account and this month's balance. The rest of the app builds from there.
 
-So this is small, on purpose. It runs in your browser. Your data is a folder of plain files on your own disk, open to any backup tool you already trust: Time Machine, Dropbox, iCloud Drive, git, rsync, whatever. There is no account to create. There is no server I run. There is no analytics pixel sitting in the corner of the page, quietly counting how long you spent on the budget screen. It is a small app for one person to keep their own books, on a Sunday morning, in a green they did not quite pick on purpose.
+Step-by-step with screenshots: [Getting Started](https://github.com/dutta14/worth/wiki/Getting-Started).
 
----
+## Documentation
 
-## Privacy & data
+Everything else lives in the [wiki](https://github.com/dutta14/worth/wiki):
 
-What follows is the literal version of the promise above. Where your data lives, and what this app does not do.
+- **Using worth:** Getting Started, Planning, Wealth, Cashflow, Importing Bank CSVs, Taxes and Drive, Settings
+- **Your data:** Privacy and Data, Data Folder Layout, Data Safety Net, FAQ, Troubleshooting
+- **Contributing:** Architecture, Development Setup, Testing, Feature Flags, CI and Deployment
 
-### Where your data lives
+## Develop
 
-A folder on your own machine. Not the cloud. On first run the app shows a full-page screen asking you to choose a data folder. Once you pick one, every account, balance, transaction, goal, tax checklist item, uploaded file, and budget record is written there as plain files: JSON for most things, CSV for monthly balance and transaction data. The chosen folder handle is remembered in IndexedDB so the browser can reconnect on your next visit without asking again.
+```bash
+npm ci
+npm run dev   # http://localhost:5173/worth/
+```
 
-The files are human-readable and directly editable. Open them in any text editor. Open the CSVs in Excel or Numbers. They are yours.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) and the wiki's Development Setup page.
 
-A handful of UI preferences stay in `localStorage`: dark mode, accent theme, the CSV import toggle, and a few feature-flag seeds. Nothing sensitive lives there.
+## License
 
-### What "backups" means now
-
-The data folder is ordinary files. Use whatever backup tool you already use: Time Machine, Dropbox, iCloud Drive, git, rsync. If you want to use this on two machines, point both at the same synced folder, or copy the folder from one machine to the other. The app has no built-in sync mechanism because it does not need one.
-
-**Data safety net:** the app also keeps its own safety copies. Before it changes or deletes a JSON or CSV file, it copies the old version into a `_backups` folder inside your data folder, at most once per file per session and then no more often than every six hours, skipping copies identical to the newest one; a delete or a restore always copies first. The newest 10 copies of each file are kept. Tax documents and the derived `budget/summary-cache.json` are not copied. A plain-text `_backups/README.txt` explains the folder, and you can delete it at any time. Your backup and sync tools will see this folder too, so add `_backups/` (and `*.corrupt-*`) to `.gitignore` if the data folder is a git repository. Restore a copy from Settings → Data Folder → Backups, or copy the file back yourself. There is no recycle bin.
-
-The data safety net also adds: a best-effort save when you switch tabs or close the page, a visible banner with "Try again" when a save fails or folder access is lost, and protection for a JSON file that cannot be read (the app leaves it untouched, saves a copy next to it as `<name>.json.corrupt-<timestamp>`, and pauses saving to it until you choose Restore latest backup or Start fresh). It cannot promise that a write survives the browser being killed mid-save.
-
-### What this app does not do
-
-No analytics. No third-party scripts. No accounts. No backend. No telemetry, no error reporting, no fingerprinting. No data ever leaves your device. You can verify this by opening the Network tab in devtools and watching the app do nothing.
-
-### The trade-off, stated honestly
-
-Your data is plain files with no encryption layer of its own. It is exactly as protected as your disk is. If you are on a shared machine or you store the folder somewhere accessible to others, that is a real concern. Use full-disk encryption (FileVault, BitLocker, or equivalent) if you need the data protected at rest. The app will not do that for you.
-
-The other constraint: this uses the File System Access API, which is available in Chrome and Edge but not in Firefox or Safari. The folder picker screen says so explicitly.
-
----
-
-## Quick start (5 minutes)
-
-### 1. Open the app
-
-Go to [anindya.dev/worth](https://anindya.dev/worth) in Chrome or Edge. Nothing to install. No signup screen.
-
-![Landing page on first open](./docs/screenshots/quickstart-1.png)
-
-### 2. Choose your data folder
-
-The first thing you see is a full-page screen asking you to pick a folder where the app will store your files. Click "Choose Folder", pick (or create) an empty folder somewhere on your machine, and grant read and write access when the browser asks. The app remembers that folder and reconnects on your next visit without asking again. You can change or disconnect it any time from Settings → Data Folder.
-
-![Folder picker on first run](./docs/screenshots/quickstart-2.png)
-
-### 3. Add your first account
-
-Go to Net Worth → Accounts and add an account you actually look at every month, a checking account or retirement account works well. Give it a name, pick a type, and save. This is the foundation the dashboard, allocation planner, and goals all build on.
-
-![Add account form](./docs/screenshots/quickstart-3.png)
-
-### 4. Enter a monthly balance
-
-Open that account and add this month's balance. That is enough to make the charts wake up. Come back next month and add another point. You do not need perfect history to get value from it.
-
-![Enter monthly balance](./docs/screenshots/quickstart-4.png)
-
-### 5. Let the rest of the app unfold from there
-
-Go back Home. You'll see the net worth summary, mini charts, goals peek, and allocation bar start to take shape. From there, add a goal, import a budget CSV, or drop your tax documents into Drive. The app is modular. You can grow into it.
-
-![Net worth on the home dashboard](./docs/screenshots/quickstart-5.png)
-
----
-
-## Features, by page
-
-Planning, Wealth, and Cashflow are accordions in the left sidebar. Click a heading to expand it and pick a section (for example Goals, Allocation, or Transactions). Views inside a page, such as Breakdown and My Allocation, stay on the page.
-
-### Home
-
-![Home dashboard with summary cards](./docs/screenshots/home-light.png)
-
-Your dashboard. A quick read on where things stand right now, without opening six tabs or a spreadsheet you have to mentally parse before coffee.
-
-**How to use it**
-- Glance at current net worth and the delta from the previous month
-- Flip through the mini charts for Net Worth, FI vs GW, and Assets vs Liabilities
-- Use the goals peek to see which targets are on pace and which ones are drifting
-- Check the allocation bar to see where your money is actually sitting today
-- Drag and reorder the cards until the page matches the way you think
-- A check-in strip above the cards tells you when the latest month is missing balances or the data is getting old, and one click opens the balance form for that month
-
-**One tip:** Put the card you check most often in the top-left slot. The dashboard remembers the order, and the right first glance matters more than one more chart.
-
----
-
-### Goals
-
-![Goals page with FI calculator and sub-goals](./docs/screenshots/goals.png)
-
-Two modes live here: concrete plans and a more abstract FI calculator. One keeps you honest about named goals. The other answers the older, quieter question of when work becomes optional.
-
-**How to use it**
-- Open Goals under Planning in the sidebar for savings or investment goals with target amounts and dates
-- Duplicate a goal when you want to try a more conservative or more aggressive version
-- Reorder goals so the ones that matter this year stay near the top
-- Mix and match goals to see how they stack together
-- Open FIRE Calculator under Planning to estimate years to financial independence from savings rate and expenses
-
-**One tip:** Create one practical goal and one aspirational one. A near-term emergency fund and a long-term FI target make the page useful in two different time horizons.
-
----
-
-### Net Worth
-
-![Net Worth page with accounts and growth chart](./docs/screenshots/networth.png)
-
-This is the spine of the app. The Dashboard gives you the raw history, Allocation turns it into portfolio shape, and Growth lets you connect balances to income, expenses, and savings rate.
-
-**How to use it**
-- In Accounts, add accounts and enter monthly balances over time
-- Details opens a guided entry for the month, prefilled from the last one and marking every account you have not updated, and a month that is missing balances is labelled Partial month and left off the trend charts
-- Switch between chart view and spreadsheet view depending on whether you want trend or detail
-- Hover chart points to see deltas and how a month changed relative to the prior one
-- Filter the accounts table when you want to isolate cash, retirement, debt, or other slices
-- In Allocation, create custom ratio tabs for your ideal asset mix
-- In Growth, log yearly income, expenses, and savings to keep the balance history grounded in behavior
-- Open Review under Wealth for a one-page look at a single year (net worth change, income, expenses, savings rate, top spending groups, goal progress), then print it, save it as a PDF, or download it as a CSV
-
-**One tip:** Use Accounts for what happened, Allocation for what you want, and Growth for why the gap exists. The three sections make more sense when you think of them as history, target, and explanation.
-
-![Allocation section with ratio targets](./docs/screenshots/allocation.png)
-
-![Growth section with income, expenses, and savings rate](./docs/screenshots/growth.png)
-
----
-
-### Budget
-
-![Budget page with categorized transactions](./docs/screenshots/budget.png)
-
-A year-based budgeting workspace that is more interested in patterns than ceremony. Import bank CSVs, clean them up, and look at spending from different distances.
-
-**How to use it**
-- Pick a year and import bank or card CSVs, or enter transactions manually
-- Use the Detailed view for category-by-category breakdowns inside each group
-- Switch to Aggregated when you only want group totals
-- Use Cashflow to read income against expenses over time
-- Change the period between monthly, quarterly, and half-yearly views
-- Set a monthly target per expense group in Spreadsheet → Aggregated and compare it with what you spent
-- Use the built-in PDF → CSV converter when the bank only gives you a statement PDF
-- Import bank CSVs with any column names. The wizard asks which column is the date, description and amount (and whether spending is negative), splits a statement into the right months whatever the filename says, skips transactions you already have, shows everything for review before it writes anything, and offers Undo. It remembers the mapping for the next file from the same bank. It also adds categorization rules ("description contains Starbucks → Dining") that run on every import, from the ⋯ More actions menu on Transactions (Import, Rules, Apply rules to uncategorized) and from the category menu on a row. Nothing leaves your machine; rules live in `budget/category-rules.json` and saved mappings in `budget/import-formats.json`
-
-**One tip:** Start in Aggregated view the first time you import a messy file. It lets you find the categories that matter before you get lost in line items.
-
----
-
-### Transactions
-
-![Transactions page with filters and categorization](./docs/screenshots/transactions.png)
-
-Transaction management lives on its own page now, separate from Budget. It is for the raw stream of money in and out, with filtering and categorization that helps you clean things up before they become a reporting habit.
-
-**How to use it**
-- Review transactions separately from annual budget rollups
-- Filter the list when you want to isolate one account, merchant, or category pattern
-- Categorize or recategorize items before they pollute your longer-term summaries
-- Use it as the place for cleanup work, not just for reading totals
-
-**One tip:** Treat Transactions as the inbox and Budget as the monthly summary. One is where you fix the raw data, the other is where you look for meaning.
-
----
-
-### Taxes
-
-![Taxes page with checklist and document uploads](./docs/screenshots/taxes.png)
-
-A yearly tax binder without the actual binder. Checklists, uploads, linked accounts, and reusable templates, all organized by year.
-
-**How to use it**
-- Move between tax years with the year navigation
-- Upload W-2s, 1099s, receipts, and whatever else tends to arrive at inconvenient times
-- Work through the checklist and mark items done as they land
-- Use linked-account suggestions when you want the app to help connect documents to the right places
-- Save or import templates so each year does not start from a blank page
-
-**One tip:** Build next year's template the week you finish this year's return. Your future self will still remember what was annoying.
-
----
-
-### Drive
-
-![Drive file browser](./docs/screenshots/drive.png)
-
-Drive is the app's file browser for uploaded documents. It gives you one place to browse the practical debris of personal finance, with enough structure to make it useful instead of decorative.
-
-**How to use it**
-- Browse uploaded files and folders with breadcrumbs
-- Sort and filter when the list gets noisy
-- Open CSV previews before you decide what to keep or rename
-- Use it as the home for tax files, imported budget data, and other uploads that should stay close to the rest of the app
-
-**One tip:** Rename files while they still mean something to you. "Statement.pdf" is readable today and useless six months from now.
-
----
-
-### Settings
-
-![Settings page](./docs/screenshots/settings.png)
-
-Profile, data folder, appearance, and the slightly more dangerous switches all live here.
-
-**How to use it**
-- Change or disconnect your data folder in Data Folder
-- Toggle dark mode and accent preferences in Appearance
-- Toggle the "Allow CSV imports & resets" switch in Advanced when you want bulk data entry tools
-- Explore Labs when you are curious
-- Data Folder lists the safety copies in `_backups` and restores one after you confirm (the current file is copied first)
-
-**One tip:** If you move or rename the folder on disk, use Settings → Data Folder → Change Folder to reconnect it. Disconnecting only forgets the handle; your files stay exactly where they are.
-
----
-
-## Common questions
-
-### Is this free?
-
-Yes. Forever. No paid tier, no premium features, no upsell. The app is open source under MIT.
-
-### Where does my data go?
-
-A folder on your own machine. On first run you pick a folder; the app stores everything there as plain files. You can open the folder in Finder or Explorer right now and read the files. Nothing leaves your device.
-
-### How do I use this on two devices?
-
-Point both at the same folder. If the folder is inside a synced directory (iCloud Drive, Dropbox, or similar) both devices see the same files automatically. If it is not synced, copy the folder manually from one machine to the other. The app has no built-in sync mechanism because plain files already have a thousand backup tools designed for them.
-
-When you return to the tab, the app checks whether a file it has loaded was changed outside it, for example from the other machine or by a sync tool. If so it pauses saving to that file and asks you to Reload (take what is on disk) or Keep my version (save yours; the version on disk is copied to `_backups` first). Reload keeps your unsaved edits in `_backups` too. It does not notice new files that appear in a folder, such as a new `balances/{year}.csv`, until you reload.
-
-### What if I move or rename the folder?
-
-Open Settings → Data Folder and click "Change Folder". Pick the new location and grant access. Disconnecting only forgets the folder handle; your files stay on disk wherever you left them.
-
-### Can I export my data?
-
-You already have it. Open the data folder in Finder or Explorer. The JSON files are readable as-is. The CSV files open in Excel or Numbers. There is nothing to export because the files are the data.
-
-### Does it work offline?
-
-Yes, once loaded. The app is a static bundle. After the first visit, your browser caches it and you can use it on a plane, in a tunnel, or with your wifi off.
-
-### What if I lose my passphrase?
-
-There is no passphrase. Your data is plain files with no application-level encryption. Your files are protected by whatever protects your disk, ideally full-disk encryption at the OS level.
-
-### Is this audited or production-grade?
-
-No formal audit. One person built it. It's used daily by its author. Treat it as a personal tool, not a bank.
-
-### Why should I trust this?
-
-You shouldn't blindly trust anything with your financial data. Here's what's true: the source code is public, the app makes no network calls at all, and your data is readable plain files on your own disk. Read the code. Or just try it with one account and see for yourself.
-
-### Is this open source?
-
-Yes. MIT license. Source is at [github.com/dutta14/worth](https://github.com/dutta14/worth). Read it, fork it, run it yourself.
-
-### What's the difference between Budget and Transactions?
-
-Transactions is for the raw list: filter, inspect, correct, categorize. Budget is for the roll-up: detailed, aggregated, or cashflow views across a whole year. If you are fixing individual entries, start in Transactions. If you are asking where the money went, start in Budget.
-
-### Do I need to use every page?
-
-No. The app works fine as a net-worth tracker with goals. Or as a budget tool with tax storage. Or as a private archive for documents. Use the parts that solve your actual problem.
-
-### Why no mobile app?
-
-The web app works on mobile browsers, though the File System Access API is not available in mobile browsers yet, which means you cannot use the full app on a phone. Add the site to your home screen on iOS or Android if you want quick access to read-only views, but for data entry, a desktop browser is the right tool right now.
-
----
-
-## More
-
-- **Self-host or contribute:** see [CONTRIBUTING.md](https://github.com/dutta14/worth/blob/main/CONTRIBUTING.md)
-- **Source code:** [github.com/dutta14/worth](https://github.com/dutta14/worth)
-- **Anindya's blog:** [anindya.dev/blog](https://anindya.dev/blog)
-- **License:** MIT
-
-Built in the open, for an audience of one. Useful to anyone who wants the same thing.
+[MIT](./LICENSE)

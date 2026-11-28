@@ -21,4 +21,4 @@ Internal documentation for worth. The user-facing README lives at the repo root.
   - `test-coverage-plan.md` — **partially superseded** — items covering EncryptionContext, GitHubSyncContext, ImportExportContext, and IndexedDB patterns no longer apply; see CONTRIBUTING.md for current testing guidance
 - **`ideas/`** — informal idea capture (see `ideas/README.md` for the drop-in workflow)
   - `github-sync-ux-audit.md` — **superseded** — GitHub Sync was removed in the File System Access migration
-- **`screenshots/`** — PNGs embedded in the root `README.md` (regenerated via `scripts/capture-screenshots.ts`)
+- **`screenshots/`** — PNGs embedded in the root `README.md` and the GitHub wiki (regenerated via `scripts/capture-screenshots.ts`)
