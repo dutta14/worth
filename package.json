@@ -2,6 +2,7 @@
   "name": "worth",
   "version": "1.0.0",
   "description": "A financial tracking and planning website",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
