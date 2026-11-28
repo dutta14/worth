@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 20+ (CI runs Node 20)
 - npm
 
 ## Getting Started
@@ -37,6 +37,7 @@ src/
 │   ├── sidebarNavConfig     # Single source of truth for accordion groups, children and route matching
 │   ├── SidebarToggle        # Mobile sidebar toggle
 │   ├── SearchModal          # Global search (⌘K) with indexed navigation
+│   ├── DataSafetyBanner     # Sticky alert for failed writes, stale files and lost permission
 │   ├── ErrorBoundary        # Top-level error boundary with fallback UI
 │   ├── TermAbbr             # Tooltip definitions for FI terms
 │   └── UndoToast            # 10-second undo notification
@@ -45,19 +46,24 @@ src/
 │   ├── FileStoreContext     # File System Access API integration and demo mode
 │   ├── GoalsContext         # FI + GW goal CRUD and state
 │   ├── LayoutContext        # Sidebar, mobile, search modal state
-│   └── DataContext          # Accounts and balances
+│   ├── DataContext          # Accounts and balances
+│   └── SafetyNetContext     # Enables the data safety net for real folders; owns banner state
 ├── flags/                   # Feature flag system (see Feature Flags section)
 │   ├── FlagContext.tsx      # Provider: fetches config, manages overrides
 │   ├── flagSystem.ts        # Resolution logic (override > rollout > default)
 │   ├── flagDefinitions.ts   # Flag names and defaults
 │   ├── useFlag.ts           # Hook: useFlag(FLAGS.NAME) → boolean
 │   └── ModernDesignToggle   # Applies body.modern-design class when flag is on
-├── search/                  # Search index builder
-│   └── searchIndex.ts       # Indexes pages, goals, accounts for SearchModal
+├── search/                  # Global search (⌘K)
+│   ├── searchIndex.ts       # Builds the index of pages, goals and accounts
+│   └── useSearchIndexData.ts # Gathers the data the index is built from
 ├── hooks/
 │   ├── useProfile.ts        # Profile state (name, birthday, avatar, partner)
 │   ├── useNow.ts            # Current Date, refreshed on focus and visibility (no timers)
-│   └── useFocusTrap.ts      # Focus trap for modals
+│   ├── useFocusTrap.ts      # Focus trap for modals
+│   ├── usePageHideFlush.ts  # Flushes pending writes on pagehide / tab hidden
+│   ├── useDarkMode.ts, useChartColors.ts, useTouchDrag.ts
+│   └── useDateFilter.ts, useGrowthSettings.ts, useLeverage.ts
 ├── pages/
 │   ├── home/                # Dashboard with draggable cards
 │   │   ├── Home.tsx
@@ -83,7 +89,10 @@ src/
 │   ├── allocation/          # Asset allocation & rebalancing
 │   ├── taxes/               # Tax document management
 │   ├── drive/               # Hierarchical file browser
-│   ├── tools/               # FI Calculator, Savings/Growth Tracker, PDF-to-CSV
+│   ├── tools/               # No page of its own; holds the FI Calculator, Savings/Growth Tracker
+│   │                        # and PDF-to-CSV components and math used by Planning and Wealth
+│   ├── transactions/        # Transactions page and CSV import tools
+│   ├── guide/               # In-app User Guide
 │   └── settings/            # Settings modal (refactored package)
 ├── styles/                  # CSS files (one per component/page)
 │   ├── colorThemes.css      # Base :root + body.dark variables
@@ -129,32 +138,32 @@ The chosen folder handle is persisted in IndexedDB via `src/utils/handlePersiste
 
 **File layout inside the chosen folder:**
 
-| Path | Content |
-| ---- | ------- |
-| `profile.json` | Name, birthday, partner |
-| `accounts.json` | Account definitions |
-| `balances/{year}.csv` | Monthly balances (columns: `month,accountId,balance`) |
-| `transactions/{year}/{yyyy-mm}.csv` | Budget transactions per month |
-| `budget/categories.json` | Category groups and tracked years |
-| `budget/import-formats.json` | Saved CSV import column formats |
-| `budget/category-rules.json` | Import categorization rules (`{ schemaVersion, rules }`) |
-| `budget/summary-cache.json` | Derived savings-rate summary |
-| `budget/targets.json` | Monthly targets per expense group, keyed by group id |
-| `goals.json` | `{ financialGoals, gwGoals }` |
-| `_backups/` | Safety copies, `_backups/{path without extension}/{yyyymmddThhmmssmmmZ}[-unsaved].{json,csv}`, plus a `README.txt`. Created before a file is overwritten or deleted; the newest 10 per file are kept. No loader reads it |
-| `{path}.corrupt-{stamp}` | Byte-for-byte copy of a JSON file that failed to parse, saved next to the original No loader reads it |
-| `taxes/{year}.json` | Tax checklist for that year |
-| `taxes/templates.json` | Reusable tax checklists |
-| `taxes/{year}/files/{filename}` | Uploaded tax documents |
-| `allocation.json` | Custom allocation ratios |
-| `fi-simulations.json` | Saved FI calculator simulations |
-| `leverage.json` | Leverage tool data |
-| `savings-tracker-overrides.json` | Savings/growth tracker manual overrides (also read, never written, by the Annual Review) |
-| `paydown-loans.json` | Loan paydown tool data |
+| Path                                | Content                                                                                                                                                                                                                  |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `profile.json`                      | Name, birthday, partner                                                                                                                                                                                                  |
+| `accounts.json`                     | Account definitions                                                                                                                                                                                                      |
+| `balances/{year}.csv`               | Monthly balances (columns: `month,accountId,balance`)                                                                                                                                                                    |
+| `transactions/{year}/{yyyy-mm}.csv` | Budget transactions per month                                                                                                                                                                                            |
+| `budget/categories.json`            | Category groups and tracked years                                                                                                                                                                                        |
+| `budget/import-formats.json`        | Saved CSV import column formats                                                                                                                                                                                          |
+| `budget/category-rules.json`        | Import categorization rules (`{ schemaVersion, rules }`)                                                                                                                                                                 |
+| `budget/summary-cache.json`         | Derived savings-rate summary                                                                                                                                                                                             |
+| `budget/targets.json`               | Monthly targets per expense group, keyed by group id                                                                                                                                                                     |
+| `goals.json`                        | `{ financialGoals, gwGoals }`                                                                                                                                                                                            |
+| `_backups/`                         | Safety copies, `_backups/{path without extension}/{yyyymmddThhmmssmmmZ}[-unsaved].{json,csv}`, plus a `README.txt`. Created before a file is overwritten or deleted; the newest 10 per file are kept. No loader reads it |
+| `{path}.corrupt-{stamp}`            | Byte-for-byte copy of a JSON file that failed to parse, saved next to the original No loader reads it                                                                                                                    |
+| `taxes/{year}.json`                 | Tax checklist for that year                                                                                                                                                                                              |
+| `taxes/templates.json`              | Reusable tax checklists                                                                                                                                                                                                  |
+| `taxes/{year}/files/{filename}`     | Uploaded tax documents                                                                                                                                                                                                   |
+| `allocation.json`                   | Custom allocation ratios                                                                                                                                                                                                 |
+| `fi-simulations.json`               | Saved FI calculator simulations                                                                                                                                                                                          |
+| `leverage.json`                     | Leverage tool data                                                                                                                                                                                                       |
+| `savings-tracker-overrides.json`    | Savings/growth tracker manual overrides (also read, never written, by the Annual Review)                                                                                                                                 |
+| `paydown-loans.json`                | Loan paydown tool data                                                                                                                                                                                                   |
 
 **UI preferences in `localStorage` (not financial data):**
 
-`darkMode`, `accentTheme`, `allowCsvImport`, `goal-view-mode`, `home-card-order`, `onboarding-dismissed`, `checkin-snooze`, `lab-pdf-to-csv`, and the feature-flag keys (`flag-rollout-cache`, `flag-overrides`, `flag-user-seed`).
+`darkMode`, `accentTheme`, `allowCsvImport`, `goal-view-mode`, `home-card-order`, `onboarding-dismissed`, `checkin-snooze`, `lab-pdf-to-csv`, and the feature-flag keys (`flag-rollout-cache`, `flag-overrides`, `flag-client-id`).
 
 ### Styling
 
@@ -169,9 +178,15 @@ The chosen folder handle is persisted in IndexedDB via `src/utils/handlePersiste
 
 Custom DOM events for cross-component communication:
 
-| Event               | Source                  | Purpose                            |
-| ------------------- | ----------------------- | ---------------------------------- |
-| `labs-changed`      | LabsPane                | Refreshes Tools page feature gates |
+| Event                     | Source                                          | Purpose                                           |
+| ------------------------- | ----------------------------------------------- | ------------------------------------------------- |
+| `data-changed`            | SafetyNetContext, useAnnualReview               | `DataContext` reloads accounts and balances       |
+| `budget-changed`          | budgetStorage, TransactionImportTools           | Budget and Transactions refresh                   |
+| `tax-store-changed`       | useTaxStore                                     | Tax checklist views refresh                       |
+| `allocation-changed`      | allocation utils                                | Allocation views refresh                          |
+| `tools-changed`           | FICalculator, SavingsGrowthTracker, useLeverage | Planning and Wealth views pick up saved tool data |
+| `growth-settings-changed` | useGrowthSettings                               | Growth views pick up new settings                 |
+| `labs-changed`            | LabsPane                                        | Refreshes feature gates for lab features          |
 
 ## Scripts
 
@@ -205,7 +220,7 @@ Each context lives in `src/contexts/` and exports a provider + a `useXxx()` hook
 The flag system in `src/flags/` controls runtime feature rollout:
 
 1. **Config** — `feature-flags.json` at repo root. Deployed as a static file. Fetched publicly (no auth) on app load. Admin writes (updating rollout %) require GitHub auth.
-2. **Resolution order** — local override → rollout percentage → default value. Each user gets a stable random seed (`flag-user-seed` in localStorage) for consistent percentage bucketing.
+2. **Resolution order** — local override → rollout percentage → default value. Each browser gets a stable random id (`flag-client-id` in localStorage), hashed with the flag id for consistent percentage bucketing.
 3. **Usage** — `const enabled = useFlag(FLAGS.MODERN_DESIGN)` in any component.
 4. **Adding a flag** — Define in `flagDefinitions.ts`, add rollout config to `feature-flags.json`.
 5. **Local override** — Set `flag-overrides` in localStorage (JSON object of `{ "flag-name": true/false }`) for development/testing.
@@ -222,7 +237,7 @@ All modern design styles live in `src/styles/modern-design.css`, scoped under `b
 
 ## Testing
 
-686+ tests across 56 files using **Vitest** + **@testing-library/react** + **jsdom**.
+Around 258 test files under `src/`, using **Vitest** + **@testing-library/react** + **jsdom**.
 
 ### Running tests
 
@@ -251,7 +266,7 @@ const store = new MemoryFileStore()
 render(
   <FileStoreTestProvider value={makeFileStoreValue({ fileStore: store })}>
     <ComponentUnderTest />
-  </FileStoreTestProvider>
+  </FileStoreTestProvider>,
 )
 ```
 
@@ -290,12 +305,12 @@ Deployment is automated. Every push to `main` triggers `.github/workflows/ci.yml
 
 ## Regenerating Screenshots
 
-The `docs/screenshots/` directory contains 12 PNGs that are embedded in the user-facing README. They are committed to the repo and serve as the source of truth for documentation — even though the files are several hundred KB each, this is intentional.
+The `docs/screenshots/` directory contains 19 PNGs that are embedded in the README and the GitHub wiki. They are committed to the repo and serve as the source of truth for documentation — even though the files are several hundred KB each, this is intentional.
 
 ### When to regenerate
 
-- Any UI change that affects a captured screen (Home, Net Worth, Goals, Budget, Taxes, Drive, Settings, or the folder picker / add-account onboarding states)
-- Any change to the README that surfaces a different feature or flow
+- Any UI change that affects a captured screen (Home, Goals, FIRE Calculator, Wealth, Annual Review, Cashflow, Transactions, Taxes, Drive, Settings, or the folder picker / add-account onboarding states)
+- Any change to the README or wiki that surfaces a different feature or flow
 - New release builds where the screenshots have drifted from the current visual design
 
 ### How to regenerate
@@ -305,4 +320,6 @@ npm run dev          # in one terminal
 npm run screenshots  # in another terminal
 ```
 
-`scripts/capture-screenshots.ts` seeds a fixed fake persona ("Avery Chen") into a `MemoryFileStore` and uses Playwright to capture each screen at 1440×900 @ 2× device scale. The browser clock is pinned to June 1, 2025 so the seeded May-2025 data is "last month" regardless of when the script is run. All 12 PNGs land in `docs/screenshots/`.
+`scripts/capture-screenshots.ts` seeds a fixed fake persona ("Avery Chen") into the same `MemoryFileStore` the e2e tests use (via `_e2eMode` and `window.__e2eSeedData`) and uses Playwright to capture each screen at 1440×900 @ 2× device scale. The browser clock is pinned to June 1, 2025 so the seeded May-2025 data is "last month" regardless of when the script is run. All 19 PNGs land in `docs/screenshots/`.
+
+Pass a name to capture one image (`npx tsx scripts/capture-screenshots.ts home-light`). If the dev server picked another port, set `APP_URL` (for example `APP_URL=http://localhost:5174/worth/`).
